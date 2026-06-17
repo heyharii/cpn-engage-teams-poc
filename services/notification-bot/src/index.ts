@@ -1,11 +1,11 @@
 import Fastify from "fastify";
 import { type NotificationRequest } from "@cpn-engage/shared";
-import { listNotifications, queueNotification, resetNotifications } from "./bot-store";
+import { listNotifications, queueNotification, resetNotifications } from "./bot-store.js";
 import {
   buildTemplateMessage,
   listCardTemplates,
   resolveTemplateFromNotification
-} from "./adaptive-cards";
+} from "./adaptive-cards.js";
 
 const app = Fastify({ logger: true });
 
