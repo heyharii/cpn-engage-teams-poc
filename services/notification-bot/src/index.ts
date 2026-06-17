@@ -1,3 +1,4 @@
+import cors from "@fastify/cors";
 import Fastify from "fastify";
 import { type NotificationRequest } from "@cpn-engage/shared";
 import { listNotifications, queueNotification, resetNotifications } from "./bot-store.js";
@@ -8,6 +9,10 @@ import {
 } from "./adaptive-cards.js";
 
 const app = Fastify({ logger: true });
+
+await app.register(cors, {
+  origin: true
+});
 
 app.get("/health", async () => ({
   ok: true,

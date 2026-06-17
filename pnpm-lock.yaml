@@ -131,6 +131,9 @@ importers:
       '@cpn-engage/shared':
         specifier: workspace:*
         version: link:../../packages/shared
+      '@fastify/cors':
+        specifier: ^11.1.0
+        version: 11.2.0
       fastify:
         specifier: ^5.3.2
         version: 5.8.5
