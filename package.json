@@ -1,0 +1,16 @@
+{
+  "name": "cpn-engage-poc",
+  "private": true,
+  "version": "0.1.0",
+  "packageManager": "pnpm@11.3.0",
+  "scripts": {
+    "dev": "pnpm -r --parallel dev",
+    "build": "pnpm -r build",
+    "typecheck": "pnpm -r typecheck",
+    "poc:smoke": "node ./scripts/poc-smoke-test.mjs",
+    "teams:manifest": "node ./teams/scripts/render-manifest.mjs ./teams/.env.local",
+    "teams:manifest:example": "node ./teams/scripts/render-manifest.mjs ./teams/env.example",
+    "teams:package": "pnpm teams:manifest && node ./teams/scripts/package-app.mjs",
+    "teams:package:example": "pnpm teams:manifest:example && node ./teams/scripts/package-app.mjs"
+  }
+}

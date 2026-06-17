@@ -1,0 +1,93 @@
+{
+  "$schema": "https://developer.microsoft.com/json-schemas/teams/v1.25/MicrosoftTeams.schema.json",
+  "manifestVersion": "1.25",
+  "version": "0.1.0",
+  "id": "${{TEAMS_APP_ID}}",
+  "developer": {
+    "name": "Int-Labs",
+    "websiteUrl": "https://int-labs.example.com",
+    "privacyUrl": "https://int-labs.example.com/privacy",
+    "termsOfUseUrl": "https://int-labs.example.com/terms"
+  },
+  "name": {
+    "short": "CPN Engage",
+    "full": "Central Pattana Engage"
+  },
+  "description": {
+    "short": "Employee engagement ecosystem for Teams.",
+    "full": "Central Pattana Engage combines private learning, challenges, recognition, feed, and admin orchestration inside Microsoft Teams."
+  },
+  "icons": {
+    "color": "color.png",
+    "outline": "outline.png"
+  },
+  "accentColor": "#c94732",
+  "staticTabs": [
+    {
+      "entityId": "home",
+      "name": "CPN Engage Home",
+      "contentUrl": "${{EMPLOYEE_APP_URL}}",
+      "websiteUrl": "${{EMPLOYEE_APP_URL}}",
+      "scopes": ["personal"]
+    },
+    {
+      "entityId": "community-feed",
+      "name": "Community Feed",
+      "contentUrl": "${{COMMUNITY_FEED_URL}}",
+      "websiteUrl": "${{COMMUNITY_FEED_URL}}",
+      "scopes": ["personal"]
+    },
+    {
+      "entityId": "admin-console",
+      "name": "Admin Command Center",
+      "contentUrl": "${{ADMIN_CONSOLE_URL}}",
+      "websiteUrl": "${{ADMIN_CONSOLE_URL}}",
+      "scopes": ["personal"]
+    }
+  ],
+  "bots": [
+    {
+      "botId": "${{TEAMS_BOT_ID}}",
+      "scopes": ["personal"],
+      "supportsFiles": false,
+      "isNotificationOnly": false,
+      "commandLists": [
+        {
+          "scopes": ["personal"],
+          "commands": [
+            {
+              "title": "Start today's module",
+              "description": "Open the next assigned learning module"
+            },
+            {
+              "title": "Daily challenge",
+              "description": "Open the current challenge"
+            },
+            {
+              "title": "Recognise a colleague",
+              "description": "Submit a recognition for approval"
+            },
+            {
+              "title": "View leaderboard",
+              "description": "See this week's top contributors"
+            },
+            {
+              "title": "View passport",
+              "description": "Open your progress passport summary"
+            },
+            {
+              "title": "Launch capstone",
+              "description": "Open the final challenge experience"
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "permissions": ["identity", "messageTeamMembers"],
+  "validDomains": ["${{TEAMS_APP_DOMAIN}}"],
+  "webApplicationInfo": {
+    "id": "${{TEAMS_ENTRA_CLIENT_ID}}",
+    "resource": "${{APPLICATION_ID_URI}}"
+  }
+}
