@@ -5,7 +5,7 @@ services:
     repo: https://github.com/heyharii/cpn-engage-teams-poc
     branch: main
     plan: starter
-    buildCommand: corepack enable && pnpm install --frozen-lockfile && pnpm --filter @cpn-engage/api build
+    buildCommand: pnpm install --frozen-lockfile && pnpm --filter @cpn-engage/api build
     startCommand: pnpm --filter @cpn-engage/api start
     healthCheckPath: /health
 
@@ -15,7 +15,7 @@ services:
     repo: https://github.com/heyharii/cpn-engage-teams-poc
     branch: main
     plan: starter
-    buildCommand: corepack enable && pnpm install --frozen-lockfile && pnpm --filter @cpn-engage/notification-bot build
+    buildCommand: pnpm install --frozen-lockfile && pnpm --filter @cpn-engage/notification-bot build
     startCommand: pnpm --filter @cpn-engage/notification-bot start
     healthCheckPath: /health
 
@@ -24,7 +24,7 @@ services:
     runtime: static
     repo: https://github.com/heyharii/cpn-engage-teams-poc
     branch: main
-    buildCommand: corepack enable && pnpm install --frozen-lockfile && pnpm --filter @cpn-engage/employee-app build
+    buildCommand: pnpm install --frozen-lockfile && pnpm --filter @cpn-engage/employee-app build
     staticPublishPath: apps/employee-app/dist
     envVars:
       - key: VITE_API_BASE_URL
@@ -39,7 +39,7 @@ services:
     runtime: static
     repo: https://github.com/heyharii/cpn-engage-teams-poc
     branch: main
-    buildCommand: corepack enable && pnpm install --frozen-lockfile && pnpm --filter @cpn-engage/community-feed build
+    buildCommand: pnpm install --frozen-lockfile && pnpm --filter @cpn-engage/community-feed build
     staticPublishPath: apps/community-feed/dist
     envVars:
       - key: VITE_API_BASE_URL
@@ -54,7 +54,7 @@ services:
     runtime: static
     repo: https://github.com/heyharii/cpn-engage-teams-poc
     branch: main
-    buildCommand: corepack enable && pnpm install --frozen-lockfile && pnpm --filter @cpn-engage/admin-console build
+    buildCommand: pnpm install --frozen-lockfile && pnpm --filter @cpn-engage/admin-console build
     staticPublishPath: apps/admin-console/dist
     envVars:
       - key: VITE_API_BASE_URL
