@@ -1,122 +1,75 @@
-import cors from "@fastify/cors";
-import Fastify from "fastify";
-import { type NotificationRequest } from "@cpn-engage/shared";
-import { listNotifications, queueNotification, resetNotifications } from "./bot-store.js";
-import {
-  buildTemplateMessage,
-  listCardTemplates,
-  resolveTemplateFromNotification
-} from "./adaptive-cards.js";
+/**
+ * HTTP entry point for the CPN Engage Teams bot.
+ *
+ *   GET  /                  sanity check
+ *   GET  /health            liveness probe (Render health check)
+ *   POST /api/messages      Bot Framework webhook → chat SDK (Teams messaging
+ *                           endpoint configured in the Azure Bot resource)
+ *   POST /internal/notify   internal notification relay from the CPN API
+ *                           (accepted + logged; proactive push is future work)
+ *
+ * The Teams webhook is a thin adapter between Express and the Fetch-style
+ * request/response the chat SDK expects.
+ */
 
-const app = Fastify({ logger: true });
+import express from "express";
+import { bot } from "./bot.ts";
+import { config } from "./config.ts";
+import { state } from "./state.ts";
 
-await app.register(cors, {
-  origin: true
+const app = express();
+
+// Bot Framework sends JSON; the adapter needs the raw body for signature
+// verification, so capture it raw for all content types.
+app.use(express.raw({ type: "*/*", limit: "5mb" }));
+
+app.get("/", (_req, res) => {
+  res.json({ status: "ok", bot: "CPN Engage", webhook: "/api/messages" });
 });
 
-app.get("/health", async () => ({
-  ok: true,
-  service: "notification-bot"
-}));
+app.get("/health", (_req, res) => {
+  res.status(200).json({ ok: true, service: "notification-bot" });
+});
 
-app.get("/api/messages", async () => ({
-  ok: true,
-  notifications: listNotifications().map((notification) => ({
-    ...notification,
-    preview: buildTemplateMessage(resolveTemplateFromNotification(notification))
-  }))
-}));
-
-app.get("/api/cards", async () => ({
-  ok: true,
-  templates: listCardTemplates()
-}));
-
-app.get<{
-  Params: { template: string };
-}>("/api/cards/:template", async (request, reply) => {
-  const template = listCardTemplates().find((item) => item.template === request.params.template);
-
-  if (!template) {
-    return reply.code(404).send({
-      ok: false,
-      message: "Card template not found"
-    });
+// Internal relay from the CPN API. Not a Bot Framework activity — just log it.
+app.post("/internal/notify", (req, res) => {
+  try {
+    const body = Buffer.isBuffer(req.body) ? req.body.toString("utf8") : String(req.body ?? "");
+    console.log("[notify]", body.slice(0, 500));
+  } catch {
+    /* ignore */
   }
-
-  return {
-    ok: true,
-    ...template,
-    preview: buildTemplateMessage(template.template)
-  };
+  res.status(202).json({ ok: true });
 });
 
-app.post<{
-  Body: NotificationRequest;
-}>("/api/messages", async (request) => {
-  const notification = queueNotification(request.body);
-  const template = resolveTemplateFromNotification(notification);
+app.post("/api/messages", async (req, res) => {
+  try {
+    const headers = new Headers();
+    for (const [key, value] of Object.entries(req.headers)) {
+      if (value) headers.set(key, Array.isArray(value) ? value.join(",") : String(value));
+    }
+    const buf = Buffer.isBuffer(req.body) ? req.body : Buffer.from(JSON.stringify(req.body ?? {}));
+    const url = `http://localhost:${config.port}${req.path}`;
+    const body = new Uint8Array(buf.buffer, buf.byteOffset, buf.byteLength);
+    const request = new Request(url, { method: "POST", headers, body: body as unknown as BodyInit });
 
-  return {
-    ok: true,
-    notification,
-    preview: buildTemplateMessage(template),
-    note: "Bot queue accepted with Adaptive Card preview payload."
-  };
-});
-
-app.post<{
-  Params: { template: string };
-}>("/api/messages/demo/:template", async (request, reply) => {
-  const template = listCardTemplates().find((item) => item.template === request.params.template);
-
-  if (!template) {
-    return reply.code(404).send({
-      ok: false,
-      message: "Card template not found"
-    });
+    const response = await bot.webhooks.teams(request);
+    const text = await response.text();
+    response.headers.forEach((value, key) => res.setHeader(key, value));
+    res.status(response.status).send(text || "");
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    console.error("[webhook/teams]", msg);
+    res.status(500).json({ error: msg });
   }
-
-  const notification = queueNotification({
-    type:
-      template.template === "recognition-approved"
-        ? "recognition-approved"
-        : template.template === "module-assigned"
-          ? "module-assigned"
-          : template.template === "passport-summary" || template.template === "capstone-unlocked"
-            ? "leaderboard-summary"
-            : "challenge-reminder",
-    title: template.title,
-    summary: template.description,
-    audience: "user-1",
-    template: template.template
-  });
-
-  return {
-    ok: true,
-    notification,
-    preview: buildTemplateMessage(template.template)
-  };
 });
 
-app.post("/api/messages/reset", async () => ({
-  ok: true,
-  notifications: resetNotifications()
-}));
+// Connect the per-thread state store up front (idempotent — the chat SDK also
+// connects it during webhook handling).
+await state.connect();
 
-app.post("/api/notifications/test", async () => ({
-  ok: true,
-  notification: queueNotification({
-    type: "challenge-reminder",
-    title: "Challenge reminder",
-    summary: "Customer First Challenge is due in 2 days.",
-    audience: "user-1"
-  })
-}));
-
-const port = Number(process.env.PORT || 4177);
-
-app.listen({ port, host: "0.0.0.0" }).catch((error) => {
-  app.log.error(error);
-  process.exit(1);
+app.listen(config.port, () => {
+  console.log(`✅ CPN Engage bot on http://localhost:${config.port}`);
+  console.log(`   → Teams webhook: POST /api/messages  (appType=${config.teams.appType})`);
+  console.log(`   → API base: ${config.apiBaseUrl}`);
 });

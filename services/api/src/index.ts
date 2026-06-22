@@ -89,7 +89,9 @@ async function relayNotificationToBot(notification: NotificationItem) {
   const botBaseUrl = process.env.NOTIFICATION_BOT_URL || "http://127.0.0.1:4177";
 
   try {
-    await fetch(`${botBaseUrl}/api/messages`, {
+    // /internal/notify — NOT /api/messages (that is now the Teams Bot Framework
+    // webhook and would reject plain notification JSON).
+    await fetch(`${botBaseUrl}/internal/notify`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json"
