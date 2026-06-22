@@ -148,6 +148,14 @@ button {
   background: white;
 }
 
+/* Keep the primary CTA styled even inside .actions (specificity fix). */
+.actions button.primary {
+  border: 0;
+  background: linear-gradient(135deg, var(--accent), #db775e);
+  color: white;
+  font-weight: 700;
+}
+
 ul {
   margin: 0;
   padding-left: 18px;
@@ -179,7 +187,166 @@ li + li {
   margin-bottom: 8px;
 }
 
+/* Ghost / secondary button */
+.ghost {
+  background: white;
+  border: 1px solid var(--line);
+  color: var(--ink);
+  border-radius: 8px;
+  padding: 10px 14px;
+  font-weight: 600;
+}
+.ghost:hover {
+  border-color: var(--accent-2);
+  color: var(--accent-2);
+}
+
+/* How-it-works guide */
+.guide {
+  margin-top: 18px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: linear-gradient(180deg, #ffffff, #f7faf9);
+  padding: 22px;
+}
+.guide-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 16px;
+  margin-bottom: 18px;
+}
+.guide-head h2 {
+  margin: 0;
+}
+.guide-head span {
+  color: var(--muted);
+  font-size: 13px;
+}
+.guide-steps {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px;
+}
+.guide-steps li {
+  display: flex;
+  gap: 12px;
+  margin: 0;
+  align-items: flex-start;
+}
+.guide-steps li + li {
+  position: relative;
+}
+.step-no {
+  flex: 0 0 28px;
+  width: 28px;
+  height: 28px;
+  border-radius: 999px;
+  background: var(--accent-2);
+  color: white;
+  font-weight: 800;
+  font-size: 14px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.guide-steps strong {
+  display: block;
+  margin-bottom: 4px;
+}
+.guide-steps p {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+/* Pills + tags */
+.pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 12px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--muted);
+}
+.pill-active {
+  background: rgba(186, 74, 47, 0.1);
+  border-color: transparent;
+  color: var(--accent);
+}
+.tag {
+  font-size: 11px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 2px 8px;
+  border-radius: 999px;
+}
+.tag-live {
+  background: rgba(29, 111, 104, 0.12);
+  color: var(--accent-2);
+}
+.tag-soon {
+  background: rgba(120, 110, 100, 0.14);
+  color: var(--muted);
+}
+
+.empty-note {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--muted);
+  background: #f7faf9;
+  border: 1px dashed var(--line);
+  border-radius: 8px;
+  padding: 12px 14px;
+}
+.queue-item + .empty-note {
+  margin-top: 12px;
+}
+
+.destinations {
+  list-style: none;
+  padding: 0;
+  margin: 0 0 14px;
+}
+.destinations li {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  padding: 11px 0;
+  border-bottom: 1px solid var(--line);
+  margin: 0;
+}
+.destinations li:last-child {
+  border-bottom: 0;
+}
+.dest-name {
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.lab-intro {
+  margin: -4px 0 16px;
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.queue-item + .queue-item {
+  margin-top: 12px;
+}
+
 @media (max-width: 980px) {
+  .guide-steps {
+    grid-template-columns: 1fr;
+  }
+
   .topbar,
   .two-up {
     grid-template-columns: 1fr;

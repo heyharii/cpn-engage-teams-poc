@@ -1,12 +1,6 @@
 import { type BootstrapResponse } from "@cpn-engage/shared";
 import { useEffect, useState } from "react";
 
-type CardTemplateSummary = {
-  template: string;
-  title: string;
-  description: string;
-};
-
 type DemoScenarioSummary = {
   name: string;
   title: string;
@@ -15,62 +9,38 @@ type DemoScenarioSummary = {
 
 export function App() {
   const [bootstrap, setBootstrap] = useState<BootstrapResponse | null>(null);
-  const [cardTemplates, setCardTemplates] = useState<CardTemplateSummary[]>([]);
   const [scenarios, setScenarios] = useState<DemoScenarioSummary[]>([]);
-  const [lastCardPreview, setLastCardPreview] = useState<string | null>(null);
   const [lastScenarioRun, setLastScenarioRun] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
   const apiBaseUrl = import.meta.env.VITE_API_BASE_URL ?? "http://127.0.0.1:4175";
-  const botBaseUrl = import.meta.env.VITE_BOT_BASE_URL ?? "http://127.0.0.1:4177";
 
   async function loadBootstrap(cancelled = false) {
     const response = await fetch(`${apiBaseUrl}/api/bootstrap`);
     const data = (await response.json()) as BootstrapResponse;
-
-    if (!cancelled) {
-      setBootstrap(data);
-    }
-  }
-
-  async function loadCardTemplates(cancelled = false) {
-    const response = await fetch(`${botBaseUrl}/api/cards`);
-    const data = (await response.json()) as { templates: CardTemplateSummary[] };
-
-    if (!cancelled) {
-      setCardTemplates(data.templates);
-    }
+    if (!cancelled) setBootstrap(data);
   }
 
   async function loadScenarios(cancelled = false) {
     const response = await fetch(`${apiBaseUrl}/api/admin/demo/scenarios`);
     const data = (await response.json()) as { scenarios: DemoScenarioSummary[] };
-
-    if (!cancelled) {
-      setScenarios(data.scenarios);
-    }
+    if (!cancelled) setScenarios(data.scenarios);
   }
 
   useEffect(() => {
     let cancelled = false;
-
     async function init() {
       try {
         await loadBootstrap(cancelled);
-        await loadCardTemplates(cancelled);
         await loadScenarios(cancelled);
       } catch {
-        if (!cancelled) {
-          setBootstrap(null);
-        }
+        if (!cancelled) setBootstrap(null);
       }
     }
-
     void init();
-
     return () => {
       cancelled = true;
     };
-  }, [apiBaseUrl, botBaseUrl]);
+  }, [apiBaseUrl]);
 
   async function approveRecognition(id: string) {
     setBusyId(id);
@@ -88,27 +58,9 @@ export function App() {
   async function resetDemo() {
     setBusyId("reset");
     try {
-      const response = await fetch(`${apiBaseUrl}/api/admin/demo/reset`, {
-        method: "POST"
-      });
+      const response = await fetch(`${apiBaseUrl}/api/admin/demo/reset`, { method: "POST" });
       const data = (await response.json()) as BootstrapResponse;
       setBootstrap((data as unknown as { bootstrap?: BootstrapResponse }).bootstrap ?? data);
-    } finally {
-      setBusyId(null);
-    }
-  }
-
-  async function triggerCardPreview(template: string) {
-    setBusyId(`card:${template}`);
-    try {
-      const response = await fetch(`${botBaseUrl}/api/messages/demo/${template}`, {
-        method: "POST"
-      });
-      const data = (await response.json()) as {
-        notification: { title: string };
-        preview: { summary: string };
-      };
-      setLastCardPreview(`${data.notification.title}: ${data.preview.summary}`);
     } finally {
       setBusyId(null);
     }
@@ -131,28 +83,59 @@ export function App() {
     }
   }
 
+  const pending = bootstrap?.recognitionQueue.length ?? 0;
+
   return (
     <div className="console">
       <header className="topbar">
         <div>
-          <p className="kicker">Admin console</p>
+          <p className="kicker">Admin command center</p>
           <h1>Campaigns, moderation, and engagement visibility.</h1>
         </div>
         <div className="toolbar">
           <button
             onClick={() => {
               void loadBootstrap();
-              void loadCardTemplates();
               void loadScenarios();
             }}
           >
-            {busyId ? "Working..." : "Refresh"}
+            {busyId === null ? "Refresh" : "Working…"}
           </button>
-          <button className="primary" onClick={() => void resetDemo()}>
-            Reset demo
+          <button className="ghost" onClick={() => void resetDemo()} disabled={busyId === "reset"}>
+            {busyId === "reset" ? "Resetting…" : "Reset demo"}
           </button>
         </div>
       </header>
+
+      <section className="guide">
+        <div className="guide-head">
+          <h2>How this demo works</h2>
+          <span>One shared state across all three surfaces + the bot</span>
+        </div>
+        <ol className="guide-steps">
+          <li>
+            <span className="step-no">1</span>
+            <div>
+              <strong>Something happens</strong>
+              <p>An employee sends a recognition in the Employee App or bot — or click a scenario below to simulate it.</p>
+            </div>
+          </li>
+          <li>
+            <span className="step-no">2</span>
+            <div>
+              <strong>You moderate it here</strong>
+              <p>New recognitions land in the moderation queue. Approve one and the shared metrics update live.</p>
+            </div>
+          </li>
+          <li>
+            <span className="step-no">3</span>
+            <div>
+              <strong>It goes public</strong>
+              <p>Approved recognition appears as a post in the Community Feed tab — same data, three windows.</p>
+            </div>
+          </li>
+        </ol>
+      </section>
 
       <section className="metric-grid">
         {(bootstrap?.metrics ?? []).map((metric) => (
@@ -168,22 +151,28 @@ export function App() {
         <article className="sheet">
           <div className="sheet-head">
             <h2>Moderation queue</h2>
-            <span>{bootstrap?.recognitionQueue.length ?? 0} pending</span>
+            <span className={pending ? "pill pill-active" : "pill"}>{pending} pending</span>
           </div>
+          {pending === 0 ? (
+            <p className="empty-note">
+              Nothing waiting. Run the <strong>“Recognition to feed”</strong> scenario below, or submit a
+              recognition from the Employee App, and it will appear here for approval.
+            </p>
+          ) : null}
           {(bootstrap?.recognitionQueue ?? []).map((item) => (
             <div className="queue-item" key={item.id}>
-              <strong>Recognition: {item.behavior}</strong>
+              <strong>Recognition · {item.behavior}</strong>
               <p>
                 {item.employee} praised {item.target} for behavior aligned to {item.behavior}.
               </p>
               <div className="actions">
-                <button>Reject</button>
+                <button className="ghost">Reject</button>
                 <button
                   className="primary"
                   disabled={busyId === item.id}
                   onClick={() => void approveRecognition(item.id)}
                 >
-                  {busyId === item.id ? "Approving..." : "Approve"}
+                  {busyId === item.id ? "Approving…" : "Approve → publish"}
                 </button>
               </div>
             </div>
@@ -193,47 +182,35 @@ export function App() {
         <article className="sheet">
           <div className="sheet-head">
             <h2>Publishing destinations</h2>
-            <span>Current recommendation</span>
+            <span>Where approved content can go</span>
           </div>
-          <ul>
-            {(bootstrap?.publishingDestinations ?? []).map((item) => (
-              <li key={item}>{item}</li>
+          <ul className="destinations">
+            {(bootstrap?.publishingDestinations ?? []).map((item, i) => (
+              <li key={item}>
+                <span className="dest-name">{item}</span>
+                <span className={i === 2 ? "tag tag-soon" : "tag tag-live"}>
+                  {i === 2 ? "spike" : "live"}
+                </span>
+              </li>
             ))}
           </ul>
+          <p className="empty-note">
+            “Native Teams Communities” is a validation spike (Viva Engage) — the live surfaces are the
+            private bot feed and this custom Community Feed.
+          </p>
         </article>
-      </section>
-
-      <section className="sheet card-lab">
-        <div className="sheet-head">
-          <h2>Bot card lab</h2>
-          <span>{cardTemplates.length} templates ready</span>
-        </div>
-        {lastCardPreview ? <p className="preview-note">Last preview: {lastCardPreview}</p> : null}
-        <div className="card-template-grid">
-          {cardTemplates.map((item) => (
-            <div className="card-template" key={item.template}>
-              <strong>{item.title}</strong>
-              <p>{item.description}</p>
-              <div className="actions">
-                <button
-                  className="primary"
-                  disabled={busyId === `card:${item.template}`}
-                  onClick={() => void triggerCardPreview(item.template)}
-                >
-                  {busyId === `card:${item.template}` ? "Triggering..." : "Queue demo card"}
-                </button>
-              </div>
-            </div>
-          ))}
-        </div>
       </section>
 
       <section className="sheet scenario-lab">
         <div className="sheet-head">
-          <h2>End-to-end demo lab</h2>
-          <span>{scenarios.length} scenarios ready</span>
+          <h2>Run the end-to-end demo</h2>
+          <span>{scenarios.length} one-click journeys</span>
         </div>
-        {lastScenarioRun ? <p className="preview-note">Last scenario: {lastScenarioRun}</p> : null}
+        <p className="lab-intro">
+          Each button drives the whole platform at once — fire one, then switch to the Employee App or
+          Community Feed tab and watch the same numbers move.
+        </p>
+        {lastScenarioRun ? <p className="preview-note">✓ Ran: {lastScenarioRun}</p> : null}
         <div className="card-template-grid">
           {scenarios.map((item) => (
             <div className="card-template" key={item.name}>
@@ -245,7 +222,7 @@ export function App() {
                   disabled={busyId === `scenario:${item.name}`}
                   onClick={() => void runScenario(item.name)}
                 >
-                  {busyId === `scenario:${item.name}` ? "Running..." : "Run scenario"}
+                  {busyId === `scenario:${item.name}` ? "Running…" : "Run scenario"}
                 </button>
               </div>
             </div>
