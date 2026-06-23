@@ -142,7 +142,7 @@ function triggerRecognitionToFeed() {
     id: `rec-${Date.now()}`,
     employee: "Patcharaporn K.",
     target: "Somruk T.",
-    behavior: state.behaviors[3]?.name ?? "Grow Together",
+    behavior: state.behaviors[3]?.name ?? "Communities",
     message: "Thank you for coordinating the tenant recovery and helping the team stay calm during a difficult handover."
   };
 

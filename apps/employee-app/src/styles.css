@@ -149,6 +149,65 @@ button {
   font-weight: 700;
 }
 
+/* Bot pointer banner — daily actions live in the Chat tab */
+.bot-pointer {
+  margin-top: 18px;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 18px 20px;
+  border-radius: 18px;
+  border: 1px solid var(--teal-soft);
+  background: linear-gradient(135deg, var(--teal-soft), rgba(255, 253, 248, 0.9));
+  box-shadow: var(--shadow);
+}
+.bot-pointer-icon {
+  font-size: 1.6rem;
+  width: 48px;
+  height: 48px;
+  flex: 0 0 48px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 14px;
+  background: var(--surface-strong);
+  border: 1px solid var(--line);
+}
+.bot-pointer strong {
+  display: block;
+  margin-bottom: 2px;
+}
+.bot-pointer p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.95rem;
+  line-height: 1.45;
+}
+.pointer-state {
+  margin-left: auto;
+  flex: 0 0 auto;
+  align-self: flex-start;
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 12px;
+  border-radius: 999px;
+  font-size: 0.82rem;
+  font-weight: 700;
+  text-transform: capitalize;
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+.pointer-state.done {
+  background: var(--teal-soft);
+  color: var(--teal);
+}
+.chat-hint {
+  margin-top: 10px;
+  color: var(--teal);
+  font-weight: 700;
+  font-size: 0.9rem;
+}
+
 .runtime-badge {
   background: var(--accent-soft);
   color: var(--accent);
@@ -227,14 +286,9 @@ button {
   grid-column: span 5;
 }
 
-.passport-panel {
-  grid-column: span 4;
-}
-
-.streak-panel {
-  grid-column: span 3;
-}
-
+.passport-panel,
+.streak-panel,
+.rank-panel,
 .module-panel,
 .capstone-panel,
 .recognition-panel,

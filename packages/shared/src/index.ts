@@ -193,11 +193,12 @@ export type BootstrapResponse = {
   publishingDestinations: string[];
 };
 
+// Central Pattana's four Desired Behaviors (Int Labs proposal, p.3).
 export const demoBehaviors: Behavior[] = [
-  { name: "Customer First", tagline: "Act with service empathy." },
-  { name: "One Team", tagline: "Collaborate across functions." },
-  { name: "Own It", tagline: "Turn responsibility into action." },
-  { name: "Grow Together", tagline: "Share progress generously." }
+  { name: "Customers", tagline: "Exceed expectations, source of inspiration." },
+  { name: "Dynamism", tagline: "Entrepreneurial, ability to create, aim high." },
+  { name: "Collaboration", tagline: "Thrive through exploring and thinking beyond self." },
+  { name: "Communities", tagline: "Value to all stakeholders, shared success." }
 ];
 
 export const demoModules: LearningModule[] = [
@@ -220,16 +221,16 @@ export const demoModules: LearningModule[] = [
 export const demoChallenges: Challenge[] = [
   {
     id: "challenge-1",
-    title: "Customer First Challenge",
+    title: "Customers Challenge",
     prompt: "How would you respond when a frustrated customer asks for an exception during peak traffic?",
-    behavior: "Customer First",
+    behavior: "Customers",
     status: "pending"
   },
   {
     id: "challenge-2",
-    title: "One Team Reflection",
+    title: "Collaboration Reflection",
     prompt: "Describe one action that helped another store team move faster this week.",
-    behavior: "One Team",
+    behavior: "Collaboration",
     status: "completed"
   }
 ];
@@ -237,7 +238,7 @@ export const demoChallenges: Challenge[] = [
 export const demoDailyDrop: DailyDrop = {
   id: "challenge-1",
   title: "Daily Drop Challenge",
-  behavior: "Customer First",
+  behavior: "Customers",
   rewardLabel: "Up to 50 points",
   timeLimit: "30 sec",
   question: "A peak-hour tenant escalation is rising. What is the best next step?",
@@ -269,7 +270,7 @@ export const demoCurrentUser: CurrentUser = {
 export const demoStats: Stats = {
   progress: 75,
   streak: 12,
-  pendingChallenge: "Customer First Challenge"
+  pendingChallenge: "Customers Challenge"
 };
 
 export const demoMetrics: Metric[] = [
@@ -283,7 +284,7 @@ export const demoFeed: FeedItem[] = [
   {
     id: "feed-1",
     kind: "recognition",
-    title: "Customer First recognition",
+    title: "Customers recognition",
     summary: "Patcharaporn K. recognized Somruk T. for guiding a difficult store recovery."
   },
   {
@@ -305,7 +306,7 @@ export const demoRecognitionQueue: RecognitionQueueItem[] = [
     id: "rec-1",
     employee: "Patcharaporn K.",
     target: "Somruk T.",
-    behavior: "Customer First",
+    behavior: "Customers",
     message: "Thank you for helping the store navigate a difficult recovery issue with calm and care."
   }
 ];
@@ -330,7 +331,7 @@ export const demoNotifications: NotificationItem[] = [
     id: "notif-2",
     type: "challenge-reminder",
     title: "Challenge reminder",
-    summary: "Customer First Challenge is due in 2 days.",
+    summary: "Customers Challenge is due in 2 days.",
     audience: "user-1",
     template: "daily-drop"
   },
@@ -356,16 +357,16 @@ export const demoPassport: PassportSummary = {
   modulesTotal: 12,
   badges: 6,
   valuesProgress: [
-    { name: "Customer First", points: 250, status: "completed" },
-    { name: "One Team", points: 175, status: "in-progress" },
-    { name: "Own It", points: 225, status: "completed" },
-    { name: "Grow Together", points: 225, status: "completed" }
+    { name: "Customers", points: 250, status: "completed" },
+    { name: "Collaboration", points: 175, status: "in-progress" },
+    { name: "Dynamism", points: 225, status: "completed" },
+    { name: "Communities", points: 225, status: "completed" }
   ],
   recentEntries: [
     {
       id: "passport-1",
       title: "Daily Drop completed",
-      behavior: "Customer First",
+      behavior: "Customers",
       points: 50,
       date: "June 17, 2026",
       status: "recorded"
@@ -373,7 +374,7 @@ export const demoPassport: PassportSummary = {
     {
       id: "passport-2",
       title: "Recognition contribution logged",
-      behavior: "Grow Together",
+      behavior: "Communities",
       points: 75,
       date: "June 16, 2026",
       status: "recorded"
@@ -381,7 +382,7 @@ export const demoPassport: PassportSummary = {
     {
       id: "passport-3",
       title: "Module milestone completed",
-      behavior: "Own It",
+      behavior: "Dynamism",
       points: 100,
       date: "June 15, 2026",
       status: "completed"
