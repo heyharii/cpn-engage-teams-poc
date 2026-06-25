@@ -25,23 +25,16 @@
   "staticTabs": [
     {
       "entityId": "home",
-      "name": "CPN Engage Home",
+      "name": "Profile",
       "contentUrl": "${{EMPLOYEE_APP_URL}}",
       "websiteUrl": "${{EMPLOYEE_APP_URL}}",
       "scopes": ["personal"]
     },
     {
       "entityId": "community-feed",
-      "name": "Community Feed",
+      "name": "Feeds",
       "contentUrl": "${{COMMUNITY_FEED_URL}}",
       "websiteUrl": "${{COMMUNITY_FEED_URL}}",
-      "scopes": ["personal"]
-    },
-    {
-      "entityId": "admin-console",
-      "name": "Admin Command Center",
-      "contentUrl": "${{ADMIN_CONSOLE_URL}}",
-      "websiteUrl": "${{ADMIN_CONSOLE_URL}}",
       "scopes": ["personal"]
     }
   ],

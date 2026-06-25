@@ -64,11 +64,10 @@ export function App() {
       <header className="feed-header">
         <div>
           <p className="eyebrow">Community Feed</p>
-          <h1>Public recognition, campaigns, and leaderboard energy in one controlled feed.</h1>
+          <h1>Public recognition, announcements, and the weekly leaderboard.</h1>
           <p className="subtle">
-            This is the custom public feed surface we control for recognition, announcements, and
-            score visibility, while still keeping native Communities as an optional publishing
-            destination.
+            The company-wide social surface for the four Beliefs. Recognitions are moderated in the
+            Admin Console before they appear here, where everyone can react and comment.
           </p>
         </div>
         <div className="header-actions">
@@ -97,25 +96,6 @@ export function App() {
         </aside>
 
         <section className="timeline">
-          <article className="panel destination-panel">
-            <div className="panel-title">
-              <h2>Publishing paths</h2>
-              <span>This tab = path 2</span>
-            </div>
-            <div className="destination-grid">
-              {(bootstrap?.publishingDestinations ?? []).map((item, i) => (
-                <div key={item} className={i === 2 ? "destination-card is-spike" : "destination-card is-live"}>
-                  <strong>{item}</strong>
-                  <span className="dest-tag">{i === 2 ? "spike — Viva Engage" : "live"}</span>
-                </div>
-              ))}
-            </div>
-            <p className="path-note">
-              You are looking at our <strong>own custom feed</strong> — not the native Teams Communities
-              app. Native Communities (Viva Engage) is a separate validation spike.
-            </p>
-          </article>
-
           {(bootstrap?.feed ?? []).map((item) => (
             <article className="post panel" key={item.id}>
               <div className={`post-type post-type--${item.kind}`}>{item.kind}</div>
@@ -134,10 +114,6 @@ export function App() {
           <h2>Spotlight</h2>
           <strong>{bootstrap?.spotlight.title ?? "Preparing spotlight..."}</strong>
           <p>{bootstrap?.spotlight.summary ?? "Loading public announcement preview."}</p>
-          <button className="spike-button" title="Native Communities publishing is a validation spike (Viva Engage / Yammer API)" disabled>
-            Publish to Teams Communities
-          </button>
-          <small className="spike-hint">Spike — needs Viva Engage enabled in the tenant</small>
         </aside>
       </section>
     </main>

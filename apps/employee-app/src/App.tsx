@@ -13,7 +13,20 @@ export function App() {
   const [teamsState, setTeamsState] = useState<TeamsState>(null);
   const [teamsStatus, setTeamsStatus] = useState<"checking" | "teams" | "browser">("checking");
   const [refreshing, setRefreshing] = useState(false);
+  const [activeNav, setActiveNav] = useState("overview");
   const apiBaseUrl = import.meta.env.VITE_API_BASE_URL ?? "http://127.0.0.1:4175";
+
+  const NAV = [
+    { id: "overview", label: "Overview", icon: "◎" },
+    { id: "progress", label: "Progress", icon: "📒" },
+    { id: "learning", label: "Learning", icon: "📘" },
+    { id: "beliefs", label: "Beliefs", icon: "🎯" }
+  ];
+
+  function goToSection(id: string) {
+    setActiveNav(id);
+    document.getElementById(id)?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
 
   useEffect(() => {
     let cancelled = false;
@@ -64,25 +77,27 @@ export function App() {
   }
 
   const nextModule = bootstrap?.modules.find((item) => item.status === "assigned") ?? bootstrap?.modules[0];
-  const leadingName = bootstrap?.leaderboard[0]?.name;
-  const myName = bootstrap?.currentUser.name;
-  const myRank = bootstrap?.leaderboard.findIndex((e) => e.name === myName);
 
   return (
     <div className="app-shell">
       <aside className="rail">
         <div className="brand">CP</div>
         <nav>
-          {["Overview", "Learning", "Passport", "Profile"].map((item) => (
-            <button key={item} className={item === "Overview" ? "nav-item active" : "nav-item"}>
-              {item}
+          {NAV.map((item) => (
+            <button
+              key={item.id}
+              className={activeNav === item.id ? "nav-item active" : "nav-item"}
+              onClick={() => goToSection(item.id)}
+            >
+              <span className="nav-icon">{item.icon}</span>
+              <span className="nav-label">{item.label}</span>
             </button>
           ))}
         </nav>
       </aside>
 
       <main className="main">
-        <header className="hero">
+        <header className="hero" id="overview">
           <div className="hero-copy">
             <p className="eyebrow">Central Pattana Engage</p>
             <h1>Your culture journey, at a glance.</h1>
@@ -115,8 +130,8 @@ export function App() {
           </div>
           <div className="hero-stat">
             <span>{bootstrap?.passport.score ?? "--"}</span>
-            <small>Passport score</small>
-            <strong>{bootstrap?.persona.title ?? "Persona loading"}</strong>
+            <small>Total points</small>
+            <strong>{bootstrap?.currentUser.businessUnit ?? ""}</strong>
           </div>
         </header>
 
@@ -136,9 +151,9 @@ export function App() {
         </section>
 
         <section className="grid">
-          <article className="panel passport-panel">
+          <article className="panel passport-panel" id="progress">
             <div className="panel-title">
-              <h2>Progress passport</h2>
+              <h2>My progress</h2>
               <span>{bootstrap?.passport.score ?? 0} pts</span>
             </div>
             <div className="passport-score-row">
@@ -151,10 +166,6 @@ export function App() {
                   {bootstrap?.passport.modulesCompleted ?? "--"}/{bootstrap?.passport.modulesTotal ?? "--"}
                 </strong>
                 <small>Modules</small>
-              </div>
-              <div>
-                <strong className="passport-score">{bootstrap?.passport.badges ?? "--"}</strong>
-                <small>Badges</small>
               </div>
             </div>
             <div className="passport-values">
@@ -172,31 +183,7 @@ export function App() {
             </div>
           </article>
 
-          <article className="panel streak-panel">
-            <div className="panel-title">
-              <h2>Current streak</h2>
-              <span>Best {bootstrap?.streakSummary.best ?? "--"} days</span>
-            </div>
-            <strong className="big-number">{bootstrap?.streakSummary.current ?? "--"} days</strong>
-            <p>
-              Next milestone: {bootstrap?.streakSummary.nextMilestone ?? "--"} days.{" "}
-              {bootstrap?.streakSummary.daysLeft ?? "--"} day(s) left for{" "}
-              {bootstrap?.streakSummary.reward ?? "reward"}.
-            </p>
-          </article>
-
-          <article className="panel rank-panel">
-            <div className="panel-title">
-              <h2>Leaderboard standing</h2>
-              <span>This week</span>
-            </div>
-            <strong className="big-number">
-              {myRank != null && myRank >= 0 ? `#${myRank + 1}` : "—"}
-            </strong>
-            <p>{leadingName ? <>Leader this week: <strong>{leadingName}</strong>.</> : "Climb the weekly board."}</p>
-          </article>
-
-          <article className="panel module-panel">
+          <article className="panel module-panel" id="learning">
             <div className="panel-title">
               <h2>Next module</h2>
               <span>{nextModule?.duration ?? "Loading"}</span>
@@ -206,41 +193,9 @@ export function App() {
             <p className="chat-hint">▶ Start it from the Chat tab</p>
           </article>
 
-          <article className="panel capstone-panel">
-            <div className="panel-title">
-              <h2>Capstone</h2>
-              <span>{bootstrap?.capstone.difficulty ?? "Extreme"}</span>
-            </div>
-            <strong>{bootstrap?.capstone.title ?? "Capstone Challenge"}</strong>
-            <p>{bootstrap?.capstone.summary ?? "Preparing final-week scenario."}</p>
-            <div className="capstone-meta">
-              <span>{bootstrap?.capstone.timeLimit ?? "05:00"}</span>
-              <span>{bootstrap?.capstone.reward ?? "Reward"}</span>
-              <span className={bootstrap?.capstone.unlocked ? "state-tag done" : "state-tag"}>
-                {bootstrap?.capstone.unlocked ? "unlocked" : "locked"}
-              </span>
-            </div>
-          </article>
-
-          <article className="panel persona-panel">
-            <div className="panel-title">
-              <h2>Work persona</h2>
-              <span>Level {bootstrap?.persona.level ?? "--"}</span>
-            </div>
-            <strong>{bootstrap?.persona.title ?? "Persona loading"}</strong>
-            <p>{bootstrap?.persona.points ?? "--"} total points accumulated across the journey.</p>
-            <div className="trait-list">
-              {(bootstrap?.persona.traits ?? []).map((trait) => (
-                <span key={trait} className="trait-pill">
-                  {trait}
-                </span>
-              ))}
-            </div>
-          </article>
-
           <article className="panel passport-entries-panel">
             <div className="panel-title">
-              <h2>Recent passport entries</h2>
+              <h2>Recent activity</h2>
               <span>Live record</span>
             </div>
             <div className="entry-list">
@@ -258,22 +213,7 @@ export function App() {
             </div>
           </article>
 
-          <article className="panel notifications-panel">
-            <div className="panel-title">
-              <h2>Teams nudges</h2>
-              <span>{bootstrap?.notifications.length ?? 0} queued</span>
-            </div>
-            <div className="notification-list">
-              {(bootstrap?.notifications ?? []).slice(0, 3).map((item) => (
-                <div key={item.id} className="notification-item">
-                  <strong>{item.title}</strong>
-                  <p>{item.summary}</p>
-                </div>
-              ))}
-            </div>
-          </article>
-
-          <article className="panel behaviors">
+          <article className="panel behaviors" id="beliefs">
             <div className="panel-title">
               <h2>The four behaviours</h2>
               <span>CPN's Beliefs by 4 Desired Behaviors</span>

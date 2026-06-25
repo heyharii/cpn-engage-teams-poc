@@ -181,23 +181,20 @@ export function App() {
 
         <article className="sheet">
           <div className="sheet-head">
-            <h2>Publishing destinations</h2>
-            <span>Where approved content can go</span>
+            <h2>Live in the feed</h2>
+            <span>Recently published</span>
           </div>
           <ul className="destinations">
-            {(bootstrap?.publishingDestinations ?? []).map((item, i) => (
-              <li key={item}>
-                <span className="dest-name">{item}</span>
-                <span className={i === 2 ? "tag tag-soon" : "tag tag-live"}>
-                  {i === 2 ? "spike" : "live"}
-                </span>
+            {(bootstrap?.feed ?? []).slice(0, 5).map((item) => (
+              <li key={item.id}>
+                <span className="dest-name">{item.title}</span>
+                <span className="tag tag-live">{item.kind}</span>
               </li>
             ))}
           </ul>
-          <p className="empty-note">
-            “Native Teams Communities” is a validation spike (Viva Engage) — the live surfaces are the
-            private bot feed and this custom Community Feed.
-          </p>
+          {!(bootstrap?.feed ?? []).length ? (
+            <p className="empty-note">Approved recognitions and announcements appear here once published.</p>
+          ) : null}
         </article>
       </section>
 
