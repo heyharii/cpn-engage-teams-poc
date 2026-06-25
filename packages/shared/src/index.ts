@@ -296,8 +296,8 @@ export const demoFeed: FeedItem[] = [
   {
     id: "feed-3",
     kind: "announcement",
-    title: "Final week unlocked",
-    summary: "Capstone challenge is now available for employees who have stayed active this month."
+    title: "New Beliefs challenge this week",
+    summary: "A fresh Collaboration scenario is live in the bot — complete it to climb the weekly leaderboard."
   }
 ];
 
@@ -346,8 +346,8 @@ export const demoNotifications: NotificationItem[] = [
 ];
 
 export const demoSpotlight: Spotlight = {
-  title: "Weekly top performers announcement",
-  summary: "Generate a clean feed post, keep the custom feed as source of truth, and optionally push it to native Communities."
+  title: "Weekly top performers",
+  summary: "Natcha P. leads the momentum board this week. Recognitions and the leaderboard refresh every week."
 };
 
 export const demoPassport: PassportSummary = {
@@ -433,13 +433,13 @@ export const demoScenarios: DemoScenario[] = [
   },
   {
     name: "streak-recovery",
-    title: "Streak recovery",
-    description: "Trigger a streak-at-risk nudge, then recover momentum and update the passport."
+    title: "Challenge completion",
+    description: "An employee completes today's challenge — points post and the leaderboard updates."
   },
   {
     name: "capstone-launch",
-    title: "Capstone launch",
-    description: "Unlock the final challenge moment and queue the launch announcement."
+    title: "Weekly announcement",
+    description: "Publish a weekly announcement to the community feed for all employees."
   }
 ];
 
