@@ -3,8 +3,8 @@ import { Card, CardText, Section, Fields, Field, Actions, Button, Divider } from
 import type { LearningModule } from "@cpn-engage/shared";
 
 /**
- * "Start today's module" intro. Leads into the daily drop quiz so the bot
- * always has an interactive next step.
+ * Learning Journey — module intro (PRD Feature 1). A module mixes video, text,
+ * and a quiz; completing the quiz gives a score (not points).
  */
 export function ModuleIntroCard(opts: { module: LearningModule; behavior: string }) {
   const { module: m, behavior } = opts;
@@ -18,13 +18,13 @@ export function ModuleIntroCard(opts: { module: LearningModule; behavior: string
         <CardText style="bold">WHAT'S INSIDE</CardText>
         <Fields>
           <Field label="⏱️ Time" value={m.duration} />
-          <Field label="🎯 Behaviour" value={behavior} />
-          <Field label="⚡ Drop" value="1 scenario · up to +50 pts" />
+          <Field label="🎯 Belief" value={behavior} />
+          <Field label="📦 Format" value="Video · guide · quiz" />
         </Fields>
       </Section>
       <Actions>
         <Button id="start_module" value={m.id} style="primary">
-          Start the drop
+          Start module
         </Button>
         <Button id="intent" value="help">Maybe later</Button>
       </Actions>

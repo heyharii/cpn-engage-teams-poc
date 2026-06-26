@@ -38,17 +38,12 @@ export async function onSubmitAnswer(thread: AnyThread, payload: { dropId: strin
   const best = drop.options.find((o) => o.isBest) ?? drop.options[0]!;
   const pointsEarned = chosen.isBest ? 50 : 20;
 
-  // Write back to shared state — only the best answer completes the streak day,
-  // but every answer is acknowledged.
+  // Write the challenge completion back to shared state (points).
   let newScore: number | null = null;
-  let newStreak: number | null = null;
   const updated = await submitChallenge(drop.id);
   if (updated) {
     newScore = updated.passport.score;
-    newStreak = updated.streakSummary.current;
   }
 
-  await thread.post(
-    AnswerResultCard({ drop, chosen, best, pointsEarned, newScore, newStreak })
-  );
+  await thread.post(AnswerResultCard({ drop, chosen, best, pointsEarned, newScore }));
 }

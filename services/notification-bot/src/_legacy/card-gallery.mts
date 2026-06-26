@@ -36,25 +36,33 @@ const sampleModule: ModuleContent = {
 };
 
 const cards: { name: string; el: unknown }[] = [
+  // Menu / edge
   { name: "Welcome / Menu", el: C.WelcomeCard({ displayName: "Narin" }) },
-  { name: "Module intro", el: C.ModuleIntroCard({ module: boot.modules[0]!, behavior: "Customers" }) },
-  { name: "Video lesson", el: C.VideoLessonCard({ module: sampleModule }) },
-  { name: "Quiz question", el: C.QuizQuestionCard({ module: sampleModule, quiz: sampleQuiz, total: 3 }) },
-  { name: "Quiz result — correct", el: C.QuizResultCard({ moduleId: "module-1", quiz: sampleQuiz, chosen: sampleQuiz.options[0]!, correct: sampleQuiz.options[0]!, isCorrect: true, hasNext: true }) },
-  { name: "Quiz result — wrong", el: C.QuizResultCard({ moduleId: "module-1", quiz: sampleQuiz, chosen: sampleQuiz.options[1]!, correct: sampleQuiz.options[0]!, isCorrect: false, hasNext: true }) },
-  { name: "Module complete (score)", el: C.ModuleCompleteCard({ module: sampleModule, score: 8, total: 10, next: { id: "module-2", title: "Solving With Impact" } }) },
-  { name: "Daily drop (challenge)", el: C.DailyDropCard({ drop: boot.dailyDrop }) },
-  { name: "Answer result", el: C.AnswerResultCard({ drop: boot.dailyDrop, chosen: boot.dailyDrop.options[0]!, best: boot.dailyDrop.options[0]!, pointsEarned: 50, newScore: 925, newStreak: 13 }) },
-  { name: "Leaderboard", el: C.LeaderboardCard({ entries: boot.leaderboard, you: boot.currentUser.name }) },
-  { name: "Recognise — who", el: C.RecognisePromptCard({ behaviors: boot.behaviors }) },
-  { name: "Recognise — pick Belief", el: C.BeliefSelectCard({ colleague: "Somruk T.", behaviors: boot.behaviors }) },
-  { name: "Recognise — confirm", el: C.RecognitionConfirmCard({ colleague: "Somruk T.", behavior: "Collaboration", description: "Stayed late to help another store recover a difficult handover." }) },
-  { name: "Recognise — sent", el: C.RecognitionSentCard({ colleague: "Somruk T.", behavior: "Collaboration" }) },
-  { name: "Recognition received (notif)", el: C.RecognitionReceivedCard({ fromName: "Narin", behavior: "Collaboration", message: "Stayed late to help another store recover a difficult handover." }) },
-  { name: "My progress", el: C.PassportCard({ passport: boot.passport, streak: boot.streakSummary, persona: boot.persona }) },
-  { name: "Module assigned (notif)", el: C.ModuleAssignedCard({ moduleId: "module-1", title: "Building Customer Empathy", track: "Customers", durationMin: 15 }) },
-  { name: "Challenge reminder (notif)", el: C.ChallengeReminderCard({ behavior: "Customers", reward: "Up to 50 points", timeLimit: "30 sec" }) },
-  { name: "Deadline reminder (notif)", el: C.DeadlineReminderCard({ title: "Building Customer Empathy", daysLeft: 2, actionId: "start_module", actionValue: "module-1" }) }
+  { name: "Error", el: C.ErrorCard() },
+  // Feature 1 — Learning Journey
+  { name: "F1 · Module intro", el: C.ModuleIntroCard({ module: boot.modules[0]!, behavior: "Customers" }) },
+  { name: "F1 · Video lesson", el: C.VideoLessonCard({ module: sampleModule }) },
+  { name: "F1 · Text lesson", el: C.TextLessonCard({ module: sampleModule, heading: "Listen before you solve", body: "When a customer is upset, restate their need in your own words first. It signals you understand, and it surfaces the real problem before you act." }) },
+  { name: "F1 · Quiz question", el: C.QuizQuestionCard({ module: sampleModule, quiz: sampleQuiz, total: 3 }) },
+  { name: "F1 · Module complete (score)", el: C.ModuleCompleteCard({ module: sampleModule, score: 8, total: 10, next: { id: "module-2", title: "Solving With Impact" } }) },
+  { name: "F1 · Module closed", el: C.ClosedCard({ kind: "module", title: "Building Customer Empathy" }) },
+  // Feature 2 — Challenges & Leaderboard
+  { name: "F2 · Challenge (MCQ)", el: C.DailyDropCard({ drop: boot.dailyDrop }) },
+  { name: "F2 · Answer result", el: C.AnswerResultCard({ drop: boot.dailyDrop, chosen: boot.dailyDrop.options[0]!, best: boot.dailyDrop.options[0]!, pointsEarned: 50, newScore: 925 }) },
+  { name: "F2 · Leaderboard", el: C.LeaderboardCard({ entries: boot.leaderboard, you: boot.currentUser.name }) },
+  { name: "F2 · Challenge closed", el: C.ClosedCard({ kind: "challenge", title: "Customers Challenge" }) },
+  // Feature 3 — Recognition
+  { name: "F3 · Recognise — who", el: C.RecognisePromptCard({ behaviors: boot.behaviors }) },
+  { name: "F3 · Pick Belief", el: C.BeliefSelectCard({ colleague: "Somruk T.", behaviors: boot.behaviors }) },
+  { name: "F3 · Describe", el: C.DescriptionPromptCard({ colleague: "Somruk T.", behavior: "Collaboration" }) },
+  { name: "F3 · Add media", el: C.MediaPromptCard({ colleague: "Somruk T." }) },
+  { name: "F3 · Confirm", el: C.RecognitionConfirmCard({ colleague: "Somruk T.", behavior: "Collaboration", description: "Stayed late to help another store recover a difficult handover." }) },
+  { name: "F3 · Sent", el: C.RecognitionSentCard({ colleague: "Somruk T.", behavior: "Collaboration" }) },
+  { name: "F3 · Recognition received (notif)", el: C.RecognitionReceivedCard({ fromName: "Narin", behavior: "Collaboration", message: "Stayed late to help another store recover a difficult handover." }) },
+  // Notifications (proactive)
+  { name: "Notif · Module assigned", el: C.ModuleAssignedCard({ moduleId: "module-1", title: "Building Customer Empathy", track: "Customers", durationMin: 15 }) },
+  { name: "Notif · Challenge reminder", el: C.ChallengeReminderCard({ behavior: "Customers", reward: "Up to 50 points", timeLimit: "30 sec" }) },
+  { name: "Notif · Deadline reminder", el: C.DeadlineReminderCard({ title: "Building Customer Empathy", daysLeft: 2, actionId: "start_module", actionValue: "module-1" }) }
 ];
 
 const items = cards.map((c) => {

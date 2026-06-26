@@ -10,8 +10,8 @@ export function WelcomeCard(opts: { displayName?: string } = {}) {
     <Card title="👋 Welcome to CPN Engage" subtitle="Your Central Pattana culture companion">
       <Section>
         <CardText>
-          {hi} I help you grow the four CPN behaviours through a daily drop,
-          short modules, peer recognition, and your personal progress passport.
+          {hi} I help you grow the four CPN Beliefs through short learning modules,
+          quick challenges, and peer recognition.
         </CardText>
         <CardText style="bold">What would you like to do?</CardText>
       </Section>
@@ -19,10 +19,9 @@ export function WelcomeCard(opts: { displayName?: string } = {}) {
         <Button id="intent" value="start_module" style="primary">
           Start today's module
         </Button>
-        <Button id="intent" value="daily_challenge">Daily drop challenge</Button>
+        <Button id="intent" value="daily_challenge">Today's challenge</Button>
         <Button id="intent" value="recognise">Recognise a colleague</Button>
         <Button id="intent" value="leaderboard">View leaderboard</Button>
-        <Button id="intent" value="passport">My passport</Button>
       </Actions>
     </Card>
   );

@@ -20,6 +20,35 @@ export function BeliefSelectCard(opts: { colleague: string; behaviors: Behavior[
   );
 }
 
+/** Step 2b — ask what happened (free-text description). */
+export function DescriptionPromptCard(opts: { colleague: string; behavior: string }) {
+  return (
+    <Card title="✍️ What happened?" subtitle={`${opts.colleague} · ${opts.behavior}`}>
+      <Section>
+        <CardText>{`Reply with a short note about what **${opts.colleague}** did to show **${opts.behavior}**.`}</CardText>
+      </Section>
+    </Card>
+  );
+}
+
+/** Step 2c — optionally attach a photo or video (PRD Feature 3 #4). */
+export function MediaPromptCard(opts: { colleague: string }) {
+  return (
+    <Card title="📷 Add a photo or video?" subtitle="Optional">
+      <Section>
+        <CardText>
+          {`Attach a photo or video of ${opts.colleague} in action using the Teams attachment (📎) below, or skip.`}
+        </CardText>
+      </Section>
+      <Actions>
+        <Button id="recognise_skip_media" value="skip" style="primary">
+          Skip — no media
+        </Button>
+      </Actions>
+    </Card>
+  );
+}
+
 /** Step 3 — confirm before it goes to the moderation queue. */
 export function RecognitionConfirmCard(opts: { colleague: string; behavior: string; description: string }) {
   return (

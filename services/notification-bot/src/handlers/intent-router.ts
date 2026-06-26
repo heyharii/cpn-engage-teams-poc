@@ -9,7 +9,6 @@ export type Intent =
   | "daily_challenge"
   | "recognise"
   | "leaderboard"
-  | "passport"
   | "unknown";
 
 const MATCHERS: { intent: Intent; patterns: RegExp[] }[] = [
@@ -35,11 +34,7 @@ const MATCHERS: { intent: Intent; patterns: RegExp[] }[] = [
   },
   {
     intent: "leaderboard",
-    patterns: [/\b(leader\w*|rank\w*|top\s+\w+|standing\w*|my rank)\b/i]
-  },
-  {
-    intent: "passport",
-    patterns: [/\b(passport|streak\w*|stamp\w*|my progress|my score|points)\b/i]
+    patterns: [/\b(leader\w*|rank\w*|top\s+\w+|standing\w*|my rank|points|score)\b/i]
   }
 ];
 

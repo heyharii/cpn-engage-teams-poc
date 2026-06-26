@@ -6,7 +6,7 @@ import type { Thread } from "chat";
 import type { Intent } from "./intent-router.ts";
 import { showMenu } from "../flows/menu.ts";
 import { showModuleIntro, showDailyDrop } from "../flows/module.ts";
-import { showLeaderboard, showPassport } from "../flows/leaderboard.ts";
+import { showLeaderboard } from "../flows/leaderboard.ts";
 import { startRecognise } from "../flows/recognise.ts";
 
 type AnyThread = Thread<unknown, unknown>;
@@ -27,9 +27,6 @@ export async function dispatchIntent(thread: AnyThread, intent: Intent | string,
       return;
     case "leaderboard":
       await showLeaderboard(thread);
-      return;
-    case "passport":
-      await showPassport(thread);
       return;
     case "recognise":
       await startRecognise(thread, ctx.rawText, ctx.displayName);
