@@ -1,6 +1,7 @@
 // Menu / edge (needed for any bot)
 export { WelcomeCard } from "./WelcomeCard.tsx";
 export { ErrorCard } from "./ErrorCard.tsx";
+export { StalePromptCard } from "./StalePromptCard.tsx";
 
 // Feature 1 — Learning Journey
 export { ModuleIntroCard } from "./ModuleIntroCard.tsx";

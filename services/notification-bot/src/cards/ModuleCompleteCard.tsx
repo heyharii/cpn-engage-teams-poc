@@ -41,7 +41,7 @@ export function ModuleCompleteCard(opts: {
       ) : null}
       <Actions>
         {next ? (
-          <Button id="start_module" value={next.id} style="primary">
+          <Button id="begin_module" value={next.id} style="primary">
             Start next module
           </Button>
         ) : null}

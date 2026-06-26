@@ -10,7 +10,7 @@ export function ModuleAssignedCard(opts: { moduleId: string; title: string; trac
         <CardText>Tap below to start — it only takes a few minutes.</CardText>
       </Section>
       <Actions>
-        <Button id="start_module" value={opts.moduleId} style="primary">
+        <Button id="begin_module" value={opts.moduleId} style="primary">
           Start module
         </Button>
         <Button id="remind_later" value={opts.moduleId}>Remind me later</Button>

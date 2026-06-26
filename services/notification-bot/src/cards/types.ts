@@ -20,9 +20,11 @@ export type QuizQuestion = {
 export type ModuleContent = {
   id: string;
   title: string;
+  summary: string;
   track: string; // the Belief this module sits under
   durationMin: number;
   videoUrl?: string;
   outcome?: string;
+  lesson: { heading: string; body: string };
   questions: QuizQuestion[];
 };

@@ -1,62 +1,69 @@
 /**
- * Bot wiring: chat SDK + Teams adapter + message/action handlers.
+ * Bot wiring: chat SDK + Teams adapter + the conversation state machine.
  *
- * Inbound text is classified into an intent and dispatched to a flow. Adaptive
- * Card buttons fire actions (intent / start_module / submit_answer) handled
- * below. Every handler is guarded so the conversation never hangs silently.
+ * Three robustness guarantees for this no-AI, button-driven bot:
+ *  1. Free text  → intent router → closest flow, or the menu (never ignored).
+ *  2. Wrong/unknown button → catch-all → menu (never silent).
+ *  3. Stale button (an old card the user scrolled back to) → each flow checks
+ *     the thread state and replies "let's pick up where you are" instead of
+ *     corrupting progress. Button values are self-contained so order doesn't
+ *     matter, and scoring is idempotent.
  */
 
 import { Chat, type Author, type Message } from "chat";
 import { createTeamsAdapter } from "@chat-adapter/teams";
 import { config } from "./config.ts";
-import { state, type ThreadState } from "./state.ts";
+import { state, getState } from "./state.ts";
 import { classifyIntent } from "./handlers/intent-router.ts";
 import { dispatchIntent, type DispatchCtx } from "./handlers/dispatch.ts";
 import { guardAction, guardMessage } from "./handlers/safe.ts";
-import { onSubmitAnswer, showModuleIntro } from "./flows/module.ts";
-import { continueRecognise } from "./flows/recognise.ts";
+import { beginModule, onWatchedVideo, onLessonDone, onQuizAnswer, resumeModule } from "./flows/module.ts";
+import { onSubmitAnswer } from "./flows/challenge.ts";
+import {
+  onRecogniseText,
+  onBeliefSelect,
+  onSkipMedia,
+  onRecogniseSend,
+  resumeRecognise
+} from "./flows/recognise.ts";
+import { showMenu } from "./flows/menu.ts";
 
 export const bot = new Chat({
   userName: "CPN Engage",
-  adapters: {
-    teams: createTeamsAdapter({ appType: config.teams.appType })
-  },
+  adapters: { teams: createTeamsAdapter({ appType: config.teams.appType }) },
   state
 });
 
-function ctxFromAuthor(author?: Author, rawText?: string): DispatchCtx {
+function ctx(author?: Author, rawText?: string): DispatchCtx {
   return { displayName: author?.fullName, teamsUserId: author?.userId, rawText };
 }
 
-/** Shared text handler for DM + mention + subscribed channel messages. */
+/** Shared text handler. Mid-flow text input is consumed by the active flow. */
 async function handleText(thread: Parameters<typeof dispatchIntent>[0], message: Message) {
   const text = message.text ?? "";
 
-  // If the user is mid-recognise and just typed a colleague name, capture it.
-  const current = await state.get<ThreadState>(thread.id);
-  if (current?.kind === "recognise" && current.step === "await_colleague") {
+  // If we're mid-recognition on a text step, the reply IS the answer.
+  const st = await getState(thread.id);
+  if (st.kind === "recognise" && (st.step === "colleague" || st.step === "description")) {
     const intent = classifyIntent(text);
-    // An explicit different command escapes the recognise flow.
+    // An explicit command (e.g. "leaderboard") still escapes the flow.
     if (intent === "unknown" || intent === "recognise") {
-      await continueRecognise(thread, text, message.author?.fullName);
-      return;
+      if (await onRecogniseText(thread, text)) return;
     }
   }
 
-  const intent = classifyIntent(text);
-  await dispatchIntent(thread, intent, ctxFromAuthor(message.author, text));
+  await dispatchIntent(thread, classifyIntent(text), ctx(message.author, text));
 }
 
 bot.onDirectMessage(
   guardMessage<Message>("dm", async (thread, message) => {
-    console.log(`[dm] from="${message.author?.fullName}" text="${message.text}"`);
+    console.log(`[dm] "${message.text}" from ${message.author?.fullName}`);
     await handleText(thread, message);
   })
 );
 
 bot.onNewMention(
   guardMessage<Message>("mention", async (thread, message) => {
-    console.log(`[mention] from="${message.author?.fullName}" text="${message.text}"`);
     await thread.subscribe();
     await handleText(thread, message);
   })
@@ -64,54 +71,81 @@ bot.onNewMention(
 
 bot.onSubscribedMessage(
   guardMessage<Message>("subscribed", async (thread, message) => {
-    const isDm = thread.isDM === true;
-    const isMention = message.isMention === true;
     const intent = classifyIntent(message.text);
-    if (!isDm && !isMention && intent === "unknown") return;
+    if (thread.isDM !== true && message.isMention !== true && intent === "unknown") return;
     await handleText(thread, message);
   })
 );
 
-// ── Action handlers (Adaptive Card buttons) ──────────────────────────────────
+// ── Action handlers ──────────────────────────────────────────────────────────
 
 bot.onAction(
   "intent",
   guardAction("intent", async (event) => {
-    const value = (event.value ?? "help") as string;
     if (!event.thread) return;
-    await dispatchIntent(event.thread, value, {
-      displayName: event.user?.fullName,
-      teamsUserId: event.user?.userId
-    });
+    await dispatchIntent(event.thread, (event.value ?? "help") as string, ctx(event.user));
   })
 );
 
-bot.onAction(
-  "start_module",
-  guardAction("start_module", async (event) => {
-    if (!event.thread) return;
-    await showModuleIntro(event.thread);
-  })
-);
+// Learning Journey
+bot.onAction("begin_module", guardAction("begin_module", async (e) => {
+  if (e.thread) await beginModule(e.thread, (e.value ?? "") as string);
+}));
+bot.onAction("watched_video", guardAction("watched_video", async (e) => {
+  if (e.thread) await onWatchedVideo(e.thread, (e.value ?? "") as string);
+}));
+bot.onAction("lesson_done", guardAction("lesson_done", async (e) => {
+  if (e.thread) await onLessonDone(e.thread, (e.value ?? "") as string);
+}));
+bot.onAction("quiz_answer", guardAction("quiz_answer", async (e) => {
+  if (!e.thread) return;
+  const [moduleId, quizId, optionKey] = ((e.value ?? "") as string).split("|");
+  if (!moduleId || !quizId || !optionKey) throw new Error(`bad quiz_answer: "${e.value}"`);
+  await onQuizAnswer(e.thread, { moduleId, quizId, optionKey });
+}));
 
-bot.onAction(
-  "submit_answer",
-  guardAction("submit_answer", async (event) => {
-    if (!event.thread) return;
-    const raw = (event.value ?? "") as string;
-    const [dropId, optionId] = raw.split("|");
-    if (!dropId || !optionId) throw new Error(`malformed submit_answer payload: "${raw}"`);
-    await onSubmitAnswer(event.thread, { dropId, optionId });
-  })
-);
+// Challenge
+bot.onAction("submit_answer", guardAction("submit_answer", async (e) => {
+  if (!e.thread) return;
+  const [dropId, optionId] = ((e.value ?? "") as string).split("|");
+  if (!dropId || !optionId) throw new Error(`bad submit_answer: "${e.value}"`);
+  await onSubmitAnswer(e.thread, { dropId, optionId });
+}));
 
-// Catch-all — unknown action ids route to the menu instead of going silent.
+// Recognition
+bot.onAction("recognise_belief", guardAction("recognise_belief", async (e) => {
+  if (e.thread) await onBeliefSelect(e.thread, (e.value ?? "") as string);
+}));
+bot.onAction("recognise_skip_media", guardAction("recognise_skip_media", async (e) => {
+  if (e.thread) await onSkipMedia(e.thread);
+}));
+bot.onAction("recognise_send", guardAction("recognise_send", async (e) => {
+  if (e.thread) await onRecogniseSend(e.thread, e.user?.fullName);
+}));
+
+// "Remind me later" — just acknowledge with the menu.
+bot.onAction("remind_later", guardAction("remind_later", async (e) => {
+  if (e.thread) await showMenu(e.thread, e.user?.fullName);
+}));
+
+// "Continue" on a stale-prompt card — re-render the user's current step.
+bot.onAction("resume", guardAction("resume", async (e) => {
+  if (!e.thread) return;
+  const st = await getState(e.thread.id);
+  if (st.kind === "module") await resumeModule(e.thread, st);
+  else if (st.kind === "recognise") await resumeRecognise(e.thread, st);
+  else await showMenu(e.thread, e.user?.fullName);
+}));
+
+// Catch-all — any unknown action id routes to the menu, never silent.
 bot.onAction(
   guardAction("catchall", async (event) => {
-    const known = new Set(["intent", "start_module", "submit_answer"]);
+    const known = new Set([
+      "intent", "begin_module", "watched_video", "lesson_done", "quiz_answer",
+      "submit_answer", "recognise_belief", "recognise_skip_media", "recognise_send",
+      "remind_later", "resume"
+    ]);
     if (known.has(event.actionId)) return;
-    if (event.thread) {
-      await dispatchIntent(event.thread, "help", { displayName: event.user?.fullName });
-    }
+    if (event.thread) await showMenu(event.thread, event.user?.fullName);
   })
 );
