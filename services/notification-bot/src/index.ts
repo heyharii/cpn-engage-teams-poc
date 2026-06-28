@@ -16,6 +16,11 @@ import express from "express";
 import { bot } from "./bot.ts";
 import { config } from "./config.ts";
 import { state } from "./state.ts";
+import { initDb, listConversations } from "./db.ts";
+import { pushCardToAll } from "./proactive.ts";
+import { getBootstrap } from "./api.ts";
+import { firstAssignedModule } from "./content.ts";
+import { ChallengeReminderCard, ModuleAssignedCard } from "./cards/index.ts";
 
 const app = express();
 
@@ -42,6 +47,40 @@ app.post("/internal/notify", (req, res) => {
   res.status(202).json({ ok: true });
 });
 
+// How many users we can proactively reach.
+app.get("/internal/audience", async (_req, res) => {
+  const refs = await listConversations();
+  res.json({ ok: true, count: refs.length, users: refs.map((r) => r.userName ?? r.userId) });
+});
+
+/**
+ * Admin-triggered proactive PUSH. Sends a card to every captured conversation.
+ *   POST /internal/push?type=challenge|module   (header x-push-token if PUSH_TOKEN set)
+ * This is the manual "send now"; the scheduled (cron) path reuses pushCardToAll.
+ */
+app.post("/internal/push", async (req, res) => {
+  const required = process.env.PUSH_TOKEN?.trim();
+  if (required && req.headers["x-push-token"] !== required) {
+    return res.status(401).json({ ok: false, error: "bad push token" });
+  }
+  const type = String(req.query.type ?? "challenge");
+  const boot = await getBootstrap();
+  const card =
+    type === "module"
+      ? (() => {
+          const m = firstAssignedModule();
+          return ModuleAssignedCard({ moduleId: m.id, title: m.title, track: m.track, durationMin: m.durationMin });
+        })()
+      : ChallengeReminderCard({
+          behavior: boot.dailyDrop.behavior,
+          reward: boot.dailyDrop.rewardLabel,
+          timeLimit: boot.dailyDrop.timeLimit
+        });
+  const result = await pushCardToAll(card);
+  console.log(`[push] type=${type} sent=${result.sent}/${result.total}`);
+  res.json({ ok: true, type, ...result });
+});
+
 app.post("/api/messages", async (req, res) => {
   try {
     const headers = new Headers();
@@ -64,9 +103,9 @@ app.post("/api/messages", async (req, res) => {
   }
 });
 
-// Connect the per-thread state store up front (idempotent — the chat SDK also
-// connects it during webhook handling).
+// Connect the per-thread state store + the proactive DB up front.
 await state.connect();
+await initDb();
 
 app.listen(config.port, () => {
   console.log(`✅ CPN Engage bot on http://localhost:${config.port}`);

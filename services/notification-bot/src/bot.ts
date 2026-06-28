@@ -10,10 +10,11 @@
  *     matter, and scoring is idempotent.
  */
 
-import { Chat, type Author, type Message } from "chat";
-import { createTeamsAdapter } from "@chat-adapter/teams";
+import { Chat, type Author, type Message, type Thread } from "chat";
+import { createTeamsAdapter, decodeThreadId } from "@chat-adapter/teams";
 import { config } from "./config.ts";
 import { state, getState } from "./state.ts";
+import { rememberConversation } from "./db.ts";
 import { classifyIntent } from "./handlers/intent-router.ts";
 import { dispatchIntent, type DispatchCtx } from "./handlers/dispatch.ts";
 import { guardAction, guardMessage } from "./handlers/safe.ts";
@@ -38,9 +39,27 @@ function ctx(author?: Author, rawText?: string): DispatchCtx {
   return { displayName: author?.fullName, teamsUserId: author?.userId, rawText };
 }
 
+/** Capture the conversation reference so we can DM this user proactively later. */
+async function capture(thread: Thread<unknown, unknown>, author?: Author) {
+  try {
+    const d = decodeThreadId(thread.id);
+    await rememberConversation({
+      threadId: thread.id,
+      serviceUrl: d.serviceUrl,
+      conversationId: d.conversationId,
+      userId: author?.userId ?? null,
+      userName: author?.fullName ?? null,
+      tenantId: config.teams.tenantId || null
+    });
+  } catch {
+    /* non-fatal — proactive push just skips users we couldn't capture */
+  }
+}
+
 /** Shared text handler. Mid-flow text input is consumed by the active flow. */
 async function handleText(thread: Parameters<typeof dispatchIntent>[0], message: Message) {
   const text = message.text ?? "";
+  await capture(thread, message.author);
 
   // If we're mid-recognition on a text step, the reply IS the answer.
   const st = await getState(thread.id);
