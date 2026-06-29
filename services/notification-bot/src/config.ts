@@ -25,7 +25,10 @@ export const config = {
     tenantId: optional("TEAMS_APP_TENANT_ID"),
     // "MultiTenant" so a bot registered in one tenant can serve Teams in
     // another (our Azure subscription tenant differs from the M365 tenant).
-    appType: appType === "SingleTenant" ? "SingleTenant" : "MultiTenant"
+    appType: appType === "SingleTenant" ? "SingleTenant" : "MultiTenant",
+    // The Teams app PACKAGE id (manifest id) — used as externalId to find the
+    // app in the org catalog for Graph proactive-install.
+    manifestAppId: optional("TEAMS_MANIFEST_APP_ID", "11e326e7-3dfe-49ac-9202-1857b18d6383")
   },
 
   // Base URL of the deployed CPN Engage API (shared cross-app state).

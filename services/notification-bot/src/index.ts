@@ -21,6 +21,8 @@ import { pushCardToAll } from "./proactive.ts";
 import { getBootstrap } from "./api.ts";
 import { firstAssignedModule } from "./content.ts";
 import { ChallengeReminderCard, ModuleAssignedCard } from "./cards/index.ts";
+import { captureFromRawActivity } from "./install-capture.ts";
+import { installAppForUsers } from "./graph.ts";
 
 const app = express();
 
@@ -81,6 +83,30 @@ app.post("/internal/push", async (req, res) => {
   res.json({ ok: true, type, ...result });
 });
 
+/**
+ * Graph proactive-install — install the app for employees so they get captured
+ * (and can be DM'd) without ever opening it. Needs Graph app permissions +
+ * admin consent on the bot's app registration.
+ *   POST /internal/install   body { "userIds": ["<aadObjectId>", ...] }
+ */
+app.post("/internal/install", async (req, res) => {
+  const required = process.env.PUSH_TOKEN?.trim();
+  if (required && req.headers["x-push-token"] !== required) {
+    return res.status(401).json({ ok: false, error: "bad push token" });
+  }
+  let userIds: string[] = [];
+  try {
+    const body = Buffer.isBuffer(req.body) ? JSON.parse(req.body.toString("utf8")) : req.body;
+    userIds = Array.isArray(body?.userIds) ? body.userIds : [];
+  } catch {
+    /* ignore */
+  }
+  if (!userIds.length) return res.status(400).json({ ok: false, error: "provide userIds: [aadObjectId,...]" });
+  const result = await installAppForUsers(userIds);
+  console.log(`[install] ${JSON.stringify(result)}`);
+  res.json({ ok: !result.error, ...result });
+});
+
 app.post("/api/messages", async (req, res) => {
   try {
     const headers = new Headers();
@@ -88,6 +114,8 @@ app.post("/api/messages", async (req, res) => {
       if (value) headers.set(key, Array.isArray(value) ? value.join(",") : String(value));
     }
     const buf = Buffer.isBuffer(req.body) ? req.body : Buffer.from(JSON.stringify(req.body ?? {}));
+    // Capture conversation refs from install / bot-added events (before any chat).
+    void captureFromRawActivity(buf.toString("utf8"));
     const url = `http://localhost:${config.port}${req.path}`;
     const body = new Uint8Array(buf.buffer, buf.byteOffset, buf.byteLength);
     const request = new Request(url, { method: "POST", headers, body: body as unknown as BodyInit });
