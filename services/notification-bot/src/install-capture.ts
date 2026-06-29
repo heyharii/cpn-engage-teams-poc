@@ -1,9 +1,13 @@
 /**
- * Capture a user's conversation reference at INSTALL time — before they ever
- * chat. When the CPN Engage app is installed/added for a user, Teams sends a
- * `conversationUpdate` (bot added) or `installationUpdate` (action: add)
- * activity to the webhook. We parse it and store the ref so the bot can DM
- * that user proactively even if they've never opened the app.
+ * Capture a user's conversation reference from ANY inbound Teams activity, so
+ * the bot can DM that user proactively even if they never open the chat.
+ *
+ * Install events (`installationUpdate` action:add, or `conversationUpdate` with
+ * the bot in membersAdded) are the ideal signal — they fire before the user
+ * ever chats. But Teams does not always re-fire them (e.g. re-installing into an
+ * existing 1:1 conversation), so we also capture from plain messages and every
+ * other activity that carries a conversation ref. Capturing is idempotent
+ * (upsert keyed on threadId), so doing it on every activity is safe.
  *
  * Uses the same encodeThreadId scheme as on-chat capture, so the two dedupe.
  */
@@ -30,16 +34,25 @@ export async function captureFromRawActivity(rawBody: string): Promise<void> {
     return;
   }
 
+  const serviceUrl = a.serviceUrl;
+  const conversationId = a.conversation?.id;
+
+  // Diagnostics: log EVERY inbound activity so we can see exactly what Teams
+  // delivers (type/action + whether it carries a conversation ref).
+  console.log(
+    `[webhook] type=${a.type ?? "?"}${a.action ? ` action=${a.action}` : ""} ` +
+      `from=${a.from?.name ?? a.from?.id ?? "-"} conv=${conversationId ? "yes" : "no"}`
+  );
+
+  // Any activity with a conversation ref is enough to DM that user later.
+  if (!serviceUrl || !conversationId) return;
+
   const isInstall = a.type === "installationUpdate" && (a.action === "add" || a.action == null);
   const botAdded =
     a.type === "conversationUpdate" &&
     Array.isArray(a.membersAdded) &&
     a.membersAdded.some((m) => m.id && m.id === a.recipient?.id);
-  if (!isInstall && !botAdded) return;
-
-  const serviceUrl = a.serviceUrl;
-  const conversationId = a.conversation?.id;
-  if (!serviceUrl || !conversationId) return;
+  const label = isInstall || botAdded ? "install" : a.type ?? "activity";
 
   try {
     const threadId = encodeThreadId({ serviceUrl, conversationId });
@@ -51,8 +64,8 @@ export async function captureFromRawActivity(rawBody: string): Promise<void> {
       userName: a.from?.name ?? null,
       tenantId: a.channelData?.tenant?.id ?? config.teams.tenantId ?? null
     });
-    console.log(`[install-capture] ${a.type} captured for ${a.from?.name ?? conversationId}`);
+    console.log(`[capture] (${label}) stored ref for ${a.from?.name ?? conversationId}`);
   } catch (err) {
-    console.warn("[install-capture] failed:", err instanceof Error ? err.message : err);
+    console.warn("[capture] failed:", err instanceof Error ? err.message : err);
   }
 }
