@@ -45,19 +45,32 @@ export async function verifyTeamsToken(authHeader: string | undefined): Promise<
   // Accept either the client id or the Application ID URI as audience — Teams
   // SSO tokens use one or the other depending on how the API scope is exposed.
   const audiences = [clientId, appIdUri].filter(Boolean);
+  // Teams SSO may issue v1 (iss = sts.windows.net/{tid}/) or v2
+  // (iss = login.microsoftonline.com/{tid}/v2.0) tokens depending on the app's
+  // requestedAccessTokenVersion — accept both so it works either way.
+  const issuers = [
+    `https://login.microsoftonline.com/${tenantId}/v2.0`,
+    `https://sts.windows.net/${tenantId}/`
+  ];
   try {
     const { payload } = await jwtVerify(token, jwks, {
-      issuer: `https://login.microsoftonline.com/${tenantId}/v2.0`,
+      issuer: issuers,
       audience: audiences
     });
-    const p = payload as JWTPayload & { oid?: string; name?: string; preferred_username?: string; tid?: string };
+    const p = payload as JWTPayload & {
+      oid?: string;
+      name?: string;
+      preferred_username?: string;
+      upn?: string;
+      tid?: string;
+    };
     if (!p.oid) return { ok: false, error: "token has no oid" };
     return {
       ok: true,
       user: {
         oid: p.oid,
         name: p.name ?? null,
-        email: p.preferred_username ?? null,
+        email: p.preferred_username ?? p.upn ?? null,
         tenantId: p.tid ?? null
       }
     };
