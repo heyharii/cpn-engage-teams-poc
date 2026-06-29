@@ -17,6 +17,7 @@ export function App() {
   const [teamsStatus, setTeamsStatus] = useState<"checking" | "teams" | "browser">("checking");
   const [ssoUser, setSsoUser] = useState<SsoUser>(null);
   const [ssoStatus, setSsoStatus] = useState<SsoStatus>("checking");
+  const [ssoError, setSsoError] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const [activeNav, setActiveNav] = useState("overview");
   const apiBaseUrl = import.meta.env.VITE_API_BASE_URL ?? "http://127.0.0.1:4175";
@@ -75,10 +76,15 @@ export function App() {
               setSsoStatus("verified");
             }
           } else if (!cancelled) {
+            const body = await res.text();
+            setSsoError(`backend ${res.status}: ${body.slice(0, 160)}`);
             setSsoStatus("unverified");
           }
-        } catch {
-          if (!cancelled) setSsoStatus("unverified");
+        } catch (err) {
+          if (!cancelled) {
+            setSsoError(`getAuthToken: ${err instanceof Error ? err.message : String(err)}`);
+            setSsoStatus("unverified");
+          }
         }
       } catch {
         if (!cancelled) {
@@ -151,7 +157,9 @@ export function App() {
               {ssoStatus === "verified" ? (
                 <span className="runtime-badge">✓ Verified via SSO</span>
               ) : ssoStatus === "unverified" ? (
-                <span className="runtime-badge muted">SSO unavailable — unverified</span>
+                <span className="runtime-badge muted" title={ssoError ?? ""}>
+                  SSO unavailable — {ssoError ?? "unverified"}
+                </span>
               ) : (
                 <span className="runtime-badge muted">Verifying…</span>
               )}
