@@ -23,6 +23,7 @@ import { firstAssignedModule } from "./content.ts";
 import { ChallengeReminderCard, ModuleAssignedCard } from "./cards/index.ts";
 import { captureFromRawActivity } from "./install-capture.ts";
 import { installAppForUsers } from "./graph.ts";
+import { startScheduler, scheduleTestPush } from "./scheduler.ts";
 
 const app = express();
 
@@ -107,6 +108,17 @@ app.post("/internal/install", async (req, res) => {
   res.json({ ok: !result.error, ...result });
 });
 
+// Demo the scheduler: fire a one-off proactive push after N seconds (default 30).
+app.post("/internal/schedule-test", async (req, res) => {
+  const required = process.env.PUSH_TOKEN?.trim();
+  if (required && req.headers["x-push-token"] !== required) {
+    return res.status(401).json({ ok: false, error: "bad push token" });
+  }
+  const seconds = Number(req.query.seconds ?? 30);
+  const ok = await scheduleTestPush(seconds);
+  res.json({ ok, scheduledInSeconds: ok ? seconds : null, note: ok ? "watch your DM" : "scheduler not running (no DATABASE_URL)" });
+});
+
 app.post("/api/messages", async (req, res) => {
   try {
     const headers = new Headers();
@@ -131,9 +143,10 @@ app.post("/api/messages", async (req, res) => {
   }
 });
 
-// Connect the per-thread state store + the proactive DB up front.
+// Connect the per-thread state store + the proactive DB + scheduler up front.
 await state.connect();
 await initDb();
+await startScheduler();
 
 app.listen(config.port, () => {
   console.log(`✅ CPN Engage bot on http://localhost:${config.port}`);
