@@ -11,6 +11,13 @@ services:
     envVars:
       - key: NOTIFICATION_BOT_URL
         value: https://cpn-engage-bot-teams-poc.onrender.com
+      # Teams SSO token validation for the personal Profile tab.
+      - key: TEAMS_APP_ID
+        sync: false
+      - key: TEAMS_APP_TENANT_ID
+        sync: false
+      - key: APPLICATION_ID_URI
+        sync: false
 
   - type: web
     name: cpn-engage-bot-teams-poc

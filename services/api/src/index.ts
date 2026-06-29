@@ -1,5 +1,6 @@
 import cors from "@fastify/cors";
 import Fastify from "fastify";
+import { ssoConfigured, verifyTeamsToken } from "./sso.js";
 import {
   demoBootstrap,
   demoScenarios,
@@ -258,6 +259,41 @@ function runScenario(name: DemoScenarioName) {
 }
 
 app.get("/health", async () => ({ ok: true }));
+
+/**
+ * Personalized profile — SSO-protected. The Profile tab sends the silent Teams
+ * SSO token as a Bearer; we verify it and return that user's profile. Identity
+ * comes from the verified token (oid/name/email), never from the request body.
+ */
+app.get("/api/profile/me", async (request, reply) => {
+  if (!ssoConfigured()) {
+    // SSO not wired yet → don't 500; let the tab fall back to unverified mode.
+    return reply.code(501).send({ ok: false, error: "sso-not-configured" });
+  }
+  const result = await verifyTeamsToken(request.headers.authorization);
+  if (!result.ok) {
+    return reply.code(401).send({ ok: false, error: result.error });
+  }
+  const { user } = result;
+  // POC data model has one shared demo profile; merge the VERIFIED identity on
+  // top so the tab shows the real signed-in person. In production this is keyed
+  // on user.oid to load that employee's own progress.
+  return {
+    ok: true,
+    verified: true,
+    user: {
+      id: user.oid,
+      name: user.name ?? state.currentUser.name,
+      email: user.email,
+      businessUnit: state.currentUser.businessUnit
+    },
+    profile: state.currentUser,
+    progress: {
+      modules: state.modules,
+      leaderboard: state.leaderboard
+    }
+  };
+});
 
 app.get("/api/bootstrap", async () => state);
 app.get("/api/users/me", async () => state.currentUser);

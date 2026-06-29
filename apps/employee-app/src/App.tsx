@@ -1,6 +1,6 @@
 import { type BootstrapResponse } from "@cpn-engage/shared";
 import { useEffect, useState } from "react";
-import { app as teamsApp } from "@microsoft/teams-js";
+import { app as teamsApp, authentication } from "@microsoft/teams-js";
 
 type TeamsState = {
   host: string;
@@ -8,10 +8,15 @@ type TeamsState = {
   userObjectId?: string;
 } | null;
 
+type SsoUser = { id: string; name: string | null; email: string | null } | null;
+type SsoStatus = "checking" | "verified" | "unverified";
+
 export function App() {
   const [bootstrap, setBootstrap] = useState<BootstrapResponse | null>(null);
   const [teamsState, setTeamsState] = useState<TeamsState>(null);
   const [teamsStatus, setTeamsStatus] = useState<"checking" | "teams" | "browser">("checking");
+  const [ssoUser, setSsoUser] = useState<SsoUser>(null);
+  const [ssoStatus, setSsoStatus] = useState<SsoStatus>("checking");
   const [refreshing, setRefreshing] = useState(false);
   const [activeNav, setActiveNav] = useState("overview");
   const apiBaseUrl = import.meta.env.VITE_API_BASE_URL ?? "http://127.0.0.1:4175";
@@ -55,8 +60,31 @@ export function App() {
           });
           setTeamsStatus("teams");
         }
+
+        // SSO (silent): exchange the Teams identity for an AAD token — no login
+        // screen — then have the backend VERIFY it before trusting who we are.
+        try {
+          const token = await authentication.getAuthToken();
+          const res = await fetch(`${apiBaseUrl}/api/profile/me`, {
+            headers: { Authorization: `Bearer ${token}` }
+          });
+          if (res.ok) {
+            const data = (await res.json()) as { user: { id: string; name: string | null; email: string | null } };
+            if (!cancelled) {
+              setSsoUser(data.user);
+              setSsoStatus("verified");
+            }
+          } else if (!cancelled) {
+            setSsoStatus("unverified");
+          }
+        } catch {
+          if (!cancelled) setSsoStatus("unverified");
+        }
       } catch {
-        if (!cancelled) setTeamsStatus("browser");
+        if (!cancelled) {
+          setTeamsStatus("browser");
+          setSsoStatus("unverified");
+        }
       }
     }
     void initTeams();
@@ -106,7 +134,12 @@ export function App() {
               happen in the <strong>Chat</strong> tab with the CPN Engage bot — this view shows how
               far you've come.
             </p>
-            {bootstrap ? (
+            {ssoStatus === "verified" && ssoUser ? (
+              <p className="subtle">
+                Signed in as <strong>{ssoUser.name ?? ssoUser.email}</strong>
+                {ssoUser.email ? ` (${ssoUser.email})` : ""}.
+              </p>
+            ) : bootstrap ? (
               <p className="subtle">
                 Signed in as {bootstrap.currentUser.name} from {bootstrap.currentUser.businessUnit}.
               </p>
@@ -115,6 +148,13 @@ export function App() {
               <span className="runtime-badge">
                 {teamsStatus === "teams" ? "Teams host detected" : "Browser preview mode"}
               </span>
+              {ssoStatus === "verified" ? (
+                <span className="runtime-badge">✓ Verified via SSO</span>
+              ) : ssoStatus === "unverified" ? (
+                <span className="runtime-badge muted">SSO unavailable — unverified</span>
+              ) : (
+                <span className="runtime-badge muted">Verifying…</span>
+              )}
               {teamsState ? (
                 <>
                   <span className="runtime-badge muted">{teamsState.host}</span>
