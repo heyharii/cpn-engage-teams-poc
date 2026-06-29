@@ -14,7 +14,7 @@ import { listConversations, type ConversationRef } from "./db.ts";
 
 let cachedToken: { value: string; exp: number } | null = null;
 
-async function getBotToken(): Promise<string | null> {
+export async function getBotToken(): Promise<string | null> {
   if (!config.teams.appId || !config.teams.appPassword) return null;
   if (cachedToken && cachedToken.exp > Date.now() + 60_000) return cachedToken.value;
 
@@ -37,6 +37,36 @@ async function getBotToken(): Promise<string | null> {
   const json = (await res.json()) as { access_token: string; expires_in: number };
   cachedToken = { value: json.access_token, exp: Date.now() + json.expires_in * 1000 };
   return json.access_token;
+}
+
+export type TeamsMember = {
+  id?: string;
+  name?: string;
+  aadObjectId?: string;
+  userPrincipalName?: string;
+  email?: string;
+};
+
+/**
+ * Bot Connector "get conversation members" — for a 1:1 chat this returns the
+ * user (name + aadObjectId + UPN), even when the conversation was created by a
+ * system-triggered Graph install whose install event carried no user identity.
+ */
+export async function getConversationMembers(serviceUrl: string, conversationId: string): Promise<TeamsMember[]> {
+  const token = await getBotToken();
+  if (!token) return [];
+  const url = `${serviceUrl.replace(/\/$/, "")}/v3/conversations/${encodeURIComponent(conversationId)}/members`;
+  try {
+    const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
+    if (!res.ok) {
+      console.warn(`[members] ${conversationId} → ${res.status} ${(await res.text()).slice(0, 160)}`);
+      return [];
+    }
+    return (await res.json()) as TeamsMember[];
+  } catch (err) {
+    console.warn("[members] error:", err instanceof Error ? err.message : err);
+    return [];
+  }
 }
 
 function renderCard(cardElement: unknown): unknown {

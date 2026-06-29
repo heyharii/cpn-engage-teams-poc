@@ -23,6 +23,7 @@ import { firstAssignedModule } from "./content.ts";
 import { ChallengeReminderCard, ModuleAssignedCard } from "./cards/index.ts";
 import { captureFromRawActivity } from "./install-capture.ts";
 import { installAppForUsers } from "./graph.ts";
+import { enrichAll } from "./enrich.ts";
 import { startScheduler, scheduleTestPush } from "./scheduler.ts";
 
 const app = express();
@@ -50,10 +51,28 @@ app.post("/internal/notify", (req, res) => {
   res.status(202).json({ ok: true });
 });
 
-// How many users we can proactively reach.
+// How many users we can proactively reach (+ resolved identity once enriched).
 app.get("/internal/audience", async (_req, res) => {
   const refs = await listConversations();
-  res.json({ ok: true, count: refs.length, users: refs.map((r) => r.userName ?? r.userId) });
+  res.json({
+    ok: true,
+    count: refs.length,
+    users: refs.map((r) => ({
+      name: r.userName ?? r.userId,
+      jobTitle: r.jobTitle ?? null,
+      department: r.department ?? null
+    }))
+  });
+});
+
+// Enrich captured conversations with name + job title + department.
+app.post("/internal/enrich", async (req, res) => {
+  const required = process.env.PUSH_TOKEN?.trim();
+  if (required && req.headers["x-push-token"] !== required) {
+    return res.status(401).json({ ok: false, error: "bad push token" });
+  }
+  const result = await enrichAll();
+  res.json({ ok: true, ...result });
 });
 
 /**

@@ -31,6 +31,33 @@ async function getGraphToken(): Promise<string | null> {
   return ((await res.json()) as { access_token: string }).access_token;
 }
 
+export type UserProfile = {
+  displayName?: string;
+  jobTitle?: string;
+  department?: string;
+  mail?: string;
+  officeLocation?: string;
+};
+
+/**
+ * Read a user's directory profile (name, job title, department) for enrichment.
+ * Requires the User.Read.All application permission (admin-consented). `idOrUpn`
+ * may be an AAD object id or a userPrincipalName.
+ */
+export async function getUserProfile(idOrUpn: string): Promise<UserProfile | null> {
+  const token = await getGraphToken();
+  if (!token) return null;
+  const select = "displayName,jobTitle,department,mail,officeLocation";
+  const res = await fetch(`${GRAPH}/users/${encodeURIComponent(idOrUpn)}?$select=${select}`, {
+    headers: { Authorization: `Bearer ${token}` }
+  });
+  if (!res.ok) {
+    console.warn(`[graph] profile ${idOrUpn} → ${res.status} ${(await res.text()).slice(0, 160)}`);
+    return null;
+  }
+  return (await res.json()) as UserProfile;
+}
+
 /** Find the app's catalog id from its manifest (external) id. */
 async function getCatalogAppId(token: string): Promise<string | null> {
   const ext = config.teams.manifestAppId;

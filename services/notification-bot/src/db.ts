@@ -15,6 +15,8 @@ export type ConversationRef = {
   userId: string | null;
   userName: string | null;
   tenantId: string | null;
+  jobTitle: string | null;
+  department: string | null;
 };
 
 const url = process.env.DATABASE_URL?.trim();
@@ -36,11 +38,16 @@ export async function initDb(): Promise<void> {
       updated_at timestamptz not null default now()
     )
   `;
+  // Enrichment columns (name/title/department resolved from Teams + Graph).
+  await sql`alter table conversations add column if not exists job_title text`;
+  await sql`alter table conversations add column if not exists department text`;
   initDone = true;
   console.log("[db] connected + conversations table ready");
 }
 
-export async function rememberConversation(ref: ConversationRef): Promise<void> {
+export async function rememberConversation(
+  ref: Omit<ConversationRef, "jobTitle" | "department">
+): Promise<void> {
   if (!sql) return;
   try {
     await sql`
@@ -65,12 +72,33 @@ export async function listConversations(): Promise<ConversationRef[]> {
     const rows = await sql<ConversationRef[]>`
       select thread_id as "threadId", service_url as "serviceUrl",
              conversation_id as "conversationId", user_id as "userId",
-             user_name as "userName", tenant_id as "tenantId"
+             user_name as "userName", tenant_id as "tenantId",
+             job_title as "jobTitle", department as "department"
       from conversations order by updated_at desc
     `;
     return [...rows];
   } catch (err) {
     console.warn("[db] listConversations failed:", err instanceof Error ? err.message : err);
     return [];
+  }
+}
+
+/** Update the resolved profile fields for one conversation (enrichment). */
+export async function updateConversationProfile(
+  threadId: string,
+  p: { userId?: string | null; userName?: string | null; jobTitle?: string | null; department?: string | null }
+): Promise<void> {
+  if (!sql) return;
+  try {
+    await sql`
+      update conversations set
+        user_id    = coalesce(${p.userId ?? null}, user_id),
+        user_name  = coalesce(${p.userName ?? null}, user_name),
+        job_title  = coalesce(${p.jobTitle ?? null}, job_title),
+        department = coalesce(${p.department ?? null}, department)
+      where thread_id = ${threadId}
+    `;
+  } catch (err) {
+    console.warn("[db] updateConversationProfile failed:", err instanceof Error ? err.message : err);
   }
 }
