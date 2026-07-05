@@ -21,17 +21,30 @@ import {
 
 type AnyThread = Thread<unknown, unknown>;
 
-/** Pull a name out of "recognise Somruk T." style input, if present. */
-function extractColleague(text?: string): string | undefined {
+/**
+ * Turn free text into just the colleague's name. Handles both a bare name
+ * ("Somruk T.") and a sentence ("I want to recognise Somruk T.") by stripping
+ * leading filler and any recognise/praise verb before the name.
+ */
+function cleanColleagueName(text?: string): string | undefined {
   if (!text) return undefined;
-  const m = text.match(/\b(?:recogni[sz]e|praise|nominate|kudos to|thank)\b\s+(.+)/i);
-  const name = m?.[1]?.trim();
-  return name && name.length > 1 ? name.replace(/[.!?]+$/, "") : undefined;
+  let s = text.trim();
+  // If a recognise-style verb appears, keep only what's AFTER it.
+  const verb = s.match(/\b(?:recogni[sz]e|praise|nominate|kudos to|thank|shout ?out to)\b\s+(.+)/i);
+  if (verb?.[1]) s = verb[1];
+  // Strip common lead-in phrases ("I want to", "please", "let's", "can you"…).
+  s = s.replace(/^(?:i(?:'d| would| wanna| want)?\s+(?:like\s+)?to\s+|please\s+|can\s+you\s+|let'?s\s+|help\s+me\s+)+/i, "");
+  // Drop a trailing "for ..." clause + surrounding punctuation.
+  s = s.replace(/\s+for\s+.+$/i, "").replace(/[.!?,;:]+$/, "").trim();
+  return s.length > 1 ? s : undefined;
 }
 
 /** Intent "recognise" — start the flow (optionally jump if a name was given). */
 export async function startRecognise(thread: AnyThread, fromText?: string) {
-  const colleague = extractColleague(fromText);
+  // Only jump ahead if the opener actually named someone after a verb.
+  const colleague = /\b(?:recogni[sz]e|praise|nominate|kudos to|thank|shout ?out to)\b/i.test(fromText ?? "")
+    ? cleanColleagueName(fromText)
+    : undefined;
   const boot = await getBootstrap();
   if (colleague) {
     await setState(thread.id, { kind: "recognise", step: "belief", colleague });
@@ -49,12 +62,12 @@ export async function startRecognise(thread: AnyThread, fromText?: string) {
 export async function onRecogniseText(thread: AnyThread, text: string): Promise<boolean> {
   const st = await getState(thread.id);
   if (st.kind !== "recognise") return false;
-  const clean = text.trim().replace(/[.!?]+$/, "");
 
   if (st.step === "colleague") {
-    await setState(thread.id, { ...st, step: "belief", colleague: clean });
+    const colleague = cleanColleagueName(text) ?? text.trim();
+    await setState(thread.id, { ...st, step: "belief", colleague });
     const boot = await getBootstrap();
-    await thread.post(BeliefSelectCard({ colleague: clean, behaviors: boot.behaviors }));
+    await thread.post(BeliefSelectCard({ colleague, behaviors: boot.behaviors }));
     return true;
   }
   if (st.step === "description") {
@@ -87,7 +100,7 @@ export async function onSkipMedia(thread: AnyThread) {
   );
 }
 
-/** Action "recognise_send" — submit to the moderation queue. */
+/** Action "recognise_send" — post the recognition to the public feed. */
 export async function onRecogniseSend(thread: AnyThread, displayName?: string) {
   const st = await getState(thread.id);
   if (st.kind !== "recognise" || st.step !== "confirm") return stale(thread, st);

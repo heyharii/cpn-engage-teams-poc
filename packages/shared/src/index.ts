@@ -60,11 +60,23 @@ export type LeaderboardEntry = {
   points: number;
 };
 
+export type FeedReaction = {
+  emoji: string;
+  count: number;
+};
+
 export type FeedItem = {
   id: string;
   kind: "recognition" | "leaderboard" | "announcement";
   title: string;
   summary: string;
+  /** Rich recognition fields (present for kind === "recognition"). */
+  author?: string;
+  target?: string;
+  belief?: string;
+  message?: string;
+  createdAt?: string;
+  reactions?: FeedReaction[];
 };
 
 export type PassportValueProgress = {

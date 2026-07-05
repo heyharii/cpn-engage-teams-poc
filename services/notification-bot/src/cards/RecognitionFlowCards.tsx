@@ -49,7 +49,7 @@ export function MediaPromptCard(opts: { colleague: string }) {
   );
 }
 
-/** Step 3 — confirm before it goes to the moderation queue. */
+/** Step 3 — confirm before it posts to the public feed (no approval needed). */
 export function RecognitionConfirmCard(opts: { colleague: string; behavior: string; description: string }) {
   return (
     <Card title="📝 Confirm recognition" subtitle="Step 3 of 3">
@@ -66,7 +66,7 @@ export function RecognitionConfirmCard(opts: { colleague: string; behavior: stri
       </Section>
       <Actions>
         <Button id="recognise_send" value="send" style="primary">
-          Send for approval
+          Send recognition
         </Button>
         <Button id="intent" value="recognise">Start over</Button>
       </Actions>

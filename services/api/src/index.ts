@@ -30,8 +30,39 @@ function buildRecognitionFeedItem(item: RecognitionQueueItem) {
     id: `feed-${item.id}`,
     kind: "recognition" as const,
     title: `${item.behavior} recognition`,
-    summary: `${item.employee} recognized ${item.target} for behavior aligned to ${item.behavior}.`
+    summary: `${item.employee} recognized ${item.target} for living ${item.behavior}.`,
+    author: item.employee,
+    target: item.target,
+    belief: item.behavior,
+    message: item.message,
+    createdAt: new Date().toISOString(),
+    reactions: [] as { emoji: string; count: number }[]
   };
+}
+
+// Per-user reaction tracking (emoji → set of user oids) so a user can toggle
+// their own reaction. Kept beside the feed item; counts mirror into the item.
+const reactionUsers = new Map<string, Map<string, Set<string>>>();
+
+function toggleReaction(feedId: string, emoji: string, oid: string): void {
+  const item = state.feed.find((f) => f.id === feedId);
+  if (!item) return;
+  let byEmoji = reactionUsers.get(feedId);
+  if (!byEmoji) {
+    byEmoji = new Map();
+    reactionUsers.set(feedId, byEmoji);
+  }
+  let users = byEmoji.get(emoji);
+  if (!users) {
+    users = new Set();
+    byEmoji.set(emoji, users);
+  }
+  if (users.has(oid)) users.delete(oid);
+  else users.add(oid);
+  // Rebuild the item's reaction counts from the tracking map.
+  item.reactions = [...byEmoji.entries()]
+    .map(([e, set]) => ({ emoji: e, count: set.size }))
+    .filter((r) => r.count > 0);
 }
 
 function appendPassportEntry(entry: {
@@ -419,13 +450,20 @@ app.post<{
     ...request.body
   };
 
-  state.recognitionQueue = [recognition, ...state.recognitionQueue];
+  // New story: recognition does NOT require approval — publish straight to the
+  // public feed so it appears immediately (the recognised colleague is notified
+  // by the bot).
+  state.feed = [buildRecognitionFeedItem(recognition), ...state.feed];
+
+  updateMetric("Recognition posts", () => ({
+    note: "Published to the public feed"
+  }));
 
   queueNotification({
     type: "recognition-approved",
-    title: "Recognition awaiting approval",
-    summary: `${recognition.employee} submitted recognition for ${recognition.target}.`,
-    audience: "admins"
+    title: "New recognition posted",
+    summary: `${recognition.employee} recognised ${recognition.target} for ${recognition.behavior}.`,
+    audience: recognition.target
   });
 
   return {
@@ -433,6 +471,30 @@ app.post<{
     recognition,
     bootstrap: state
   };
+});
+
+// Toggle an emoji reaction on a feed post — SSO-gated (identity from token).
+app.post<{
+  Params: { id: string };
+  Body: { emoji?: string };
+}>("/api/feed/:id/react", async (request, reply) => {
+  if (!ssoConfigured()) {
+    return reply.code(501).send({ ok: false, error: "sso-not-configured" });
+  }
+  const result = await verifyTeamsToken(request.headers.authorization);
+  if (!result.ok) {
+    return reply.code(401).send({ ok: false, error: result.error });
+  }
+  const emoji = (request.body?.emoji ?? "").trim();
+  if (!emoji) {
+    return reply.code(400).send({ ok: false, error: "emoji required" });
+  }
+  const item = state.feed.find((f) => f.id === request.params.id);
+  if (!item) {
+    return reply.code(404).send({ ok: false, error: "feed item not found" });
+  }
+  toggleReaction(request.params.id, emoji, result.user.oid);
+  return { ok: true, reactions: item.reactions ?? [] };
 });
 
 app.post<{

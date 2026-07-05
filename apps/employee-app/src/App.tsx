@@ -150,26 +150,6 @@ export function App() {
                 Signed in as {bootstrap.currentUser.name} from {bootstrap.currentUser.businessUnit}.
               </p>
             ) : null}
-            <div className="runtime-badges">
-              <span className="runtime-badge">
-                {teamsStatus === "teams" ? "Teams host detected" : "Browser preview mode"}
-              </span>
-              {ssoStatus === "verified" ? (
-                <span className="runtime-badge">✓ Verified via SSO</span>
-              ) : ssoStatus === "unverified" ? (
-                <span className="runtime-badge muted" title={ssoError ?? ""}>
-                  SSO unavailable — {ssoError ?? "unverified"}
-                </span>
-              ) : (
-                <span className="runtime-badge muted">Verifying…</span>
-              )}
-              {teamsState ? (
-                <>
-                  <span className="runtime-badge muted">{teamsState.host}</span>
-                  <span className="runtime-badge muted">{teamsState.frame}</span>
-                </>
-              ) : null}
-            </div>
             <div className="hero-actions">
               <button onClick={() => void refreshBootstrap()}>
                 {refreshing ? "Refreshing…" : "Refresh"}
