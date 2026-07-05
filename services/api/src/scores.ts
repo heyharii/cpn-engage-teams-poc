@@ -74,6 +74,7 @@ export async function computeLeaderboard(limit = 20): Promise<LeaderRow[]> {
       from score_events s
       left join directory_users d on d.oid = s.user_key
       group by s.user_key, d.display_name, d.department
+      having sum(s.points) > 0
       order by points desc
       limit ${limit}
     `;
@@ -81,6 +82,16 @@ export async function computeLeaderboard(limit = 20): Promise<LeaderRow[]> {
   } catch (err) {
     console.warn("[scores] computeLeaderboard failed:", err instanceof Error ? err.message : err);
     return [];
+  }
+}
+
+/** Clear all score events (used by the demo reset). */
+export async function clearScores(): Promise<void> {
+  if (!sql) return;
+  try {
+    await sql`truncate table score_events`;
+  } catch (err) {
+    console.warn("[scores] clearScores failed:", err instanceof Error ? err.message : err);
   }
 }
 

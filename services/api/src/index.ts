@@ -1,7 +1,7 @@
 import cors from "@fastify/cors";
 import Fastify from "fastify";
 import { ssoConfigured, verifyTeamsToken } from "./sso.js";
-import { initScores, recordScore, computeLeaderboard, userScore } from "./scores.js";
+import { initScores, recordScore, computeLeaderboard, userScore, clearScores } from "./scores.js";
 import {
   demoBootstrap,
   demoScenarios,
@@ -582,6 +582,7 @@ app.post<{
 
 app.post("/api/admin/demo/reset", async () => {
   state = cloneDemoState();
+  await clearScores();
   return {
     ok: true,
     bootstrap: state
