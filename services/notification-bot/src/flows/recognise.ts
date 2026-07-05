@@ -9,17 +9,61 @@
 import type { Thread } from "chat";
 import { getBootstrap, submitRecognition } from "../api.ts";
 import { getState, setState, clearState, type ThreadState } from "../state.ts";
+import { searchDirectory, getDirectoryUser, getConversationByUserId } from "../db.ts";
+import { pushCardTo } from "../proactive.ts";
 import {
   RecognisePromptCard,
+  ColleaguePickCard,
   BeliefSelectCard,
   DescriptionPromptCard,
   MediaPromptCard,
   RecognitionConfirmCard,
+  RecognitionReceivedCard,
   RecognitionSentCard,
   StalePromptCard
 } from "../cards/index.ts";
 
 type AnyThread = Thread<unknown, unknown>;
+
+/**
+ * Resolve a typed name to a real directory person via the people picker:
+ *   1 match  → proceed to the Belief step with the resolved identity (+ oid)
+ *   several  → show a pick card to disambiguate
+ *   none     → proceed with the typed name (no oid); directory may be un-synced
+ */
+async function resolveColleague(thread: AnyThread, name: string): Promise<void> {
+  const matches = await searchDirectory(name, 6);
+  const boot = await getBootstrap();
+
+  if (matches.length === 1) {
+    const m = matches[0];
+    await setState(thread.id, {
+      kind: "recognise",
+      step: "belief",
+      colleague: m.displayName ?? name,
+      colleagueOid: m.oid
+    });
+    await thread.post(BeliefSelectCard({ colleague: m.displayName ?? name, behaviors: boot.behaviors }));
+    return;
+  }
+
+  if (matches.length > 1) {
+    await setState(thread.id, { kind: "recognise", step: "colleague" });
+    await thread.post(
+      ColleaguePickCard({
+        candidates: matches.map((m) => ({
+          oid: m.oid,
+          label: m.department ? `${m.displayName} · ${m.department}` : (m.displayName ?? m.oid)
+        }))
+      })
+    );
+    return;
+  }
+
+  // No directory match — don't block; proceed with the typed name.
+  await setState(thread.id, { kind: "recognise", step: "belief", colleague: name });
+  await thread.post(BeliefSelectCard({ colleague: name, behaviors: boot.behaviors }));
+}
 
 /**
  * Turn free text into just the colleague's name. Handles both a bare name
@@ -45,12 +89,12 @@ export async function startRecognise(thread: AnyThread, fromText?: string) {
   const colleague = /\b(?:recogni[sz]e|praise|nominate|kudos to|thank|shout ?out to)\b/i.test(fromText ?? "")
     ? cleanColleagueName(fromText)
     : undefined;
-  const boot = await getBootstrap();
   if (colleague) {
-    await setState(thread.id, { kind: "recognise", step: "belief", colleague });
-    await thread.post(BeliefSelectCard({ colleague, behaviors: boot.behaviors }));
+    await setState(thread.id, { kind: "recognise", step: "colleague" });
+    await resolveColleague(thread, colleague);
     return;
   }
+  const boot = await getBootstrap();
   await setState(thread.id, { kind: "recognise", step: "colleague" });
   await thread.post(RecognisePromptCard({ behaviors: boot.behaviors }));
 }
@@ -64,10 +108,8 @@ export async function onRecogniseText(thread: AnyThread, text: string): Promise<
   if (st.kind !== "recognise") return false;
 
   if (st.step === "colleague") {
-    const colleague = cleanColleagueName(text) ?? text.trim();
-    await setState(thread.id, { ...st, step: "belief", colleague });
-    const boot = await getBootstrap();
-    await thread.post(BeliefSelectCard({ colleague, behaviors: boot.behaviors }));
+    const name = cleanColleagueName(text) ?? text.trim();
+    await resolveColleague(thread, name);
     return true;
   }
   if (st.step === "description") {
@@ -76,6 +118,17 @@ export async function onRecogniseText(thread: AnyThread, text: string): Promise<
     return true;
   }
   return false;
+}
+
+/** Action "recognise_pick" — value is the chosen colleague's oid. */
+export async function onColleaguePick(thread: AnyThread, oid: string) {
+  const st = await getState(thread.id);
+  if (st.kind !== "recognise" || st.step !== "colleague") return stale(thread, st);
+  const user = await getDirectoryUser(oid);
+  const colleague = user?.displayName ?? "your colleague";
+  await setState(thread.id, { kind: "recognise", step: "belief", colleague, colleagueOid: oid });
+  const boot = await getBootstrap();
+  await thread.post(BeliefSelectCard({ colleague, behaviors: boot.behaviors }));
 }
 
 /** Action "recognise_belief" — value is the Belief name. */
@@ -105,12 +158,28 @@ export async function onRecogniseSend(thread: AnyThread, displayName?: string) {
   const st = await getState(thread.id);
   if (st.kind !== "recognise" || st.step !== "confirm") return stale(thread, st);
   const boot = await getBootstrap();
+  const fromName = displayName ?? boot.currentUser.name;
+  const message = st.description ?? `Recognised for living ${st.behavior}.`;
   await submitRecognition({
-    employee: displayName ?? boot.currentUser.name,
+    employee: fromName,
     target: st.colleague ?? "",
     behavior: st.behavior ?? "",
-    message: st.description ?? `Recognised for living ${st.behavior}.`
+    message
   });
+
+  // Notify the recognised colleague directly, if we resolved their identity and
+  // they have a captured conversation (installed the app / chatted before).
+  if (st.colleagueOid) {
+    const ref = await getConversationByUserId(st.colleagueOid);
+    if (ref) {
+      await pushCardTo(
+        ref,
+        RecognitionReceivedCard({ fromName, behavior: st.behavior ?? "", message })
+      );
+      console.log(`[recognise] notified ${st.colleague} (${st.colleagueOid})`);
+    }
+  }
+
   await clearState(thread.id);
   await thread.post(RecognitionSentCard({ colleague: st.colleague ?? "", behavior: st.behavior ?? "" }));
 }

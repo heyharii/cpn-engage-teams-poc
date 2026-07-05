@@ -26,6 +26,7 @@ export type ThreadState =
       kind: "recognise";
       step: "colleague" | "belief" | "description" | "media" | "confirm";
       colleague?: string;
+      colleagueOid?: string; // resolved directory identity (for notify)
       behavior?: string;
       description?: string;
     };

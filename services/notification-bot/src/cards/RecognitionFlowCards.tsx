@@ -2,6 +2,24 @@
 import { Card, CardText, Section, Fields, Field, Actions, Button, Divider } from "chat";
 import type { Behavior } from "@cpn-engage/shared";
 
+/** Step 1b — disambiguate a typed name into a real directory person. */
+export function ColleaguePickCard(opts: { candidates: { oid: string; label: string }[] }) {
+  return (
+    <Card title="👥 Who do you mean?" subtitle="Pick the colleague">
+      <Section>
+        <CardText>Select the right person so they get notified.</CardText>
+      </Section>
+      <Actions>
+        {opts.candidates.map((c) => (
+          <Button key={c.oid} id="recognise_pick" value={c.oid} style="primary">
+            {c.label}
+          </Button>
+        ))}
+      </Actions>
+    </Card>
+  );
+}
+
 /** Step 2 — which Belief did the colleague demonstrate? */
 export function BeliefSelectCard(opts: { colleague: string; behaviors: Behavior[] }) {
   return (

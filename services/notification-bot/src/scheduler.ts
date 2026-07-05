@@ -9,9 +9,11 @@
 import { PgBoss } from "pg-boss";
 import { getBootstrap } from "./api.ts";
 import { pushCardToAll } from "./proactive.ts";
+import { syncDirectory } from "./directory.ts";
 import { ChallengeReminderCard } from "./cards/index.ts";
 
 const QUEUE = "proactive-push";
+const QUEUE_DIR = "directory-sync";
 let boss: PgBoss | null = null;
 
 async function runDailyDropPush() {
@@ -48,7 +50,17 @@ export async function startScheduler(): Promise<void> {
   const cron = process.env.CRON_DAILY_DROP?.trim() || "0 9 * * *";
   const tz = process.env.CRON_TZ?.trim() || "Asia/Bangkok";
   await boss.schedule(QUEUE, cron, {}, { tz });
-  console.log(`[scheduler] started · daily-drop cron="${cron}" tz=${tz}`);
+
+  // Directory sync — refresh the local mirror from Graph daily (default 03:00).
+  await boss.createQueue(QUEUE_DIR);
+  await boss.work(QUEUE_DIR, async () => {
+    const r = await syncDirectory();
+    console.log(`[scheduler] directory sync → fetched ${r.fetched}, upserted ${r.upserted}`);
+  });
+  const dirCron = process.env.CRON_DIRECTORY_SYNC?.trim() || "0 3 * * *";
+  await boss.schedule(QUEUE_DIR, dirCron, {}, { tz });
+
+  console.log(`[scheduler] started · daily-drop="${cron}" · directory-sync="${dirCron}" tz=${tz}`);
 }
 
 /** Fire a one-off push after N seconds — for demoing the scheduler. */

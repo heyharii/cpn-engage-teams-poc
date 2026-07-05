@@ -41,8 +41,122 @@ export async function initDb(): Promise<void> {
   // Enrichment columns (name/title/department resolved from Teams + Graph).
   await sql`alter table conversations add column if not exists job_title text`;
   await sql`alter table conversations add column if not exists department text`;
+  // Directory mirror (synced from Microsoft Graph) — powers the people picker,
+  // recognition targeting/notify, and department segmentation.
+  await sql`
+    create table if not exists directory_users (
+      oid text primary key,
+      display_name text,
+      email text,
+      job_title text,
+      department text,
+      company text,
+      office_location text,
+      account_enabled boolean,
+      user_type text,
+      updated_at timestamptz not null default now()
+    )
+  `;
   initDone = true;
-  console.log("[db] connected + conversations table ready");
+  console.log("[db] connected + conversations + directory tables ready");
+}
+
+export type DirectoryUser = {
+  oid: string;
+  displayName: string | null;
+  email: string | null;
+  jobTitle: string | null;
+  department: string | null;
+  company: string | null;
+  officeLocation: string | null;
+  accountEnabled: boolean | null;
+  userType: string | null;
+};
+
+/** Upsert a batch of directory users (from a Graph sync). Returns count. */
+export async function upsertDirectoryUsers(users: DirectoryUser[]): Promise<number> {
+  if (!sql || users.length === 0) return 0;
+  let n = 0;
+  for (const u of users) {
+    try {
+      await sql`
+        insert into directory_users
+          (oid, display_name, email, job_title, department, company, office_location, account_enabled, user_type, updated_at)
+        values
+          (${u.oid}, ${u.displayName}, ${u.email}, ${u.jobTitle}, ${u.department}, ${u.company},
+           ${u.officeLocation}, ${u.accountEnabled}, ${u.userType}, now())
+        on conflict (oid) do update set
+          display_name = excluded.display_name,
+          email = excluded.email,
+          job_title = excluded.job_title,
+          department = excluded.department,
+          company = excluded.company,
+          office_location = excluded.office_location,
+          account_enabled = excluded.account_enabled,
+          user_type = excluded.user_type,
+          updated_at = now()
+      `;
+      n += 1;
+    } catch (err) {
+      console.warn("[db] upsertDirectoryUsers failed:", err instanceof Error ? err.message : err);
+    }
+  }
+  return n;
+}
+
+/** Typeahead search over the directory for the people picker. */
+export async function searchDirectory(query: string, limit = 6): Promise<DirectoryUser[]> {
+  if (!sql) return [];
+  const q = `%${query.trim()}%`;
+  try {
+    const rows = await sql<DirectoryUser[]>`
+      select oid, display_name as "displayName", email, job_title as "jobTitle",
+             department, company, office_location as "officeLocation",
+             account_enabled as "accountEnabled", user_type as "userType"
+      from directory_users
+      where account_enabled is not false
+        and (display_name ilike ${q} or email ilike ${q})
+      order by display_name asc
+      limit ${limit}
+    `;
+    return [...rows];
+  } catch (err) {
+    console.warn("[db] searchDirectory failed:", err instanceof Error ? err.message : err);
+    return [];
+  }
+}
+
+/** Look up one directory user by oid (to resolve a picked candidate). */
+export async function getDirectoryUser(oid: string): Promise<DirectoryUser | null> {
+  if (!sql) return null;
+  try {
+    const rows = await sql<DirectoryUser[]>`
+      select oid, display_name as "displayName", email, job_title as "jobTitle",
+             department, company, office_location as "officeLocation",
+             account_enabled as "accountEnabled", user_type as "userType"
+      from directory_users where oid = ${oid} limit 1
+    `;
+    return rows[0] ?? null;
+  } catch {
+    return null;
+  }
+}
+
+/** Find a captured conversation for a user oid (so the bot can DM them). */
+export async function getConversationByUserId(userId: string): Promise<ConversationRef | null> {
+  if (!sql) return null;
+  try {
+    const rows = await sql<ConversationRef[]>`
+      select thread_id as "threadId", service_url as "serviceUrl",
+             conversation_id as "conversationId", user_id as "userId",
+             user_name as "userName", tenant_id as "tenantId",
+             job_title as "jobTitle", department as "department"
+      from conversations where user_id = ${userId} order by updated_at desc limit 1
+    `;
+    return rows[0] ?? null;
+  } catch {
+    return null;
+  }
 }
 
 export async function rememberConversation(

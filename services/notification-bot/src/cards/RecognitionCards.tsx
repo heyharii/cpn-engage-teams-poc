@@ -8,11 +8,11 @@ export function RecognisePromptCard(opts: { behaviors: Behavior[] }) {
     <Card title="🌟 Recognise a colleague" subtitle="Send a moment of appreciation">
       <Section>
         <CardText>
-          Reply with the name of the colleague you'd like to recognise, and I'll
-          help you send it into the moderation queue.
+          Type the name of the colleague you'd like to recognise. I'll look them
+          up in the directory so they get notified.
         </CardText>
         <CardText style="bold">Tip</CardText>
-        <CardText>You can type something like: "Recognise Somruk T."</CardText>
+        <CardText>Just their name works — e.g. "Somruk" or "Somruk T."</CardText>
       </Section>
       <Divider />
       <Section>
@@ -28,13 +28,13 @@ export function RecognisePromptCard(opts: { behaviors: Behavior[] }) {
   );
 }
 
-/** Step 2 — confirmation after the recognition lands in the queue. */
+/** Step 2 — confirmation after the recognition is posted. */
 export function RecognitionSentCard(opts: { colleague: string; behavior: string }) {
   return (
-    <Card title="✅ Recognition sent" subtitle="Now in the moderation queue">
+    <Card title="✅ Recognition sent" subtitle="Posted to the Community Feed">
       <Section>
         <CardText>
-          {`Your recognition for ${opts.colleague} (${opts.behavior}) is in the Admin moderation queue. Once approved, it appears in the public Community Feed.`}
+          {`Your recognition for ${opts.colleague} (${opts.behavior}) is now live in the Community Feed, and ${opts.colleague} has been notified.`}
         </CardText>
       </Section>
       <Actions>

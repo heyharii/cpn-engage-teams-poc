@@ -31,6 +31,45 @@ async function getGraphToken(): Promise<string | null> {
   return ((await res.json()) as { access_token: string }).access_token;
 }
 
+export type DirectoryGraphUser = {
+  id: string;
+  displayName?: string;
+  userPrincipalName?: string;
+  mail?: string;
+  jobTitle?: string;
+  department?: string;
+  companyName?: string;
+  officeLocation?: string;
+  accountEnabled?: boolean;
+  userType?: string;
+};
+
+/**
+ * Fetch the whole directory (paginated) for the local mirror. Requires the
+ * User.Read.All application permission. Follows @odata.nextLink until done.
+ */
+export async function fetchDirectoryUsers(): Promise<DirectoryGraphUser[]> {
+  const token = await getGraphToken();
+  if (!token) return [];
+  const select =
+    "id,displayName,userPrincipalName,mail,jobTitle,department,companyName,officeLocation,accountEnabled,userType";
+  let url: string | null = `${GRAPH}/users?$select=${select}&$top=100`;
+  const all: DirectoryGraphUser[] = [];
+  let guard = 0;
+  while (url && guard < 200) {
+    guard += 1;
+    const res: Response = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
+    if (!res.ok) {
+      console.warn(`[graph] directory page failed: ${res.status} ${(await res.text()).slice(0, 160)}`);
+      break;
+    }
+    const json = (await res.json()) as { value?: DirectoryGraphUser[]; "@odata.nextLink"?: string };
+    if (json.value) all.push(...json.value);
+    url = json["@odata.nextLink"] ?? null;
+  }
+  return all;
+}
+
 export type UserProfile = {
   displayName?: string;
   jobTitle?: string;

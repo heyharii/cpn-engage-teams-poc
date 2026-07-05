@@ -22,6 +22,7 @@ import { beginModule, onWatchedVideo, onLessonDone, onQuizAnswer, resumeModule }
 import { onSubmitAnswer } from "./flows/challenge.ts";
 import {
   onRecogniseText,
+  onColleaguePick,
   onBeliefSelect,
   onSkipMedia,
   onRecogniseSend,
@@ -132,6 +133,9 @@ bot.onAction("submit_answer", guardAction("submit_answer", async (e) => {
 }));
 
 // Recognition
+bot.onAction("recognise_pick", guardAction("recognise_pick", async (e) => {
+  if (e.thread) await onColleaguePick(e.thread, (e.value ?? "") as string);
+}));
 bot.onAction("recognise_belief", guardAction("recognise_belief", async (e) => {
   if (e.thread) await onBeliefSelect(e.thread, (e.value ?? "") as string);
 }));
@@ -161,7 +165,7 @@ bot.onAction(
   guardAction("catchall", async (event) => {
     const known = new Set([
       "intent", "begin_module", "watched_video", "lesson_done", "quiz_answer",
-      "submit_answer", "recognise_belief", "recognise_skip_media", "recognise_send",
+      "submit_answer", "recognise_pick", "recognise_belief", "recognise_skip_media", "recognise_send",
       "remind_later", "resume"
     ]);
     if (known.has(event.actionId)) return;

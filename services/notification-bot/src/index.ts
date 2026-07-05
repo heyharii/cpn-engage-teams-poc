@@ -24,6 +24,7 @@ import { ChallengeReminderCard, ModuleAssignedCard } from "./cards/index.ts";
 import { captureFromRawActivity } from "./install-capture.ts";
 import { installAppForUsers } from "./graph.ts";
 import { enrichAll } from "./enrich.ts";
+import { syncDirectory } from "./directory.ts";
 import { startScheduler, scheduleTestPush } from "./scheduler.ts";
 
 const app = express();
@@ -63,6 +64,16 @@ app.get("/internal/audience", async (_req, res) => {
       department: r.department ?? null
     }))
   });
+});
+
+// Sync the Microsoft directory into Postgres (people picker + segmentation).
+app.post("/internal/sync-directory", async (req, res) => {
+  const required = process.env.PUSH_TOKEN?.trim();
+  if (required && req.headers["x-push-token"] !== required) {
+    return res.status(401).json({ ok: false, error: "bad push token" });
+  }
+  const result = await syncDirectory();
+  res.json({ ok: !result.error, ...result });
 });
 
 // Enrich captured conversations with name + job title + department.

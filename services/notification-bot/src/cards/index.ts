@@ -18,6 +18,7 @@ export { LeaderboardCard } from "./LeaderboardCard.tsx";
 // Feature 3 — Recognition (who → Belief → description → media → confirm)
 export { RecognisePromptCard, RecognitionSentCard } from "./RecognitionCards.tsx";
 export {
+  ColleaguePickCard,
   BeliefSelectCard,
   DescriptionPromptCard,
   MediaPromptCard,
