@@ -9,6 +9,7 @@
 import type { Thread } from "chat";
 import { getModule, firstAssignedModule, nextModuleAfter } from "../content.ts";
 import { getState, setState, clearState, type ThreadState } from "../state.ts";
+import { submitModuleComplete, scoreIdentity } from "../api.ts";
 import {
   ModuleIntroCard,
   VideoLessonCard,
@@ -60,7 +61,8 @@ export async function onLessonDone(thread: AnyThread, moduleId: string) {
 /** Action "quiz_answer" — value "moduleId|quizId|optionKey". */
 export async function onQuizAnswer(
   thread: AnyThread,
-  payload: { moduleId: string; quizId: string; optionKey: string }
+  payload: { moduleId: string; quizId: string; optionKey: string },
+  author?: { userId?: string; fullName?: string }
 ) {
   const st = await getState(thread.id);
   const m = getModule(payload.moduleId);
@@ -83,6 +85,9 @@ export async function onQuizAnswer(
     await thread.post(QuizQuestionCard({ module: m, quiz: m.questions[nextIdx]!, total: m.questions.length }));
   } else {
     await clearState(thread.id);
+    // Award module-completion points to the learner (idempotent per module+user).
+    const id = await scoreIdentity(thread.id, author?.userId, author?.fullName);
+    await submitModuleComplete(payload.moduleId, id);
     const next = nextModuleAfter(payload.moduleId);
     await thread.post(
       ModuleCompleteCard({

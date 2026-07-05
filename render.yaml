@@ -18,6 +18,11 @@ services:
         sync: false
       - key: APPLICATION_ID_URI
         sync: false
+      # Shared Postgres — per-user scoring + leaderboard (same DB as the bot).
+      - key: DATABASE_URL
+        fromDatabase:
+          name: cpn-engage-db
+          property: connectionString
 
   - type: web
     name: cpn-engage-bot-teams-poc

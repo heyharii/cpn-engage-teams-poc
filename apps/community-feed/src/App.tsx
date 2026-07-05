@@ -24,14 +24,19 @@ function initials(name?: string): string {
 
 export function App() {
   const [bootstrap, setBootstrap] = useState<BootstrapResponse | null>(null);
+  const [leaders, setLeaders] = useState<{ name: string; points: number; department?: string }[]>([]);
   const [refreshing, setRefreshing] = useState(false);
   const [view, setView] = useState<View>("recognitions");
   const [token, setToken] = useState<string | null>(null);
   const apiBaseUrl = import.meta.env.VITE_API_BASE_URL ?? "http://127.0.0.1:4175";
 
   async function loadBootstrap() {
-    const response = await fetch(`${apiBaseUrl}/api/bootstrap`);
-    setBootstrap((await response.json()) as BootstrapResponse);
+    const [b, l] = await Promise.all([
+      fetch(`${apiBaseUrl}/api/bootstrap`).then((r) => r.json() as Promise<BootstrapResponse>),
+      fetch(`${apiBaseUrl}/api/leaderboard`).then((r) => r.json()).catch(() => [])
+    ]);
+    setBootstrap(b);
+    setLeaders(Array.isArray(l) ? l : []);
   }
 
   useEffect(() => {
@@ -86,7 +91,7 @@ export function App() {
     () => (bootstrap?.feed ?? []).filter((f) => f.kind !== "leaderboard"),
     [bootstrap]
   );
-  const leaderboard = bootstrap?.leaderboard ?? [];
+  const leaderboard = leaders.length > 0 ? leaders : bootstrap?.leaderboard ?? [];
 
   return (
     <main className="feed-shell">
@@ -131,14 +136,20 @@ export function App() {
           <div className="leaderboard-full panel">
             <h2>Weekly leaders</h2>
             <ol className="leaderboard-ranked">
-              {leaderboard.map((entry, i) => (
-                <li key={entry.name}>
-                  <span className={`rank rank-${i + 1}`}>{i + 1}</span>
-                  <span className="rank-avatar">{initials(entry.name)}</span>
-                  <span className="rank-name">{entry.name}</span>
-                  <span className="rank-points">{entry.points} pts</span>
-                </li>
-              ))}
+              {leaderboard.map((entry, i) => {
+                const dept = (entry as { department?: string }).department;
+                return (
+                  <li key={`${entry.name}-${i}`}>
+                    <span className={`rank rank-${i + 1}`}>{i + 1}</span>
+                    <span className="rank-avatar">{initials(entry.name)}</span>
+                    <span className="rank-name">
+                      {entry.name}
+                      {dept ? <small className="rank-dept">{dept}</small> : null}
+                    </span>
+                    <span className="rank-points">{entry.points} pts</span>
+                  </li>
+                );
+              })}
             </ol>
           </div>
         </section>

@@ -121,7 +121,7 @@ bot.onAction("quiz_answer", guardAction("quiz_answer", async (e) => {
   if (!e.thread) return;
   const [moduleId, quizId, optionKey] = ((e.value ?? "") as string).split("|");
   if (!moduleId || !quizId || !optionKey) throw new Error(`bad quiz_answer: "${e.value}"`);
-  await onQuizAnswer(e.thread, { moduleId, quizId, optionKey });
+  await onQuizAnswer(e.thread, { moduleId, quizId, optionKey }, { userId: e.user?.userId, fullName: e.user?.fullName });
 }));
 
 // Challenge
@@ -129,7 +129,7 @@ bot.onAction("submit_answer", guardAction("submit_answer", async (e) => {
   if (!e.thread) return;
   const [dropId, optionId] = ((e.value ?? "") as string).split("|");
   if (!dropId || !optionId) throw new Error(`bad submit_answer: "${e.value}"`);
-  await onSubmitAnswer(e.thread, { dropId, optionId });
+  await onSubmitAnswer(e.thread, { dropId, optionId }, { userId: e.user?.userId, fullName: e.user?.fullName });
 }));
 
 // Recognition
@@ -143,7 +143,7 @@ bot.onAction("recognise_skip_media", guardAction("recognise_skip_media", async (
   if (e.thread) await onSkipMedia(e.thread);
 }));
 bot.onAction("recognise_send", guardAction("recognise_send", async (e) => {
-  if (e.thread) await onRecogniseSend(e.thread, e.user?.fullName);
+  if (e.thread) await onRecogniseSend(e.thread, { userId: e.user?.userId, fullName: e.user?.fullName });
 }));
 
 // "Remind me later" — just acknowledge with the menu.

@@ -142,6 +142,23 @@ export async function getDirectoryUser(oid: string): Promise<DirectoryUser | nul
   }
 }
 
+/** Look up a captured conversation by its threadId (to resolve the user's id). */
+export async function getConversationByThreadId(threadId: string): Promise<ConversationRef | null> {
+  if (!sql) return null;
+  try {
+    const rows = await sql<ConversationRef[]>`
+      select thread_id as "threadId", service_url as "serviceUrl",
+             conversation_id as "conversationId", user_id as "userId",
+             user_name as "userName", tenant_id as "tenantId",
+             job_title as "jobTitle", department as "department"
+      from conversations where thread_id = ${threadId} limit 1
+    `;
+    return rows[0] ?? null;
+  } catch {
+    return null;
+  }
+}
+
 /** Find a captured conversation for a user oid (so the bot can DM them). */
 export async function getConversationByUserId(userId: string): Promise<ConversationRef | null> {
   if (!sql) return null;

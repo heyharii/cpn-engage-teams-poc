@@ -56,22 +56,51 @@ export async function getLeaderboard(): Promise<LeaderboardEntry[]> {
   return data ?? demoBootstrap.leaderboard;
 }
 
-/** Completing the daily drop in the bot updates the same passport/streak the tabs show. */
-export async function submitChallenge(challengeId: string): Promise<BootstrapResponse | null> {
+/** Identity used to attribute points to the right person (oid keyed). */
+export type ScoreIdentity = { userKey: string; userName?: string | null };
+
+/** Completing the daily drop — awards points to the answering user. */
+export async function submitChallenge(
+  challengeId: string,
+  identity?: ScoreIdentity & { best?: boolean }
+): Promise<BootstrapResponse | null> {
   const data = await call<{ ok: boolean; bootstrap: BootstrapResponse }>(
     `/api/challenges/${challengeId}/submit`,
-    { method: "POST" }
+    { method: "POST", body: JSON.stringify(identity ?? {}) }
   );
   return data?.bootstrap ?? null;
 }
 
-/** A recognition sent from the bot lands in the Admin moderation queue. */
+/** Completing a learning module — awards module points to the user. */
+export async function submitModuleComplete(
+  moduleId: string,
+  identity?: ScoreIdentity
+): Promise<boolean> {
+  const data = await call<{ ok: boolean }>(`/api/modules/${moduleId}/complete`, {
+    method: "POST",
+    body: JSON.stringify(identity ?? {})
+  });
+  return Boolean(data?.ok);
+}
+
+/** A recognition sent from the bot posts to the feed + awards the sender. */
 export async function submitRecognition(
-  input: RecognitionSubmissionInput
+  input: RecognitionSubmissionInput & ScoreIdentity
 ): Promise<boolean> {
   const data = await call<{ ok: boolean }>("/api/recognitions", {
     method: "POST",
     body: JSON.stringify(input)
   });
   return Boolean(data?.ok);
+}
+
+/** Resolve the point-attribution identity for a thread (oid when known). */
+export async function scoreIdentity(
+  threadId: string,
+  fallbackId?: string,
+  fallbackName?: string
+): Promise<ScoreIdentity> {
+  const { getConversationByThreadId } = await import("./db.ts");
+  const conv = await getConversationByThreadId(threadId);
+  return { userKey: conv?.userId ?? fallbackId ?? "", userName: conv?.userName ?? fallbackName ?? null };
 }

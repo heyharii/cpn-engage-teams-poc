@@ -7,7 +7,7 @@
  */
 
 import type { Thread } from "chat";
-import { getBootstrap, submitRecognition } from "../api.ts";
+import { getBootstrap, submitRecognition, scoreIdentity } from "../api.ts";
 import { getState, setState, clearState, type ThreadState } from "../state.ts";
 import { searchDirectory, getDirectoryUser, getConversationByUserId } from "../db.ts";
 import { pushCardTo } from "../proactive.ts";
@@ -154,17 +154,19 @@ export async function onSkipMedia(thread: AnyThread) {
 }
 
 /** Action "recognise_send" — post the recognition to the public feed. */
-export async function onRecogniseSend(thread: AnyThread, displayName?: string) {
+export async function onRecogniseSend(thread: AnyThread, author?: { userId?: string; fullName?: string }) {
   const st = await getState(thread.id);
   if (st.kind !== "recognise" || st.step !== "confirm") return stale(thread, st);
   const boot = await getBootstrap();
-  const fromName = displayName ?? boot.currentUser.name;
+  const fromName = author?.fullName ?? boot.currentUser.name;
   const message = st.description ?? `Recognised for living ${st.behavior}.`;
+  const id = await scoreIdentity(thread.id, author?.userId, author?.fullName);
   await submitRecognition({
     employee: fromName,
     target: st.colleague ?? "",
     behavior: st.behavior ?? "",
-    message
+    message,
+    ...id
   });
 
   // Notify the recognised colleague directly, if we resolved their identity and

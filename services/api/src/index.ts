@@ -1,6 +1,7 @@
 import cors from "@fastify/cors";
 import Fastify from "fastify";
 import { ssoConfigured, verifyTeamsToken } from "./sso.js";
+import { initScores, recordScore, computeLeaderboard, userScore } from "./scores.js";
 import {
   demoBootstrap,
   demoScenarios,
@@ -306,9 +307,9 @@ app.get("/api/profile/me", async (request, reply) => {
     return reply.code(401).send({ ok: false, error: result.error });
   }
   const { user } = result;
-  // POC data model has one shared demo profile; merge the VERIFIED identity on
-  // top so the tab shows the real signed-in person. In production this is keyed
-  // on user.oid to load that employee's own progress.
+  // Identity is verified from the token; the score is this user's own total,
+  // keyed on their oid (matches how the bot attributes points).
+  const score = await userScore(user.oid);
   return {
     ok: true,
     verified: true,
@@ -318,6 +319,7 @@ app.get("/api/profile/me", async (request, reply) => {
       email: user.email,
       businessUnit: state.currentUser.businessUnit
     },
+    score,
     profile: state.currentUser,
     progress: {
       modules: state.modules,
@@ -331,7 +333,12 @@ app.get("/api/users/me", async () => state.currentUser);
 app.get("/api/modules", async () => state.modules);
 app.get("/api/challenges", async () => state.challenges);
 app.get("/api/feed", async () => state.feed);
-app.get("/api/leaderboard", async () => state.leaderboard);
+app.get("/api/leaderboard", async () => {
+  const rows = await computeLeaderboard(20);
+  // Real per-user standings once anyone has earned points; demo data until then.
+  if (rows.length === 0) return state.leaderboard;
+  return rows.map((r) => ({ name: r.name, points: r.points, department: r.department ?? undefined }));
+});
 app.get("/api/recognitions/pending", async () => state.recognitionQueue);
 app.get("/api/notifications", async () => state.notifications);
 app.get("/api/admin/demo/scenarios", async () => ({
@@ -341,12 +348,23 @@ app.get("/api/admin/demo/scenarios", async () => ({
 
 app.post<{
   Params: { id: string };
+  Body: { userKey?: string; userName?: string };
 }>("/api/modules/:id/complete", async (request, reply) => {
   const { id } = request.params;
   const target = state.modules.find((item) => item.id === id);
 
   if (!target) {
     return reply.code(404).send({ ok: false, message: "Module not found" });
+  }
+
+  if (request.body?.userKey) {
+    await recordScore({
+      userKey: request.body.userKey,
+      userName: request.body.userName,
+      points: 75,
+      reason: `Completed ${target.title}`,
+      ref: `module:${id}:${request.body.userKey}`
+    });
   }
 
   state.modules = state.modules.map((item) =>
@@ -387,12 +405,23 @@ app.post<{
 
 app.post<{
   Params: { id: string };
+  Body: { userKey?: string; userName?: string; best?: boolean };
 }>("/api/challenges/:id/submit", async (request, reply) => {
   const { id } = request.params;
   const target = state.challenges.find((item) => item.id === id);
 
   if (!target) {
     return reply.code(404).send({ ok: false, message: "Challenge not found" });
+  }
+
+  if (request.body?.userKey) {
+    await recordScore({
+      userKey: request.body.userKey,
+      userName: request.body.userName,
+      points: request.body.best ? 50 : 20,
+      reason: `Challenge: ${target.title}`,
+      ref: `challenge:${id}:${request.body.userKey}`
+    });
   }
 
   state.challenges = state.challenges.map((item) =>
@@ -442,13 +471,24 @@ app.post<{
 });
 
 app.post<{
-  Body: RecognitionSubmissionInput;
+  Body: RecognitionSubmissionInput & { userKey?: string; userName?: string };
 }>("/api/recognitions", async (request) => {
   const id = `rec-${Date.now()}`;
+  const { userKey, userName, ...submission } = request.body;
   const recognition: RecognitionQueueItem = {
     id,
-    ...request.body
+    ...submission
   };
+
+  if (userKey) {
+    await recordScore({
+      userKey,
+      userName: userName ?? recognition.employee,
+      points: 75,
+      reason: `Recognised ${recognition.target}`,
+      ref: `recognition:${id}`
+    });
+  }
 
   // New story: recognition does NOT require approval — publish straight to the
   // public feed so it appears immediately (the recognised colleague is notified
@@ -570,6 +610,8 @@ app.post<{
 });
 
 const port = Number(process.env.PORT || 4175);
+
+await initScores();
 
 app
   .listen({ port, host: "0.0.0.0" })

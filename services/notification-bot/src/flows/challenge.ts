@@ -4,11 +4,12 @@
  */
 
 import type { Thread } from "chat";
-import { getBootstrap, submitChallenge } from "../api.ts";
+import { getBootstrap, submitChallenge, scoreIdentity } from "../api.ts";
 import { getState, setState } from "../state.ts";
 import { DailyDropCard, AnswerResultCard, StalePromptCard } from "../cards/index.ts";
 
 type AnyThread = Thread<unknown, unknown>;
+type Author = { userId?: string; fullName?: string };
 
 /** Intent "daily_challenge" — present the challenge. */
 export async function showChallenge(thread: AnyThread) {
@@ -18,7 +19,11 @@ export async function showChallenge(thread: AnyThread) {
 }
 
 /** Action "submit_answer" — value "dropId|optionId". */
-export async function onSubmitAnswer(thread: AnyThread, payload: { dropId: string; optionId: string }) {
+export async function onSubmitAnswer(
+  thread: AnyThread,
+  payload: { dropId: string; optionId: string },
+  author?: Author
+) {
   const st = await getState(thread.id);
   const boot = await getBootstrap();
   const drop = boot.dailyDrop;
@@ -38,8 +43,9 @@ export async function onSubmitAnswer(thread: AnyThread, payload: { dropId: strin
   const best = drop.options.find((o) => o.isBest) ?? drop.options[0]!;
   const pointsEarned = chosen.isBest ? 50 : 20;
 
+  const id = await scoreIdentity(thread.id, author?.userId, author?.fullName);
   let newScore: number | null = null;
-  const updated = await submitChallenge(drop.id);
+  const updated = await submitChallenge(drop.id, { ...id, best: chosen.isBest === true });
   if (updated) newScore = updated.passport.score;
 
   await setState(thread.id, { kind: "challenge", dropId: payload.dropId, answered: true });

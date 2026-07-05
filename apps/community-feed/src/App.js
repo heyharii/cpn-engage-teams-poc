@@ -25,13 +25,18 @@ function initials(name) {
 }
 export function App() {
     const [bootstrap, setBootstrap] = useState(null);
+    const [leaders, setLeaders] = useState([]);
     const [refreshing, setRefreshing] = useState(false);
     const [view, setView] = useState("recognitions");
     const [token, setToken] = useState(null);
     const apiBaseUrl = import.meta.env.VITE_API_BASE_URL ?? "http://127.0.0.1:4175";
     async function loadBootstrap() {
-        const response = await fetch(`${apiBaseUrl}/api/bootstrap`);
-        setBootstrap((await response.json()));
+        const [b, l] = await Promise.all([
+            fetch(`${apiBaseUrl}/api/bootstrap`).then((r) => r.json()),
+            fetch(`${apiBaseUrl}/api/leaderboard`).then((r) => r.json()).catch(() => [])
+        ]);
+        setBootstrap(b);
+        setLeaders(Array.isArray(l) ? l : []);
     }
     useEffect(() => {
         let cancelled = false;
@@ -83,8 +88,11 @@ export function App() {
             : prev);
     }
     const recognitions = useMemo(() => (bootstrap?.feed ?? []).filter((f) => f.kind !== "leaderboard"), [bootstrap]);
-    const leaderboard = bootstrap?.leaderboard ?? [];
-    return (_jsxs("main", { className: "feed-shell", children: [_jsxs("header", { className: "feed-header", children: [_jsxs("div", { children: [_jsx("p", { className: "eyebrow", children: "Community Feed" }), _jsx("h1", { children: "Recognition & the four Beliefs, shared with everyone." })] }), _jsx("button", { className: "refresh-button", onClick: () => void refreshFeed(), children: refreshing ? "Refreshing…" : "Refresh" })] }), _jsxs("div", { className: "feed-toggle", role: "tablist", children: [_jsx("button", { className: `feed-toggle-btn${view === "recognitions" ? " active" : ""}`, onClick: () => setView("recognitions"), children: "\uD83C\uDF89 Recognitions" }), _jsx("button", { className: `feed-toggle-btn${view === "leaderboard" ? " active" : ""}`, onClick: () => setView("leaderboard"), children: "\uD83C\uDFC6 Leaderboard" })] }), view === "recognitions" ? (_jsx("section", { className: "feed-single", children: recognitions.length === 0 ? (_jsx("p", { className: "subtle", children: "No recognitions yet \u2014 send one from the Chat tab." })) : (recognitions.map((item) => (_jsx(RecognitionPost, { item: item, canReact: Boolean(token), onReact: react }, item.id)))) })) : (_jsx("section", { className: "feed-single", children: _jsxs("div", { className: "leaderboard-full panel", children: [_jsx("h2", { children: "Weekly leaders" }), _jsx("ol", { className: "leaderboard-ranked", children: leaderboard.map((entry, i) => (_jsxs("li", { children: [_jsx("span", { className: `rank rank-${i + 1}`, children: i + 1 }), _jsx("span", { className: "rank-avatar", children: initials(entry.name) }), _jsx("span", { className: "rank-name", children: entry.name }), _jsxs("span", { className: "rank-points", children: [entry.points, " pts"] })] }, entry.name))) })] }) }))] }));
+    const leaderboard = leaders.length > 0 ? leaders : bootstrap?.leaderboard ?? [];
+    return (_jsxs("main", { className: "feed-shell", children: [_jsxs("header", { className: "feed-header", children: [_jsxs("div", { children: [_jsx("p", { className: "eyebrow", children: "Community Feed" }), _jsx("h1", { children: "Recognition & the four Beliefs, shared with everyone." })] }), _jsx("button", { className: "refresh-button", onClick: () => void refreshFeed(), children: refreshing ? "Refreshing…" : "Refresh" })] }), _jsxs("div", { className: "feed-toggle", role: "tablist", children: [_jsx("button", { className: `feed-toggle-btn${view === "recognitions" ? " active" : ""}`, onClick: () => setView("recognitions"), children: "\uD83C\uDF89 Recognitions" }), _jsx("button", { className: `feed-toggle-btn${view === "leaderboard" ? " active" : ""}`, onClick: () => setView("leaderboard"), children: "\uD83C\uDFC6 Leaderboard" })] }), view === "recognitions" ? (_jsx("section", { className: "feed-single", children: recognitions.length === 0 ? (_jsx("p", { className: "subtle", children: "No recognitions yet \u2014 send one from the Chat tab." })) : (recognitions.map((item) => (_jsx(RecognitionPost, { item: item, canReact: Boolean(token), onReact: react }, item.id)))) })) : (_jsx("section", { className: "feed-single", children: _jsxs("div", { className: "leaderboard-full panel", children: [_jsx("h2", { children: "Weekly leaders" }), _jsx("ol", { className: "leaderboard-ranked", children: leaderboard.map((entry, i) => {
+                                const dept = entry.department;
+                                return (_jsxs("li", { children: [_jsx("span", { className: `rank rank-${i + 1}`, children: i + 1 }), _jsx("span", { className: "rank-avatar", children: initials(entry.name) }), _jsxs("span", { className: "rank-name", children: [entry.name, dept ? _jsx("small", { className: "rank-dept", children: dept }) : null] }), _jsxs("span", { className: "rank-points", children: [entry.points, " pts"] })] }, `${entry.name}-${i}`));
+                            }) })] }) }))] }));
 }
 function RecognitionPost(props) {
     const { item, canReact, onReact } = props;
