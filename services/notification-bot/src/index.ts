@@ -25,6 +25,7 @@ import { captureFromRawActivity } from "./install-capture.ts";
 import { installAppForUsers } from "./graph.ts";
 import { enrichAll } from "./enrich.ts";
 import { syncDirectory } from "./directory.ts";
+import { refreshModules } from "./content.ts";
 import { startScheduler, scheduleTestPush } from "./scheduler.ts";
 
 const app = express();
@@ -189,6 +190,7 @@ app.post("/api/messages", async (req, res) => {
 // Connect the per-thread state store + the proactive DB + scheduler up front.
 await state.connect();
 await initDb();
+await refreshModules();
 await startScheduler();
 
 app.listen(config.port, () => {

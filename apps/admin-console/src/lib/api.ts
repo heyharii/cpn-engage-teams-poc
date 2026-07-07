@@ -1,5 +1,5 @@
 /** Admin data layer — talks to the CPN Engage API (state) and the bot (ops). */
-import type { BootstrapResponse } from "@cpn-engage/shared";
+import type { BootstrapResponse, ModuleContent } from "@cpn-engage/shared";
 
 const API = import.meta.env.VITE_API_BASE_URL ?? "http://127.0.0.1:4175";
 const BOT = import.meta.env.VITE_BOT_BASE_URL ?? "http://127.0.0.1:4177";
@@ -46,3 +46,16 @@ export const pushBroadcast = (type: "challenge" | "module") =>
   post<{ ok: boolean; sent: number; total: number }>(`${BOT}/internal/push?type=${type}`);
 export const scheduleTest = (seconds: number) =>
   post<{ ok: boolean; scheduledInSeconds: number | null }>(`${BOT}/internal/schedule-test?seconds=${seconds}`);
+
+// --- Learning Journey content authoring ---
+export const getAdminModules = () => get<ModuleContent[]>(`${API}/api/admin/modules`);
+export const saveModule = (m: ModuleContent) =>
+  post<{ ok: boolean; module: ModuleContent }>(`${API}/api/admin/modules`, m);
+export async function deleteModuleApi(id: string): Promise<boolean> {
+  try {
+    const r = await fetch(`${API}/api/admin/modules/${encodeURIComponent(id)}`, { method: "DELETE" });
+    return r.ok;
+  } catch {
+    return false;
+  }
+}

@@ -5,11 +5,13 @@ import {
   Send,
   Heart,
   Trophy,
+  BookOpen,
   RefreshCw,
   Sparkles,
   UserPlus,
   Loader2
 } from "lucide-react";
+import { ContentView } from "@/content-view";
 import type { BootstrapResponse, FeedItem } from "@cpn-engage/shared";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -35,9 +37,10 @@ import {
   type LeaderRow
 } from "@/lib/api";
 
-type NavId = "overview" | "audience" | "broadcast" | "recognitions" | "leaderboard";
+type NavId = "overview" | "content" | "audience" | "broadcast" | "recognitions" | "leaderboard";
 const NAV: { id: NavId; label: string; icon: typeof Users }[] = [
   { id: "overview", label: "Overview", icon: LayoutDashboard },
+  { id: "content", label: "Content", icon: BookOpen },
   { id: "audience", label: "Audience", icon: Users },
   { id: "broadcast", label: "Broadcast", icon: Send },
   { id: "recognitions", label: "Recognitions", icon: Heart },
@@ -100,6 +103,7 @@ export function App() {
       {/* Main */}
       <main className="flex-1 overflow-auto p-8">
         {nav === "overview" && <Overview boot={boot} audienceCount={audience.length} leaders={leaders} />}
+        {nav === "content" && <ContentView />}
         {nav === "audience" && <Audience users={audience} onReload={loadAll} />}
         {nav === "broadcast" && <Broadcast audienceCount={audience.length} />}
         {nav === "recognitions" && <Recognitions feed={boot?.feed ?? []} />}

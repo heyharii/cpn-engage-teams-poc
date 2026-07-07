@@ -2,6 +2,8 @@ import cors from "@fastify/cors";
 import Fastify from "fastify";
 import { ssoConfigured, verifyTeamsToken } from "./sso.js";
 import { initScores, recordScore, computeLeaderboard, userScore, clearScores } from "./scores.js";
+import { initModules, listModules, upsertModule, deleteModule } from "./modules.js";
+import type { ModuleContent } from "@cpn-engage/shared";
 import {
   demoBootstrap,
   demoScenarios,
@@ -610,9 +612,22 @@ app.post<{
   };
 });
 
+// Learning Journey content — authored in the Admin, consumed by the bot.
+app.get("/api/learning/modules", async () => listModules({ liveOnly: true }));
+app.get("/api/admin/modules", async () => listModules());
+app.post<{ Body: ModuleContent }>("/api/admin/modules", async (request) => {
+  const saved = await upsertModule(request.body);
+  return { ok: true, module: saved };
+});
+app.delete<{ Params: { id: string } }>("/api/admin/modules/:id", async (request) => {
+  await deleteModule(request.params.id);
+  return { ok: true };
+});
+
 const port = Number(process.env.PORT || 4175);
 
 await initScores();
+await initModules();
 
 app
   .listen({ port, host: "0.0.0.0" })
