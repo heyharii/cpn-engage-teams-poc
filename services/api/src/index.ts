@@ -515,18 +515,14 @@ app.post<{
   };
 });
 
-// Toggle an emoji reaction on a feed post — SSO-gated (identity from token).
+// Toggle an emoji reaction on a feed post. Identity is best-effort: a verified
+// SSO token wins; otherwise the Teams-context user id sent by the tab is used
+// (reactions are low-stakes, so we don't hard-block on SSO here — this keeps
+// the reaction buttons always usable).
 app.post<{
   Params: { id: string };
-  Body: { emoji?: string };
+  Body: { emoji?: string; reactor?: string };
 }>("/api/feed/:id/react", async (request, reply) => {
-  if (!ssoConfigured()) {
-    return reply.code(501).send({ ok: false, error: "sso-not-configured" });
-  }
-  const result = await verifyTeamsToken(request.headers.authorization);
-  if (!result.ok) {
-    return reply.code(401).send({ ok: false, error: result.error });
-  }
   const emoji = (request.body?.emoji ?? "").trim();
   if (!emoji) {
     return reply.code(400).send({ ok: false, error: "emoji required" });
@@ -535,7 +531,11 @@ app.post<{
   if (!item) {
     return reply.code(404).send({ ok: false, error: "feed item not found" });
   }
-  toggleReaction(request.params.id, emoji, result.user.oid);
+  let reactor = (request.body?.reactor ?? "").trim();
+  const sso = await verifyTeamsToken(request.headers.authorization);
+  if (sso.ok) reactor = sso.user.oid;
+  if (!reactor) reactor = "anon";
+  toggleReaction(request.params.id, emoji, reactor);
   return { ok: true, reactions: item.reactions ?? [] };
 });
 

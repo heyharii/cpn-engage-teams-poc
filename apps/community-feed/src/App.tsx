@@ -1,6 +1,7 @@
 import { type BootstrapResponse, type FeedItem } from "@cpn-engage/shared";
 import { app as teamsApp, authentication } from "@microsoft/teams-js";
 import { useEffect, useMemo, useState } from "react";
+import { AnimatePresence, motion } from "framer-motion";
 
 const REACTIONS = ["👍", "🎉", "❤️", "👏", "🔥"];
 type View = "recognitions" | "leaderboard";
@@ -22,12 +23,28 @@ function initials(name?: string): string {
   return name.trim().split(/\s+/).slice(0, 2).map((p) => p[0]?.toUpperCase() ?? "").join("");
 }
 
+/** Stable per-browser reactor id (fallback when Teams context is unavailable). */
+function localReactorId(): string {
+  try {
+    const k = "cpn-reactor-id";
+    let v = localStorage.getItem(k);
+    if (!v) {
+      v = `web-${Math.random().toString(36).slice(2, 10)}`;
+      localStorage.setItem(k, v);
+    }
+    return v;
+  } catch {
+    return "web-anon";
+  }
+}
+
 export function App() {
   const [bootstrap, setBootstrap] = useState<BootstrapResponse | null>(null);
   const [leaders, setLeaders] = useState<{ name: string; points: number; department?: string }[]>([]);
   const [refreshing, setRefreshing] = useState(false);
   const [view, setView] = useState<View>("recognitions");
   const [token, setToken] = useState<string | null>(null);
+  const [reactorId, setReactorId] = useState<string>(localReactorId());
   const apiBaseUrl = import.meta.env.VITE_API_BASE_URL ?? "http://127.0.0.1:4175";
 
   async function loadBootstrap() {
@@ -44,12 +61,19 @@ export function App() {
     async function init() {
       try {
         await teamsApp.initialize();
-        // Silent SSO token — needed only to WRITE (react); reading stays open.
+        // Teams context gives a stable user id (no login) for attributing
+        // reactions — enough to let everyone react. SSO token is a bonus.
+        try {
+          const ctx = await teamsApp.getContext();
+          if (!cancelled && ctx.user?.id) setReactorId(ctx.user.id);
+        } catch {
+          /* keep local reactor id */
+        }
         try {
           const t = await authentication.getAuthToken();
           if (!cancelled) setToken(t);
         } catch {
-          /* not in Teams / consent missing — reactions disabled */
+          /* SSO optional for reactions */
         }
       } catch {
         /* browser preview */
@@ -72,11 +96,12 @@ export function App() {
   }
 
   async function react(feedId: string, emoji: string) {
-    if (!token) return;
+    const headers: Record<string, string> = { "Content-Type": "application/json" };
+    if (token) headers.Authorization = `Bearer ${token}`;
     const res = await fetch(`${apiBaseUrl}/api/feed/${encodeURIComponent(feedId)}/react`, {
       method: "POST",
-      headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
-      body: JSON.stringify({ emoji })
+      headers,
+      body: JSON.stringify({ emoji, reactor: reactorId })
     });
     if (!res.ok) return;
     const data = (await res.json()) as { reactions: { emoji: string; count: number }[] };
@@ -127,7 +152,7 @@ export function App() {
             <p className="subtle">No recognitions yet — send one from the Chat tab.</p>
           ) : (
             recognitions.map((item) => (
-              <RecognitionPost key={item.id} item={item} canReact={Boolean(token)} onReact={react} />
+              <RecognitionPost key={item.id} item={item} onReact={react} />
             ))
           )}
         </section>
@@ -158,13 +183,22 @@ export function App() {
   );
 }
 
-function RecognitionPost(props: {
-  item: FeedItem;
-  canReact: boolean;
-  onReact: (id: string, emoji: string) => void;
-}) {
-  const { item, canReact, onReact } = props;
+type Burst = { id: number; emoji: string };
+
+function RecognitionPost(props: { item: FeedItem; onReact: (id: string, emoji: string) => void }) {
+  const { item, onReact } = props;
   const isRecognition = item.kind === "recognition";
+  const [bursts, setBursts] = useState<Burst[]>([]);
+  const [burstSeed, setBurstSeed] = useState(0);
+
+  function handleReact(emoji: string) {
+    const id = burstSeed + 1;
+    setBurstSeed(id);
+    setBursts((b) => [...b, { id, emoji }]);
+    setTimeout(() => setBursts((b) => b.filter((x) => x.id !== id)), 900);
+    onReact(item.id, emoji);
+  }
+
   return (
     <article className="post panel">
       <div className="post-head">
@@ -192,16 +226,49 @@ function RecognitionPost(props: {
         {REACTIONS.map((emoji) => {
           const count = item.reactions?.find((r) => r.emoji === emoji)?.count ?? 0;
           return (
-            <button
+            <motion.button
               key={emoji}
+              type="button"
               className={`reaction${count > 0 ? " has" : ""}`}
-              disabled={!canReact}
-              title={canReact ? "React" : "Open in Teams to react"}
-              onClick={() => onReact(item.id, emoji)}
+              onClick={() => handleReact(emoji)}
+              whileHover={{ scale: 1.35, y: -4 }}
+              whileTap={{ scale: 0.8 }}
+              transition={{ type: "spring", stiffness: 500, damping: 18 }}
             >
-              {emoji}
-              {count > 0 ? <span className="reaction-count">{count}</span> : null}
-            </button>
+              <span className="reaction-emoji">{emoji}</span>
+              <AnimatePresence mode="popLayout">
+                {count > 0 ? (
+                  <motion.span
+                    key={count}
+                    className="reaction-count"
+                    initial={{ y: 8, opacity: 0, scale: 0.6 }}
+                    animate={{ y: 0, opacity: 1, scale: 1 }}
+                    exit={{ y: -8, opacity: 0 }}
+                    transition={{ type: "spring", stiffness: 600, damping: 20 }}
+                  >
+                    {count}
+                  </motion.span>
+                ) : null}
+              </AnimatePresence>
+
+              {/* Facebook-style float-up burst on tap */}
+              <AnimatePresence>
+                {bursts
+                  .filter((b) => b.emoji === emoji)
+                  .map((b) => (
+                    <motion.span
+                      key={b.id}
+                      className="reaction-burst"
+                      initial={{ y: 0, opacity: 1, scale: 1 }}
+                      animate={{ y: -42, opacity: 0, scale: 1.6 }}
+                      exit={{ opacity: 0 }}
+                      transition={{ duration: 0.85, ease: "easeOut" }}
+                    >
+                      {emoji}
+                    </motion.span>
+                  ))}
+              </AnimatePresence>
+            </motion.button>
           );
         })}
       </div>

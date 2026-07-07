@@ -359,6 +359,7 @@ body {
 
 .post-reactions { display: flex; gap: 8px; flex-wrap: wrap; }
 .reaction {
+  position: relative;
   display: inline-flex;
   align-items: center;
   gap: 5px;
@@ -368,12 +369,21 @@ body {
   padding: 5px 11px;
   font-size: 15px;
   cursor: pointer;
-  transition: transform 0.08s ease;
+  overflow: visible;
 }
-.reaction:hover:not(:disabled) { transform: scale(1.08); }
-.reaction:disabled { opacity: 0.5; cursor: default; }
 .reaction.has { border-color: var(--accent); background: rgba(187, 74, 53, 0.08); }
+.reaction-emoji { line-height: 1; }
 .reaction-count { font-size: 13px; font-weight: 700; color: var(--ink); }
+/* Facebook-style float-up burst emitted on tap. */
+.reaction-burst {
+  position: absolute;
+  left: 50%;
+  top: 0;
+  translate: -50% 0;
+  pointer-events: none;
+  font-size: 22px;
+  z-index: 5;
+}
 
 .leaderboard-full { max-width: 620px; margin: 0 auto; padding: 22px 24px; }
 .leaderboard-full h2 { margin: 0 0 16px; }
