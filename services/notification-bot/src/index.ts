@@ -29,6 +29,19 @@ import { startScheduler, scheduleTestPush } from "./scheduler.ts";
 
 const app = express();
 
+// CORS — the Admin Console (a separate web origin) calls the /internal/* ops
+// endpoints from the browser. Allow the configured admin origin (or * for POC).
+app.use((req, res, next) => {
+  res.header("Access-Control-Allow-Origin", process.env.ADMIN_ORIGIN?.trim() || "*");
+  res.header("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
+  res.header("Access-Control-Allow-Headers", "Content-Type, x-push-token");
+  if (req.method === "OPTIONS") {
+    res.sendStatus(204);
+    return;
+  }
+  next();
+});
+
 // Bot Framework sends JSON; the adapter needs the raw body for signature
 // verification, so capture it raw for all content types.
 app.use(express.raw({ type: "*/*", limit: "5mb" }));

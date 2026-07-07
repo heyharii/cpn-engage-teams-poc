@@ -6,3 +6,6 @@ coverage
 .env
 .env.local
 .turbo
+
+apps/admin-console/.env.local
+.claude/launch.json

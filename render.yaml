@@ -55,6 +55,8 @@ services:
       # Optional shared secret to protect the proactive push endpoint.
       - key: PUSH_TOKEN
         sync: false
+      - key: ADMIN_ORIGIN
+        value: https://cpn-engage-admin-teams-poc.onrender.com
 
   - type: web
     name: cpn-engage-home-teams-poc
