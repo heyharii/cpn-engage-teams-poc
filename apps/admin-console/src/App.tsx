@@ -69,8 +69,8 @@ export function App() {
             C
           </div>
           <div>
-            <p className="text-sm font-bold leading-tight">CPN Engage</p>
-            <p className="text-xs text-muted-foreground">Admin Console</p>
+            <p className="text-sm font-bold leading-tight text-sidebar-foreground">CPN Engage</p>
+            <p className="text-xs text-sidebar-foreground/50">Admin Console</p>
           </div>
         </div>
         <nav className="flex flex-col gap-1">
@@ -82,7 +82,7 @@ export function App() {
                 "flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors",
                 nav === item.id
                   ? "bg-sidebar-accent text-sidebar-accent-foreground"
-                  : "text-muted-foreground hover:bg-sidebar-accent/50 hover:text-foreground"
+                  : "text-sidebar-foreground/60 hover:bg-sidebar-accent/60 hover:text-sidebar-foreground"
               )}
             >
               <item.icon className="size-4" />
