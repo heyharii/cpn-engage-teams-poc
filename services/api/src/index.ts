@@ -3,6 +3,7 @@ import Fastify from "fastify";
 import { ssoConfigured, verifyTeamsToken } from "./sso.js";
 import { initScores, recordScore, computeLeaderboard, userScore, clearScores } from "./scores.js";
 import { initModules, listModules, upsertModule, deleteModule } from "./modules.js";
+import { initFeed, listFeed, addFeedPost, toggleReactionDb, clearFeed, feedPersistent } from "./feed.js";
 import type { ModuleContent } from "@cpn-engage/shared";
 import {
   demoBootstrap,
@@ -330,11 +331,14 @@ app.get("/api/profile/me", async (request, reply) => {
   };
 });
 
-app.get("/api/bootstrap", async () => state);
+app.get("/api/bootstrap", async () => {
+  if (feedPersistent) state.feed = await listFeed();
+  return state;
+});
 app.get("/api/users/me", async () => state.currentUser);
 app.get("/api/modules", async () => state.modules);
 app.get("/api/challenges", async () => state.challenges);
-app.get("/api/feed", async () => state.feed);
+app.get("/api/feed", async () => (feedPersistent ? listFeed() : state.feed));
 app.get("/api/leaderboard", async () => {
   const rows = await computeLeaderboard(20);
   // Real per-user standings once anyone has earned points; demo data until then.
@@ -494,8 +498,14 @@ app.post<{
 
   // New story: recognition does NOT require approval — publish straight to the
   // public feed so it appears immediately (the recognised colleague is notified
-  // by the bot).
-  state.feed = [buildRecognitionFeedItem(recognition), ...state.feed];
+  // by the bot). Persisted to Postgres so it survives restarts.
+  const feedItem = buildRecognitionFeedItem(recognition);
+  if (feedPersistent) {
+    await addFeedPost(feedItem);
+    state.feed = await listFeed();
+  } else {
+    state.feed = [feedItem, ...state.feed];
+  }
 
   updateMetric("Recognition posts", () => ({
     note: "Published to the public feed"
@@ -527,14 +537,22 @@ app.post<{
   if (!emoji) {
     return reply.code(400).send({ ok: false, error: "emoji required" });
   }
-  const item = state.feed.find((f) => f.id === request.params.id);
-  if (!item) {
-    return reply.code(404).send({ ok: false, error: "feed item not found" });
-  }
   let reactor = (request.body?.reactor ?? "").trim();
   const sso = await verifyTeamsToken(request.headers.authorization);
   if (sso.ok) reactor = sso.user.oid;
   if (!reactor) reactor = "anon";
+
+  if (feedPersistent) {
+    const reactions = await toggleReactionDb(request.params.id, emoji, reactor);
+    const item = state.feed.find((f) => f.id === request.params.id);
+    if (item) item.reactions = reactions;
+    return { ok: true, reactions };
+  }
+
+  const item = state.feed.find((f) => f.id === request.params.id);
+  if (!item) {
+    return reply.code(404).send({ ok: false, error: "feed item not found" });
+  }
   toggleReaction(request.params.id, emoji, reactor);
   return { ok: true, reactions: item.reactions ?? [] };
 });
@@ -585,6 +603,9 @@ app.post<{
 app.post("/api/admin/demo/reset", async () => {
   state = cloneDemoState();
   await clearScores();
+  await clearFeed();
+  await initFeed(); // re-seeds the starter feed posts
+  if (feedPersistent) state.feed = await listFeed();
   return {
     ok: true,
     bootstrap: state
@@ -628,6 +649,8 @@ const port = Number(process.env.PORT || 4175);
 
 await initScores();
 await initModules();
+await initFeed();
+if (feedPersistent) state.feed = await listFeed();
 
 app
   .listen({ port, host: "0.0.0.0" })
