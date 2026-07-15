@@ -7,7 +7,7 @@ WORKDIR /app
 RUN corepack enable
 
 # Install deps first (better layer caching): copy only manifests.
-COPY pnpm-workspace.yaml pnpm-lock.yaml package.json ./
+COPY pnpm-workspace.yaml pnpm-lock.yaml package.json tsconfig.base.json ./
 COPY packages/shared/package.json packages/shared/package.json
 COPY services/api/package.json services/api/package.json
 COPY services/notification-bot/package.json services/notification-bot/package.json

@@ -9,7 +9,7 @@ FROM node:24-alpine AS build
 WORKDIR /app
 RUN corepack enable
 
-COPY pnpm-workspace.yaml pnpm-lock.yaml package.json ./
+COPY pnpm-workspace.yaml pnpm-lock.yaml package.json tsconfig.base.json ./
 COPY packages/shared/package.json packages/shared/package.json
 COPY services/api/package.json services/api/package.json
 COPY services/notification-bot/package.json services/notification-bot/package.json
