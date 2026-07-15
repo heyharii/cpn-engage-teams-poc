@@ -16,15 +16,14 @@ Start the stack:
 
 1. `pnpm --filter @cpn-engage/api dev`
 2. `pnpm --filter @cpn-engage/notification-bot dev`
-3. `pnpm --filter @cpn-engage/employee-app dev`
-4. `pnpm --filter @cpn-engage/community-feed dev`
-5. `pnpm --filter @cpn-engage/admin-console dev`
+3. `pnpm --filter @cpn-engage/employee-app dev` (Profile at `/`, Feeds at `/feeds` — one app)
+4. `pnpm --filter @cpn-engage/admin-console dev`
 
 Open:
 
-- `http://localhost:4173`
-- `http://localhost:4174`
-- `http://localhost:4176`
+- `http://localhost:4173` — Profile
+- `http://localhost:4173/feeds` — Feeds
+- `http://localhost:4174` — Admin
 
 ### One-Command Smoke Test
 

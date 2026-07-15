@@ -38,7 +38,7 @@ function localReactorId(): string {
   }
 }
 
-export function App() {
+export function FeedsPage() {
   const [bootstrap, setBootstrap] = useState<BootstrapResponse | null>(null);
   const [leaders, setLeaders] = useState<{ name: string; points: number; department?: string }[]>([]);
   const [refreshing, setRefreshing] = useState(false);
@@ -62,7 +62,9 @@ export function App() {
       try {
         await teamsApp.initialize();
         // Teams context gives a stable user id (no login) for attributing
-        // reactions — enough to let everyone react. SSO token is a bonus.
+        // reactions — enough to let everyone react. SSO token is a bonus, and
+        // now that Feeds lives on the same domain as the App ID URI (merged
+        // with Profile), it actually succeeds here too.
         try {
           const ctx = await teamsApp.getContext();
           if (!cancelled && ctx.user?.id) setReactorId(ctx.user.id);

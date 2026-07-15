@@ -74,21 +74,6 @@ services:
         destination: /index.html
 
   - type: web
-    name: cpn-engage-community-teams-poc
-    runtime: static
-    repo: https://github.com/heyharii/cpn-engage-teams-poc
-    branch: main
-    buildCommand: pnpm install --frozen-lockfile && pnpm --filter @cpn-engage/community-feed build
-    staticPublishPath: apps/community-feed/dist
-    envVars:
-      - key: VITE_API_BASE_URL
-        value: https://cpn-engage-api-teams-poc.onrender.com
-    routes:
-      - type: rewrite
-        source: /*
-        destination: /index.html
-
-  - type: web
     name: cpn-engage-admin-teams-poc
     runtime: static
     repo: https://github.com/heyharii/cpn-engage-teams-poc

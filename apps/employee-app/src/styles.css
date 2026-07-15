@@ -12,6 +12,9 @@
   --teal-soft: rgba(12, 138, 130, 0.12);
   --gold: #d29c2d;
   --shadow: 0 20px 60px rgba(71, 43, 25, 0.08);
+  /* Feeds page reuses the same palette family (Community Feed was merged in). */
+  --panel: rgba(255, 252, 248, 0.9);
+  --accent-2: #2d7d74;
 }
 
 * {
@@ -574,5 +577,174 @@ button {
   .passport-score-row,
   .behavior-list {
     grid-template-columns: 1fr;
+  }
+}
+
+/* ==========================================================================
+   Feeds page (merged from the former standalone community-feed app — same
+   domain now, so Teams SSO works here too). Reuses the shared design tokens
+   above (.panel/.eyebrow/.subtle come from the Profile styles).
+   ========================================================================== */
+.feed-shell {
+  min-height: 100vh;
+  padding: 28px;
+}
+
+.feed-header {
+  display: flex;
+  justify-content: space-between;
+  gap: 24px;
+  align-items: flex-start;
+}
+
+.feed-header h1 {
+  margin: 0;
+  font-size: clamp(2rem, 2.8vw, 3.2rem);
+  line-height: 1.05;
+  max-width: 14ch;
+}
+
+.refresh-button {
+  min-height: 38px;
+  padding: 0 14px;
+  border-radius: 8px;
+  border: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.9);
+  font: inherit;
+}
+
+.feed-toggle {
+  display: inline-flex;
+  gap: 4px;
+  margin: 22px 0 18px;
+  padding: 4px;
+  background: rgba(34, 28, 24, 0.05);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+}
+.feed-toggle-btn {
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  font-weight: 700;
+  font-size: 14px;
+  padding: 8px 18px;
+  border-radius: 999px;
+  cursor: pointer;
+}
+.feed-toggle-btn.active {
+  background: var(--panel);
+  color: var(--ink);
+  box-shadow: 0 1px 3px rgba(34, 28, 24, 0.12);
+}
+
+.feed-single {
+  max-width: 620px;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.post.panel {
+  padding: 18px 20px;
+}
+.post-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+.post-avatar,
+.rank-avatar {
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, var(--accent), var(--accent-2));
+  color: #fff;
+  font-weight: 800;
+  font-size: 13px;
+  flex: none;
+}
+.post-headtext { display: flex; flex-direction: column; gap: 3px; }
+.post-headtext strong { font-size: 15px; }
+.post-headtext .muted { color: var(--muted); font-weight: 500; }
+.post-sub { display: flex; align-items: center; gap: 8px; }
+.belief-chip {
+  font-size: 11px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--accent-2);
+  background: rgba(45, 125, 116, 0.12);
+  padding: 2px 8px;
+  border-radius: 999px;
+}
+.post-time { font-size: 12px; color: var(--muted); }
+.post-body {
+  margin: 4px 0 14px;
+  font-size: 15px;
+  line-height: 1.5;
+  color: var(--ink) !important;
+}
+
+.post-reactions { display: flex; gap: 8px; flex-wrap: wrap; }
+.reaction {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  border: 1px solid var(--line);
+  background: var(--panel);
+  border-radius: 999px;
+  padding: 5px 11px;
+  font-size: 15px;
+  cursor: pointer;
+  overflow: visible;
+}
+.reaction.has { border-color: var(--accent); background: rgba(227, 77, 47, 0.08); }
+.reaction-emoji { line-height: 1; }
+.reaction-count { font-size: 13px; font-weight: 700; color: var(--ink); }
+/* Facebook-style float-up burst emitted on tap. */
+.reaction-burst {
+  position: absolute;
+  left: 50%;
+  top: 0;
+  translate: -50% 0;
+  pointer-events: none;
+  font-size: 22px;
+  z-index: 5;
+}
+
+.leaderboard-full { max-width: 620px; margin: 0 auto; padding: 22px 24px; }
+.leaderboard-full h2 { margin: 0 0 16px; }
+.leaderboard-ranked { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
+.leaderboard-ranked li {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--panel);
+}
+.rank {
+  display: grid; place-items: center;
+  width: 26px; height: 26px; border-radius: 50%;
+  font-weight: 800; font-size: 13px;
+  background: rgba(34, 28, 24, 0.08); color: var(--muted); flex: none;
+}
+.rank-1 { background: #f6c453; color: #5a4300; }
+.rank-2 { background: #d6d3cd; color: #3a352f; }
+.rank-3 { background: #e0a878; color: #4a2c12; }
+.rank-name { flex: 1; font-weight: 700; display: flex; flex-direction: column; gap: 1px; }
+.rank-dept { font-size: 11px; font-weight: 600; color: var(--muted); }
+.rank-points { font-weight: 800; color: var(--accent); }
+
+@media (max-width: 700px) {
+  .feed-header {
+    flex-direction: column;
   }
 }

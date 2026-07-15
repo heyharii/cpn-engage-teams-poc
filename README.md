@@ -24,17 +24,13 @@ Install dependencies:
 
 `pnpm install`
 
-Start the employee app:
+Start the employee app (serves both the Profile tab at `/` and the Feeds tab at `/feeds` — merged into one app so Feeds' Teams SSO works):
 
 `pnpm --filter @cpn-engage/employee-app dev`
 
 Start the admin console:
 
 `pnpm --filter @cpn-engage/admin-console dev`
-
-Start the community feed:
-
-`pnpm --filter @cpn-engage/community-feed dev`
 
 Start the API:
 

@@ -38,7 +38,7 @@ function requiredEnv(name, env) {
 }
 
 function uniqueDomains(env) {
-  const urlKeys = ["EMPLOYEE_APP_URL", "COMMUNITY_FEED_URL", "ADMIN_CONSOLE_URL", "API_BASE_URL"];
+  const urlKeys = ["EMPLOYEE_APP_URL", "ADMIN_CONSOLE_URL", "API_BASE_URL"];
   const domains = new Set();
 
   for (const key of urlKeys) {
@@ -66,7 +66,6 @@ function replaceTemplateValues(template, env) {
     TEAMS_ENTRA_CLIENT_ID: requiredEnv("TEAMS_ENTRA_CLIENT_ID", env),
     TEAMS_BOT_ID: requiredEnv("TEAMS_BOT_ID", env),
     EMPLOYEE_APP_URL: requiredEnv("EMPLOYEE_APP_URL", env),
-    COMMUNITY_FEED_URL: requiredEnv("COMMUNITY_FEED_URL", env),
     ADMIN_CONSOLE_URL: requiredEnv("ADMIN_CONSOLE_URL", env),
     APPLICATION_ID_URI: requiredEnv("APPLICATION_ID_URI", env),
     TEAMS_APP_DOMAIN: requiredEnv("TEAMS_APP_DOMAIN", env)
