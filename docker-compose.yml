@@ -1,0 +1,90 @@
+name: cpn-engage
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-cpn_engage}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-cpn_engage_local}
+      POSTGRES_DB: ${POSTGRES_DB:-cpn_engage}
+    volumes:
+      - cpn_engage_pg:/var/lib/postgresql/data
+    ports:
+      - "5433:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-cpn_engage}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  api:
+    build:
+      context: .
+      dockerfile: services/api/Dockerfile
+    restart: unless-stopped
+    environment:
+      PORT: 4175
+      DATABASE_URL: postgres://${POSTGRES_USER:-cpn_engage}:${POSTGRES_PASSWORD:-cpn_engage_local}@postgres:5432/${POSTGRES_DB:-cpn_engage}
+      NOTIFICATION_BOT_URL: http://bot:4177
+      # Teams SSO token validation (Profile tab) — optional locally.
+      TEAMS_APP_ID: ${TEAMS_APP_ID:-}
+      TEAMS_APP_TENANT_ID: ${TEAMS_APP_TENANT_ID:-}
+      APPLICATION_ID_URI: ${APPLICATION_ID_URI:-}
+    ports:
+      - "4175:4175"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  bot:
+    build:
+      context: .
+      dockerfile: services/notification-bot/Dockerfile
+    restart: unless-stopped
+    environment:
+      PORT: 4177
+      DATABASE_URL: postgres://${POSTGRES_USER:-cpn_engage}:${POSTGRES_PASSWORD:-cpn_engage_local}@postgres:5432/${POSTGRES_DB:-cpn_engage}
+      API_BASE_URL: http://api:4175
+      # Bot Framework credentials — needed for real Teams traffic, not for
+      # local infra smoke testing (the process starts fine without them).
+      TEAMS_APP_TYPE: ${TEAMS_APP_TYPE:-MultiTenant}
+      TEAMS_APP_ID: ${TEAMS_APP_ID:-}
+      TEAMS_APP_PASSWORD: ${TEAMS_APP_PASSWORD:-}
+      TEAMS_APP_TENANT_ID: ${TEAMS_APP_TENANT_ID:-}
+      PUSH_TOKEN: ${PUSH_TOKEN:-}
+      ADMIN_ORIGIN: ${ADMIN_ORIGIN:-*}
+    ports:
+      - "4177:4177"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  employee-app:
+    build:
+      context: .
+      dockerfile: apps/employee-app/Dockerfile
+      args:
+        VITE_API_BASE_URL: http://localhost:4175
+    restart: unless-stopped
+    ports:
+      - "4173:80"
+    depends_on:
+      - api
+
+  admin-console:
+    build:
+      context: .
+      dockerfile: apps/admin-console/Dockerfile
+      args:
+        VITE_API_BASE_URL: http://localhost:4175
+        VITE_BOT_BASE_URL: http://localhost:4177
+    restart: unless-stopped
+    ports:
+      - "4174:80"
+    depends_on:
+      - api
+      - bot
+
+volumes:
+  cpn_engage_pg:

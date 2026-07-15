@@ -1,0 +1,16 @@
+node_modules
+**/node_modules
+**/dist
+**/.turbo
+.git
+.github
+docker
+*.log
+.DS_Store
+.env
+.env.local
+teams/.env.local
+teams/appPackage/dist
+apps/*/node_modules
+services/*/node_modules
+packages/*/node_modules
