@@ -59,3 +59,5 @@ export async function deleteModuleApi(id: string): Promise<boolean> {
     return false;
   }
 }
+export const reorderModules = (order: { id: string; orderIdx: number }[]) =>
+  post<{ ok: boolean }>(`${API}/api/admin/modules/reorder`, { order });

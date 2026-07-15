@@ -640,6 +640,20 @@ app.post<{ Body: ModuleContent }>("/api/admin/modules", async (request) => {
   const saved = await upsertModule(request.body);
   return { ok: true, module: saved };
 });
+// Persist a new module order after a drag-and-drop reorder in the Admin.
+app.post<{ Body: { order: { id: string; orderIdx: number }[] } }>(
+  "/api/admin/modules/reorder",
+  async (request) => {
+    const all = await listModules();
+    const byId = new Map(all.map((m) => [m.id, m]));
+    for (const { id, orderIdx } of request.body.order) {
+      const m = byId.get(id);
+      if (m) await upsertModule({ ...m, orderIdx });
+    }
+    return { ok: true };
+  }
+);
+
 app.delete<{ Params: { id: string } }>("/api/admin/modules/:id", async (request) => {
   await deleteModule(request.params.id);
   return { ok: true };
