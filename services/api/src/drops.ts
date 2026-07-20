@@ -44,6 +44,20 @@ export async function initDrops(): Promise<void> {
   console.log("[drops] connected + daily_drops table ready");
 }
 
+/** jsonb sometimes round-trips as a string (double-encoded legacy rows) — normalize. */
+function asOptions(v: unknown): DailyDrop["options"] {
+  if (Array.isArray(v)) return v as DailyDrop["options"];
+  if (typeof v === "string") {
+    try {
+      const parsed = JSON.parse(v);
+      return Array.isArray(parsed) ? parsed : [];
+    } catch {
+      return [];
+    }
+  }
+  return [];
+}
+
 function rowToDrop(r: Record<string, unknown>): DailyDrop & { isActive: boolean; scheduledDate: string | null } {
   return {
     id: r.id as string,
@@ -52,7 +66,7 @@ function rowToDrop(r: Record<string, unknown>): DailyDrop & { isActive: boolean;
     question: r.question as string,
     rewardLabel: (r.reward_label as string) ?? "Up to 50 points",
     timeLimit: (r.time_limit as string) ?? "30 sec",
-    options: (r.options as DailyDrop["options"]) ?? [],
+    options: asOptions(r.options),
     bestPoints: (r.best_points as number) ?? 50,
     basePoints: (r.base_points as number) ?? 20,
     status: "pending",
@@ -99,7 +113,7 @@ export async function upsertDrop(drop: DailyDrop & { scheduledDate?: string | nu
   await sql`
     insert into daily_drops (id, title, behavior, question, reward_label, time_limit, options, best_points, base_points, scheduled_date, updated_at)
     values (${drop.id}, ${drop.title}, ${drop.behavior}, ${drop.question}, ${drop.rewardLabel ?? null},
-            ${drop.timeLimit ?? null}, ${JSON.stringify(drop.options)}::jsonb, ${drop.bestPoints ?? 50}, ${drop.basePoints ?? 20},
+            ${drop.timeLimit ?? null}, ${sql.json(drop.options ?? [])}, ${drop.bestPoints ?? 50}, ${drop.basePoints ?? 20},
             ${drop.scheduledDate ?? null}, now())
     on conflict (id) do update set
       title = excluded.title, behavior = excluded.behavior, question = excluded.question,

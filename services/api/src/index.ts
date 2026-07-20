@@ -30,6 +30,7 @@ import { resolveIdentity } from "./identity.js";
 import { requireAdmin } from "./authz.js";
 import { buildDebugBundle, recordClientError } from "./debug.js";
 import { getAnalytics } from "./analytics.js";
+import { getRecognitionPoints, getAllSettings, setSetting } from "./settings.js";
 import {
   initBeliefs,
   listBeliefs,
@@ -608,9 +609,10 @@ app.post<{
     await recordScore({
       userKey,
       userName: userName ?? recognition.employee,
-      points: 75,
+      points: await getRecognitionPoints(),
       reason: `Recognised ${recognition.target}`,
-      ref: `recognition:${id}`
+      ref: `recognition:${id}`,
+      belief: recognition.behavior ?? null
     });
   }
 
@@ -893,6 +895,15 @@ app.delete<{ Params: { id: string } }>("/api/admin/drops/:id", async (request) =
 
 // Engagement analytics for the admin Overview (real aggregates).
 app.get("/api/admin/analytics", async () => getAnalytics(14));
+
+// Configurable settings (e.g. recognition award points).
+app.get("/api/admin/settings", async () => getAllSettings());
+app.post<{ Body: { recognitionPoints?: number } }>("/api/admin/settings", async (request) => {
+  if (typeof request.body?.recognitionPoints === "number") {
+    await setSetting("recognition_points", String(Math.max(0, Math.round(request.body.recognitionPoints))));
+  }
+  return { ok: true, ...(await getAllSettings()) };
+});
 
 // One-file support bundle for post-distribution debugging (admin-gated).
 app.get("/api/admin/debug-bundle", async () => buildDebugBundle());

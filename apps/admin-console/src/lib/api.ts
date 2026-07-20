@@ -137,6 +137,11 @@ export function debugBundleUrl(): string {
   return `${API}/api/admin/debug-bundle`;
 }
 
+// --- Settings (configurable points) ---
+export const getSettings = () => get<{ recognitionPoints: number }>(`${API}/api/admin/settings`);
+export const saveSettings = (s: { recognitionPoints: number }) =>
+  post<{ ok: boolean; recognitionPoints: number }>(`${API}/api/admin/settings`, s);
+
 // --- Announcements + moderation ---
 export const postAnnouncement = (title: string, message: string) =>
   post<{ ok: boolean }>(`${API}/api/admin/announce`, { title, message });

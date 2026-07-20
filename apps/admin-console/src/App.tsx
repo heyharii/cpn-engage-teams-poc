@@ -16,6 +16,7 @@ import {
   XCircle,
   PanelLeftClose,
   PanelLeftOpen,
+  Star,
   RefreshCw,
   Sparkles,
   Search,
@@ -55,6 +56,8 @@ import {
   verifyAdminKey,
   postAnnouncement,
   hideFeedPost,
+  getSettings,
+  saveSettings,
   getDebugBundle,
   getAnalytics,
   getBroadcasts,
@@ -599,6 +602,7 @@ function Broadcast(props: { audienceCount: number; boot: BootstrapResponse | nul
   const [history, setHistory] = useState<BroadcastRow[]>([]);
   const [scheduled, setScheduled] = useState<ScheduledRow[]>([]);
   const [scheduleAt, setScheduleAt] = useState<string>("");
+  const [showSchedule, setShowSchedule] = useState(false);
 
   async function loadHistory() {
     const [h, s] = await Promise.all([getBroadcasts(), getScheduled()]);
@@ -611,263 +615,286 @@ function Broadcast(props: { audienceCount: number; boot: BootstrapResponse | nul
 
   const selectedModule = modules.find((m) => m.id === moduleId) ?? modules[0] ?? null;
   const drop = boot?.dailyDrop ?? null;
+  const points =
+    kind === "module" ? selectedModule?.points ?? 75 : drop?.bestPoints ?? 50;
 
   const canSend = busy === null && audienceCount > 0 && !(kind === "module" && !selectedModule);
+
+  async function doSchedule() {
+    await run("sched", async () => {
+      const r = await scheduleBroadcastApi({
+        type: kind,
+        moduleId: kind === "module" ? selectedModule?.id : undefined,
+        label: kind === "module" ? selectedModule?.title : drop?.behavior,
+        at: new Date(scheduleAt).toISOString()
+      });
+      if (r?.ok) {
+        setScheduleAt("");
+        setShowSchedule(false);
+        await loadHistory();
+        return "Scheduled.";
+      }
+      return r?.error ?? "Could not schedule.";
+    });
+  }
 
   return (
     <div>
       <PageHeader
         title="Broadcast"
-        subtitle="Send a card to everyone's Teams chat. Pick what to send on the left — the right shows exactly how it will look."
+        subtitle="Pick what to send on the left, preview it on the right, then send now or schedule it."
       />
 
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1fr_1.1fr]">
-        {/* LEFT — pick what to send */}
-        <Card>
-          <CardHeader>
-            <CardTitle>1 · What to send</CardTitle>
-          </CardHeader>
-          <CardContent className="flex flex-col gap-3">
-            <button
-              type="button"
-              onClick={() => setKind("challenge")}
-              className={cn(
-                "flex items-start gap-3 rounded-lg border p-3 text-left transition-colors",
-                kind === "challenge" ? "border-primary bg-primary/5" : "border-border hover:bg-muted/50"
-              )}
-            >
-              <Zap className={cn("mt-0.5 size-5 shrink-0", kind === "challenge" ? "text-primary" : "text-muted-foreground")} />
-              <div>
-                <p className="text-sm font-semibold">Daily challenge</p>
-                <p className="text-xs text-muted-foreground">Send today's active drop as a quiz card.</p>
-              </div>
-            </button>
-            <button
-              type="button"
-              onClick={() => setKind("module")}
-              className={cn(
-                "flex items-start gap-3 rounded-lg border p-3 text-left transition-colors",
-                kind === "module" ? "border-primary bg-primary/5" : "border-border hover:bg-muted/50"
-              )}
-            >
-              <BookOpen className={cn("mt-0.5 size-5 shrink-0", kind === "module" ? "text-primary" : "text-muted-foreground")} />
-              <div className="flex-1">
-                <p className="text-sm font-semibold">Learning module</p>
-                <p className="text-xs text-muted-foreground">Assign one module to everyone.</p>
-              </div>
-            </button>
-
-            {kind === "module" ? (
-              <div className="pl-1">
-                <label className="mb-1.5 block text-xs font-medium text-muted-foreground">Which module</label>
-                <select
-                  className="h-9 w-full rounded-md border border-input bg-transparent px-3 text-sm"
-                  value={selectedModule?.id ?? ""}
-                  onChange={(e) => setModuleId(e.target.value)}
-                >
-                  {modules.map((m) => (
-                    <option key={m.id} value={m.id}>
-                      {m.title} ({m.track} · {m.durationMin} min)
-                    </option>
-                  ))}
-                </select>
-                {modules.length === 0 ? (
-                  <p className="mt-2 text-xs text-muted-foreground">No live modules — author one in Content first.</p>
-                ) : null}
-              </div>
-            ) : null}
-          </CardContent>
-        </Card>
-
-        {/* RIGHT — a Teams-chat mockup so "preview" is unmistakable */}
-        <Card className="self-start">
-          <CardHeader>
-            <CardTitle>2 · How it looks in Teams</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="rounded-xl border border-border bg-muted/40 p-4">
-              {/* Chat message row: bot avatar + name + bubble */}
-              <div className="flex gap-2.5">
-                <div className="flex size-8 shrink-0 items-center justify-center rounded-full bg-primary text-xs font-bold text-primary-foreground">
-                  CP
+      {/* ONE unified card: choices + preview + send */}
+      <Card>
+        <CardContent className="flex flex-col gap-6">
+          <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1fr_1.1fr]">
+            {/* LEFT — choices */}
+            <div className="flex flex-col gap-3">
+              <p className="text-sm font-semibold">What to send</p>
+              <button
+                type="button"
+                onClick={() => setKind("challenge")}
+                className={cn(
+                  "flex items-start gap-3 rounded-lg border p-3 text-left transition-colors",
+                  kind === "challenge" ? "border-primary bg-primary/5" : "border-border hover:bg-muted/50"
+                )}
+              >
+                <Zap className={cn("mt-0.5 size-5 shrink-0", kind === "challenge" ? "text-primary" : "text-muted-foreground")} />
+                <div>
+                  <p className="text-sm font-semibold">Daily challenge</p>
+                  <p className="text-xs text-muted-foreground">Today's active drop, from the database.</p>
                 </div>
-                <div className="min-w-0 flex-1">
-                  <p className="mb-1 text-xs">
-                    <span className="font-semibold">CPN Engage</span>
-                    <span className="text-muted-foreground"> · bot · now</span>
-                  </p>
-                  {/* The adaptive card bubble */}
-                  <div className="rounded-lg border border-border bg-card p-3 shadow-none">
-                    {kind === "challenge" ? (
-                      drop ? (
+              </button>
+              <button
+                type="button"
+                onClick={() => setKind("module")}
+                className={cn(
+                  "flex items-start gap-3 rounded-lg border p-3 text-left transition-colors",
+                  kind === "module" ? "border-primary bg-primary/5" : "border-border hover:bg-muted/50"
+                )}
+              >
+                <BookOpen className={cn("mt-0.5 size-5 shrink-0", kind === "module" ? "text-primary" : "text-muted-foreground")} />
+                <div className="flex-1">
+                  <p className="text-sm font-semibold">Learning module</p>
+                  <p className="text-xs text-muted-foreground">Assign one module to everyone.</p>
+                </div>
+              </button>
+
+              {kind === "module" ? (
+                <div>
+                  <label className="mb-1.5 block text-xs font-medium text-muted-foreground">Which module</label>
+                  <select
+                    className="h-9 w-full rounded-md border border-input bg-transparent px-3 text-sm"
+                    value={selectedModule?.id ?? ""}
+                    onChange={(e) => setModuleId(e.target.value)}
+                  >
+                    {modules.map((m) => (
+                      <option key={m.id} value={m.id}>
+                        {m.title} ({m.track} · {m.durationMin} min)
+                      </option>
+                    ))}
+                  </select>
+                  {modules.length === 0 ? (
+                    <p className="mt-2 text-xs text-muted-foreground">No live modules — author one in Content first.</p>
+                  ) : null}
+                </div>
+              ) : null}
+
+              <div className="mt-1 flex items-center gap-2 rounded-lg bg-muted/50 px-3 py-2 text-sm">
+                <Trophy className="size-4 text-primary" />
+                <span className="text-muted-foreground">Worth</span>
+                <span className="font-semibold">{points} points</span>
+              </div>
+            </div>
+
+            {/* RIGHT — preview (Teams chat mockup with real DB content) */}
+            <div>
+              <p className="mb-2 text-sm font-semibold">Preview</p>
+              <div className="rounded-xl border border-border bg-muted/40 p-4">
+                <div className="flex gap-2.5">
+                  <div className="flex size-8 shrink-0 items-center justify-center rounded-full bg-primary text-xs font-bold text-primary-foreground">
+                    CP
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="mb-1 text-xs">
+                      <span className="font-semibold">CPN Engage</span>
+                      <span className="text-muted-foreground"> · bot · now</span>
+                    </p>
+                    <div className="rounded-lg border border-border bg-card p-3">
+                      {kind === "challenge" ? (
+                        drop ? (
+                          <div className="flex flex-col gap-2">
+                            <p className="text-[11px] font-semibold uppercase tracking-wide text-primary">Daily challenge</p>
+                            <Badge variant="secondary" className="w-fit">{drop.behavior}</Badge>
+                            <p className="text-sm font-medium">{drop.question}</p>
+                            {/* Real options from the database */}
+                            <div className="flex flex-col gap-1">
+                              {(Array.isArray(drop.options) ? drop.options : []).map((o) => (
+                                <div
+                                  key={o.id}
+                                  className={cn(
+                                    "flex items-center gap-2 rounded-md border px-2.5 py-1.5 text-xs",
+                                    o.isBest ? "border-primary bg-primary/5" : "border-border"
+                                  )}
+                                >
+                                  {o.isBest ? <Star className="size-3 shrink-0 text-primary" /> : <span className="size-3 shrink-0" />}
+                                  <span>{o.label}</span>
+                                </div>
+                              ))}
+                            </div>
+                            <div className="mt-1 flex items-center gap-3 text-xs text-muted-foreground">
+                              <span className="inline-flex items-center gap-1">
+                                <Trophy className="size-3.5" /> {drop.bestPoints ?? 50} / {drop.basePoints ?? 20} pts
+                              </span>
+                              <span className="inline-flex items-center gap-1">
+                                <Clock className="size-3.5" /> {drop.timeLimit}
+                              </span>
+                            </div>
+                            <div className="mt-1 rounded-md bg-primary px-3 py-1.5 text-center text-sm font-medium text-primary-foreground">
+                              Play now
+                            </div>
+                          </div>
+                        ) : (
+                          <p className="text-sm text-muted-foreground">Loading today's drop…</p>
+                        )
+                      ) : selectedModule ? (
                         <div className="flex flex-col gap-2">
-                          <p className="text-[11px] font-semibold uppercase tracking-wide text-primary">Daily challenge</p>
-                          <p className="font-semibold">{drop.behavior}</p>
-                          <p className="text-sm text-muted-foreground">{drop.question}</p>
-                          <div className="mt-1 flex items-center gap-3 text-xs text-muted-foreground">
+                          <p className="text-[11px] font-semibold uppercase tracking-wide text-primary">New module assigned</p>
+                          <p className="font-semibold">{selectedModule.title}</p>
+                          <p className="text-sm text-muted-foreground">{selectedModule.summary}</p>
+                          {/* Lesson preview + quiz size */}
+                          {selectedModule.lesson?.heading ? (
+                            <div className="rounded-md bg-muted/60 p-2">
+                              <p className="text-xs font-semibold">{selectedModule.lesson.heading}</p>
+                              {selectedModule.lesson.body ? (
+                                <p className="mt-0.5 line-clamp-2 text-xs text-muted-foreground">{selectedModule.lesson.body}</p>
+                              ) : null}
+                            </div>
+                          ) : null}
+                          <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                            <Badge variant="secondary">{selectedModule.track}</Badge>
+                            <span>{selectedModule.durationMin} min</span>
+                            <span>· {selectedModule.questions.length} questions</span>
                             <span className="inline-flex items-center gap-1">
-                              <Trophy className="size-3.5" /> {drop.rewardLabel}
-                            </span>
-                            <span className="inline-flex items-center gap-1">
-                              <Clock className="size-3.5" /> {drop.timeLimit}
+                              · <Trophy className="size-3.5" /> {selectedModule.points ?? 75} pts
                             </span>
                           </div>
                           <div className="mt-1 rounded-md bg-primary px-3 py-1.5 text-center text-sm font-medium text-primary-foreground">
-                            Play now
+                            Start module
                           </div>
                         </div>
                       ) : (
-                        <p className="text-sm text-muted-foreground">Loading today's drop…</p>
-                      )
-                    ) : selectedModule ? (
-                      <div className="flex flex-col gap-2">
-                        <p className="text-[11px] font-semibold uppercase tracking-wide text-primary">New module assigned</p>
-                        <p className="font-semibold">{selectedModule.title}</p>
-                        <p className="text-sm text-muted-foreground">{selectedModule.summary}</p>
-                        <div className="mt-1 flex flex-wrap items-center gap-2">
-                          <Badge variant="secondary">{selectedModule.track}</Badge>
-                          <span className="text-xs text-muted-foreground">{selectedModule.durationMin} min</span>
-                          <span className="text-xs text-muted-foreground">· {selectedModule.questions.length} questions</span>
-                        </div>
-                        <div className="mt-1 rounded-md bg-primary px-3 py-1.5 text-center text-sm font-medium text-primary-foreground">
-                          Start module
-                        </div>
-                      </div>
-                    ) : (
-                      <p className="text-sm text-muted-foreground">No module selected.</p>
-                    )}
+                        <p className="text-sm text-muted-foreground">No module selected.</p>
+                      )}
+                    </div>
                   </div>
                 </div>
               </div>
+              <p className="mt-2 text-xs text-muted-foreground">
+                Employees get this as an Adaptive Card in their 1:1 chat with the bot.
+              </p>
             </div>
-            <p className="mt-2 text-xs text-muted-foreground">
-              Each employee gets this as an Adaptive Card in their private 1:1 chat with the bot.
-            </p>
-          </CardContent>
-        </Card>
-      </div>
+          </div>
 
-      {/* SEND BAR — audience + the actual send action, full width */}
-      <Card className="mt-6">
-        <CardContent className="flex flex-wrap items-center gap-4">
-          <div className="flex items-center gap-3">
-            <div className="flex size-10 items-center justify-center rounded-lg bg-accent">
-              <Users className="size-5 text-primary" />
-            </div>
+          {/* Send row — inside the same card */}
+          <div className="flex flex-wrap items-center gap-3 border-t border-border pt-5">
+            <Users className="size-5 text-primary" />
             <div>
               <p className="text-sm font-semibold">
                 {audienceCount} {audienceCount === 1 ? "person" : "people"} will receive this
               </p>
               <p className="text-xs text-muted-foreground">
                 {audienceCount === 0
-                  ? "No one is reachable yet — employees appear after they open the bot chat once."
-                  : "Everyone who has opened the CPN Engage bot at least once."}
+                  ? "No one reachable yet — employees appear after opening the bot chat once."
+                  : "Everyone who has opened the CPN Engage bot."}
               </p>
             </div>
-          </div>
-          <div className="ml-auto flex items-center gap-3">
-            {msg ? <span className="text-sm font-medium text-emerald-600">{msg}</span> : null}
-            <Button
-              size="lg"
-              disabled={!canSend}
-              onClick={() =>
-                void run("send", async () => {
-                  const r = await pushBroadcast(kind, kind === "module" ? selectedModule?.id : undefined);
-                  return r?.ok ? `Delivered to ${r.sent} of ${r.total} people.` : "Push failed — check the bot logs.";
-                })
-              }
-            >
-              {busy === "send" ? <Loader2 className="size-4 animate-spin" /> : <Send className="size-4" />}
-              Send now
-            </Button>
+            <div className="ml-auto flex items-center gap-3">
+              {msg ? <span className="text-sm font-medium text-emerald-600">{msg}</span> : null}
+              <Button variant="outline" disabled={!canSend} onClick={() => setShowSchedule(true)}>
+                <Clock className="size-4" /> Send later
+              </Button>
+              <Button
+                disabled={!canSend}
+                onClick={() =>
+                  void run("send", async () => {
+                    const r = await pushBroadcast(kind, kind === "module" ? selectedModule?.id : undefined);
+                    return r?.ok ? `Delivered to ${r.sent} of ${r.total} people.` : "Push failed — check the bot logs.";
+                  })
+                }
+              >
+                {busy === "send" ? <Loader2 className="size-4 animate-spin" /> : <Send className="size-4" />}
+                Send now
+              </Button>
+            </div>
           </div>
         </CardContent>
       </Card>
 
-      {/* Schedule for later */}
-      <Card className="mt-6">
-        <CardHeader>
-          <CardTitle>Schedule for later</CardTitle>
-        </CardHeader>
-        <CardContent className="flex flex-col gap-4">
-          <div className="flex flex-wrap items-end gap-3">
-            <div className="flex flex-col gap-1.5">
+      {/* Send-later modal — lightweight custom overlay (no external dialog dep) */}
+      {showSchedule ? (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
+          onClick={() => setShowSchedule(false)}
+        >
+          <Card className="w-full max-w-sm" onClick={(e) => e.stopPropagation()}>
+            <CardHeader>
+              <CardTitle>Schedule this {kind === "module" ? "module" : "challenge"}</CardTitle>
+            </CardHeader>
+            <CardContent className="flex flex-col gap-2">
               <label className="text-xs font-medium text-muted-foreground">Send at</label>
-              <Input
-                type="datetime-local"
-                className="w-56"
-                value={scheduleAt}
-                onChange={(e) => setScheduleAt(e.target.value)}
-              />
-            </div>
-            <Button
-              disabled={busy !== null || !scheduleAt || audienceCount === 0 || (kind === "module" && !selectedModule)}
-              onClick={() =>
-                void run("sched", async () => {
-                  const r = await scheduleBroadcastApi({
-                    type: kind,
-                    moduleId: kind === "module" ? selectedModule?.id : undefined,
-                    label: kind === "module" ? selectedModule?.title : drop?.behavior,
-                    at: new Date(scheduleAt).toISOString()
-                  });
-                  if (r?.ok) {
-                    setScheduleAt("");
-                    await loadHistory();
-                    return "Scheduled.";
-                  }
-                  return r?.error ?? "Could not schedule.";
-                })
-              }
-            >
-              {busy === "sched" ? <Loader2 className="size-4 animate-spin" /> : <Clock className="size-4" />}
-              Schedule this {kind === "module" ? "module" : "challenge"}
-            </Button>
-            <Button
-              variant="outline"
-              disabled={busy !== null}
-              onClick={() =>
-                void run("schedtest", async () => {
-                  const r = await scheduleTest(30);
-                  await loadHistory();
-                  return r?.ok ? "Test push in ~30s." : "Scheduler not running.";
-                })
-              }
-            >
-              {busy === "schedtest" ? <Loader2 className="size-4 animate-spin" /> : null}
-              Test (30s)
-            </Button>
-          </div>
+              <Input type="datetime-local" value={scheduleAt} onChange={(e) => setScheduleAt(e.target.value)} autoFocus />
+              <p className="text-xs text-muted-foreground">
+                The bot sends it automatically at this time to {audienceCount} people.
+              </p>
+              <div className="mt-2 flex justify-end gap-2">
+                <Button variant="outline" onClick={() => setShowSchedule(false)}>
+                  Cancel
+                </Button>
+                <Button disabled={busy !== null || !scheduleAt} onClick={() => void doSchedule()}>
+                  {busy === "sched" ? <Loader2 className="size-4 animate-spin" /> : <Clock className="size-4" />}
+                  Schedule
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      ) : null}
 
-          {scheduled.length > 0 ? (
-            <div className="flex flex-col">
-              <p className="mb-1 text-sm font-semibold">Upcoming</p>
-              {scheduled.map((s) => (
-                <div key={s.id} className="flex items-center justify-between border-b border-border py-2 text-sm last:border-0">
-                  <div className="flex items-center gap-2">
-                    <Badge variant="secondary" className="capitalize">
-                      {s.kind}
-                    </Badge>
-                    <span className="font-medium">{s.label ?? "—"}</span>
-                    <span className="text-muted-foreground">{new Date(s.runAt).toLocaleString()}</span>
-                  </div>
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    onClick={() =>
-                      void (async () => {
-                        await cancelScheduledApi(s.id);
-                        await loadHistory();
-                      })()
-                    }
-                  >
-                    Cancel
-                  </Button>
+      {/* Upcoming scheduled */}
+      {scheduled.length > 0 ? (
+        <Card className="mt-6">
+          <CardHeader>
+            <CardTitle>Upcoming</CardTitle>
+          </CardHeader>
+          <CardContent className="flex flex-col">
+            {scheduled.map((s) => (
+              <div key={s.id} className="flex items-center justify-between border-b border-border py-2 text-sm last:border-0">
+                <div className="flex items-center gap-2">
+                  <Badge variant="secondary" className="capitalize">
+                    {s.kind}
+                  </Badge>
+                  <span className="font-medium">{s.label ?? "—"}</span>
+                  <span className="text-muted-foreground">{new Date(s.runAt).toLocaleString()}</span>
                 </div>
-              ))}
-            </div>
-          ) : null}
-        </CardContent>
-      </Card>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={() =>
+                    void (async () => {
+                      await cancelScheduledApi(s.id);
+                      await loadHistory();
+                    })()
+                  }
+                >
+                  Cancel
+                </Button>
+              </div>
+            ))}
+          </CardContent>
+        </Card>
+      ) : null}
 
       {/* Broadcast history */}
       <Card className="mt-6">
@@ -910,6 +937,11 @@ function Recognitions(props: { feed: FeedItem[]; onReload: () => Promise<void> }
   const { busy, msg, run } = useAction();
   const [title, setTitle] = useState("");
   const [message, setMessage] = useState("");
+  const [recogPoints, setRecogPoints] = useState<number | null>(null);
+
+  useEffect(() => {
+    void getSettings().then((s) => s && setRecogPoints(s.recognitionPoints));
+  }, []);
 
   async function hide(id: string) {
     if (!confirm("Hide this post from the community feed?")) return;
@@ -920,6 +952,39 @@ function Recognitions(props: { feed: FeedItem[]; onReload: () => Promise<void> }
   return (
     <div>
       <PageHeader title="Recognitions & announcements" subtitle="Speak to the feed, and moderate what's posted." />
+
+      {/* Recognition award setting */}
+      <Card className="mb-6">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Trophy className="size-4" /> Recognition award
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="flex flex-wrap items-center gap-3">
+          <p className="text-sm text-muted-foreground">Points the sender earns for each recognition they give.</p>
+          <div className="ml-auto flex items-center gap-2">
+            <Input
+              type="number"
+              className="w-24"
+              value={recogPoints ?? 75}
+              onChange={(e) => setRecogPoints(Number(e.target.value) || 0)}
+            />
+            <Button
+              variant="outline"
+              disabled={busy !== null || recogPoints === null}
+              onClick={() =>
+                void run("recog", async () => {
+                  const r = await saveSettings({ recognitionPoints: recogPoints ?? 75 });
+                  return r?.ok ? "Saved." : "Failed to save.";
+                })
+              }
+            >
+              {busy === "recog" ? <Loader2 className="size-4 animate-spin" /> : null}
+              Save
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
 
       {/* Announcement composer */}
       <Card className="mb-6">

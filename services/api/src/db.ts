@@ -121,6 +121,20 @@ const MIGRATIONS: Migration[] = [
       `;
       await db`create index if not exists sched_bc_runat_idx on scheduled_broadcasts (run_at)`;
     }
+  },
+  {
+    id: "0006",
+    name: "app_settings (configurable points etc.)",
+    up: async (db) => {
+      await db`
+        create table if not exists app_settings (
+          key text primary key,
+          value text not null,
+          updated_at timestamptz not null default now()
+        )
+      `;
+      await db`insert into app_settings (key, value) values ('recognition_points', '75') on conflict (key) do nothing`;
+    }
   }
 ];
 
