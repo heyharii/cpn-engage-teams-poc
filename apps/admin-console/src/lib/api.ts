@@ -137,10 +137,32 @@ export function debugBundleUrl(): string {
   return `${API}/api/admin/debug-bundle`;
 }
 
-// --- Settings (configurable points) ---
-export const getSettings = () => get<{ recognitionPoints: number }>(`${API}/api/admin/settings`);
-export const saveSettings = (s: { recognitionPoints: number }) =>
-  post<{ ok: boolean; recognitionPoints: number }>(`${API}/api/admin/settings`, s);
+// --- Settings (all configurable values) ---
+export type AppSettings = {
+  recognitionPoints: number;
+  appName: string;
+  accentColor: string;
+  dailyDropTime: string;
+  dailyDropTz: string;
+  leaderboardPeriod: "week" | "month" | "all";
+  recognitionRequiresApproval: boolean;
+};
+export const getSettings = () => get<AppSettings>(`${API}/api/admin/settings`);
+export const saveSettings = (s: Partial<AppSettings>) => post<AppSettings & { ok: boolean }>(`${API}/api/admin/settings`, s);
+
+// Recognition approval queue.
+export type PendingRecognition = {
+  id: string;
+  author?: string;
+  target?: string;
+  belief?: string;
+  message?: string;
+  authorKey: string | null;
+};
+export const getPendingRecognitions = () =>
+  get<{ pending: PendingRecognition[] }>(`${API}/api/admin/recognitions/pending`);
+export const approveRecognition = (id: string) =>
+  post<{ ok: boolean }>(`${API}/api/admin/recognitions/${encodeURIComponent(id)}/approve`);
 
 // --- Announcements + moderation ---
 export const postAnnouncement = (title: string, message: string) =>

@@ -13,7 +13,9 @@ import {
   addComment,
   clearFeed,
   feedPersistent,
-  setPostHidden
+  setPostHidden,
+  listPending,
+  approvePost
 } from "./feed.js";
 import { runMigrations, dbPing } from "./db.js";
 import {
@@ -30,7 +32,7 @@ import { resolveIdentity } from "./identity.js";
 import { requireAdmin } from "./authz.js";
 import { buildDebugBundle, recordClientError } from "./debug.js";
 import { getAnalytics } from "./analytics.js";
-import { getRecognitionPoints, getAllSettings, setSetting } from "./settings.js";
+import { getRecognitionPoints, getAllSettings, updateSettings, type AppSettings } from "./settings.js";
 import {
   initBeliefs,
   listBeliefs,
@@ -445,11 +447,14 @@ app.get("/api/modules", async () => state.modules);
 app.get("/api/challenges", async () => state.challenges);
 app.get("/api/feed", async () => (feedPersistent ? listFeed() : state.feed));
 app.get("/api/leaderboard", async () => {
-  const rows = await computeLeaderboard(20);
+  const { leaderboardPeriod } = await getAllSettings();
+  const rows = await computeLeaderboard(20, leaderboardPeriod);
   // Real per-user standings once anyone has earned points; demo data until then.
   if (rows.length === 0) return state.leaderboard;
   return rows.map((r) => ({ name: r.name, points: r.points, department: r.department ?? undefined }));
 });
+// Expose the current period so the Feeds label can say Weekly/Monthly/All-time.
+app.get("/api/leaderboard/period", async () => ({ period: (await getAllSettings()).leaderboardPeriod }));
 app.get("/api/recognitions/pending", async () => state.recognitionQueue);
 app.get("/api/notifications", async () => state.notifications);
 app.get("/api/admin/demo/scenarios", async () => ({
@@ -605,7 +610,11 @@ app.post<{
     ...submission
   };
 
-  if (userKey) {
+  const { recognitionRequiresApproval } = await getAllSettings();
+
+  // Award immediately only when no approval is required; otherwise the award
+  // happens on approval (so a rejected recognition earns nothing).
+  if (userKey && !recognitionRequiresApproval) {
     await recordScore({
       userKey,
       userName: userName ?? recognition.employee,
@@ -616,14 +625,13 @@ app.post<{
     });
   }
 
-  // New story: recognition does NOT require approval — publish straight to the
-  // public feed so it appears immediately (the recognised colleague is notified
-  // by the bot). Persisted to Postgres so it survives restarts.
+  // Publish straight to the feed, unless approval is required — then it's held
+  // pending until an admin approves it.
   const feedItem = buildRecognitionFeedItem(recognition);
   if (feedPersistent) {
-    await addFeedPost(feedItem);
+    await addFeedPost(feedItem, { authorKey: userKey ?? null, pending: recognitionRequiresApproval });
     state.feed = await listFeed();
-  } else {
+  } else if (!recognitionRequiresApproval) {
     state.feed = [feedItem, ...state.feed];
   }
 
@@ -768,37 +776,6 @@ app.post<{ Body: { target?: string; belief?: string; message?: string } }>(
 );
 
 app.post<{
-  Params: { id: string };
-}>("/api/admin/recognitions/:id/approve", async (request, reply) => {
-  const { id } = request.params;
-  const recognition = state.recognitionQueue.find((item) => item.id === id);
-
-  if (!recognition) {
-    return reply.code(404).send({ ok: false, message: "Recognition not found" });
-  }
-
-  state.recognitionQueue = state.recognitionQueue.filter((item) => item.id !== id);
-  state.feed = [buildRecognitionFeedItem(recognition), ...state.feed];
-
-  updateMetric("Recognition posts", () => ({
-    note: "Updated from moderation approval flow"
-  }));
-
-  queueNotification({
-    type: "recognition-approved",
-    title: "Recognition approved",
-    summary: `${recognition.target} is now featured in the public feed.`,
-    audience: recognition.target
-  });
-
-  return {
-    ok: true,
-    recognitionId: id,
-    bootstrap: state
-  };
-});
-
-app.post<{
   Body: NotificationRequest;
 }>("/api/notifications", async (request) => {
   const notification = queueNotification(request.body);
@@ -896,13 +873,28 @@ app.delete<{ Params: { id: string } }>("/api/admin/drops/:id", async (request) =
 // Engagement analytics for the admin Overview (real aggregates).
 app.get("/api/admin/analytics", async () => getAnalytics(14));
 
-// Configurable settings (e.g. recognition award points).
+// Configurable settings — points, branding, schedule, leaderboard, approval.
 app.get("/api/admin/settings", async () => getAllSettings());
-app.post<{ Body: { recognitionPoints?: number } }>("/api/admin/settings", async (request) => {
-  if (typeof request.body?.recognitionPoints === "number") {
-    await setSetting("recognition_points", String(Math.max(0, Math.round(request.body.recognitionPoints))));
+app.post<{ Body: Partial<AppSettings> }>("/api/admin/settings", async (request) => {
+  const settings = await updateSettings(request.body ?? {});
+  // Ask the bot to re-apply the daily-drop schedule if the time/tz changed.
+  if (request.body?.dailyDropTime || request.body?.dailyDropTz) {
+    try {
+      await fetch(`${process.env.NOTIFICATION_BOT_URL ?? "http://bot:4177"}/internal/reschedule`, {
+        method: "POST",
+        headers: { "x-admin-key": process.env.ADMIN_KEY ?? "" }
+      });
+    } catch {
+      /* bot may be down in dev — settings still saved */
+    }
   }
-  return { ok: true, ...(await getAllSettings()) };
+  return { ok: true, ...settings };
+});
+
+// Public branding (name + accent color) so the tabs can theme themselves.
+app.get("/api/branding", async () => {
+  const s = await getAllSettings();
+  return { appName: s.appName, accentColor: s.accentColor };
 });
 
 // One-file support bundle for post-distribution debugging (admin-gated).
@@ -965,6 +957,25 @@ app.post<{ Params: { id: string }; Body: { hidden?: boolean } }>(
     return { ok: true, hidden };
   }
 );
+
+// Recognition approval queue (only used when recognitionRequiresApproval is on).
+app.get("/api/admin/recognitions/pending", async () => ({ pending: await listPending() }));
+app.post<{ Params: { id: string } }>("/api/admin/recognitions/:id/approve", async (request) => {
+  const r = await approvePost(request.params.id);
+  if (!r) return { ok: false, error: "not found or already approved" };
+  // Award the held points to the sender now that it's approved.
+  if (r.authorKey) {
+    await recordScore({
+      userKey: r.authorKey,
+      points: await getRecognitionPoints(),
+      reason: `Recognised ${r.target ?? "a colleague"}`,
+      ref: `recognition:${request.params.id}`,
+      belief: r.belief
+    });
+  }
+  if (feedPersistent) state.feed = await listFeed();
+  return { ok: true };
+});
 
 const port = Number(process.env.PORT || 4175);
 

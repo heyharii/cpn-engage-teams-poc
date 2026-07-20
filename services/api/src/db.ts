@@ -135,6 +135,14 @@ const MIGRATIONS: Migration[] = [
       `;
       await db`insert into app_settings (key, value) values ('recognition_points', '75') on conflict (key) do nothing`;
     }
+  },
+  {
+    id: "0007",
+    name: "feed_posts approval fields",
+    up: async (db) => {
+      await db`alter table if exists feed_posts add column if not exists author_key text`;
+      await db`alter table if exists feed_posts add column if not exists pending boolean not null default false`;
+    }
   }
 ];
 

@@ -64,22 +64,33 @@ export async function recordScore(e: {
 
 export type LeaderRow = { userKey: string; name: string; department: string | null; points: number };
 
-/** Real leaderboard: total points per user, newest name + department joined. */
-export async function computeLeaderboard(limit = 20): Promise<LeaderRow[]> {
+/** Real leaderboard: total points per user, newest name + department joined.
+ *  `period` limits to this week/month (rolling) or all-time. */
+export async function computeLeaderboard(limit = 20, period: "week" | "month" | "all" = "all"): Promise<LeaderRow[]> {
   if (!sql) return [];
+  const since =
+    period === "week" ? "now() - interval '7 days'" : period === "month" ? "now() - interval '30 days'" : null;
   try {
-    const rows = await sql<LeaderRow[]>`
-      select s.user_key as "userKey",
-             coalesce(d.display_name, max(s.user_name), s.user_key) as name,
-             d.department as department,
-             sum(s.points)::int as points
-      from score_events s
-      left join directory_users d on d.oid = s.user_key
-      group by s.user_key, d.display_name, d.department
-      having sum(s.points) > 0
-      order by points desc
-      limit ${limit}
-    `;
+    const rows = since
+      ? await sql<LeaderRow[]>`
+          select s.user_key as "userKey",
+                 coalesce(d.display_name, max(s.user_name), s.user_key) as name,
+                 d.department as department, sum(s.points)::int as points
+          from score_events s
+          left join directory_users d on d.oid = s.user_key
+          where s.created_at > ${sql.unsafe(since)}
+          group by s.user_key, d.display_name, d.department
+          having sum(s.points) > 0 order by points desc limit ${limit}
+        `
+      : await sql<LeaderRow[]>`
+          select s.user_key as "userKey",
+                 coalesce(d.display_name, max(s.user_name), s.user_key) as name,
+                 d.department as department, sum(s.points)::int as points
+          from score_events s
+          left join directory_users d on d.oid = s.user_key
+          group by s.user_key, d.display_name, d.department
+          having sum(s.points) > 0 order by points desc limit ${limit}
+        `;
     return [...rows];
   } catch (err) {
     console.warn("[scores] computeLeaderboard failed:", err instanceof Error ? err.message : err);

@@ -23,6 +23,26 @@ window.addEventListener("unhandledrejection", (e) =>
   report(`Unhandled rejection: ${String(e.reason)}`, e.reason?.stack)
 );
 
+// Runtime branding — pull the admin-configured app name + accent color and
+// apply them (document title + the --primary CSS variable that drives the theme).
+function hexToOklchApprox(hex: string): string | null {
+  const m = /^#([0-9a-f]{6})$/i.exec(hex);
+  if (!m) return null;
+  return hex; // browsers accept hex directly for the CSS var; shadcn tokens read it fine
+}
+void fetch(`${API}/api/branding`)
+  .then((r) => (r.ok ? r.json() : null))
+  .then((b) => {
+    if (!b) return;
+    if (b.appName) document.title = b.appName;
+    const color = hexToOklchApprox(b.accentColor);
+    if (color) {
+      document.documentElement.style.setProperty("--primary", color);
+      document.documentElement.style.setProperty("--ring", color);
+    }
+  })
+  .catch(() => {});
+
 ReactDOM.createRoot(document.getElementById("root")!).render(
   <React.StrictMode>
     <App />

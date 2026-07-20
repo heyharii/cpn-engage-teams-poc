@@ -11,6 +11,7 @@ import {
   Megaphone,
   EyeOff,
   Activity,
+  SlidersHorizontal,
   Download,
   CheckCircle2 as CheckIcon,
   XCircle,
@@ -28,6 +29,7 @@ import {
 import { ContentView } from "@/content-view";
 import { ChallengesView } from "@/challenges-view";
 import { BeliefsView } from "@/beliefs-view";
+import { SettingsView } from "@/settings-view";
 import type { BootstrapResponse, FeedItem, ModuleContent } from "@cpn-engage/shared";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -56,8 +58,6 @@ import {
   verifyAdminKey,
   postAnnouncement,
   hideFeedPost,
-  getSettings,
-  saveSettings,
   getDebugBundle,
   getAnalytics,
   getBroadcasts,
@@ -81,6 +81,7 @@ type NavId =
   | "recognitions"
   | "leaderboard"
   | "beliefs"
+  | "settings"
   | "system";
 const NAV: { id: NavId; label: string; icon: typeof Users }[] = [
   { id: "overview", label: "Overview", icon: LayoutDashboard },
@@ -91,6 +92,7 @@ const NAV: { id: NavId; label: string; icon: typeof Users }[] = [
   { id: "broadcast", label: "Broadcast", icon: Send },
   { id: "recognitions", label: "Recognitions", icon: Heart },
   { id: "leaderboard", label: "Leaderboard", icon: Trophy },
+  { id: "settings", label: "Settings", icon: SlidersHorizontal },
   { id: "system", label: "System", icon: Activity }
 ];
 
@@ -265,6 +267,7 @@ function Console() {
         )}
         {nav === "recognitions" && <Recognitions feed={boot?.feed ?? []} onReload={loadAll} />}
         {nav === "leaderboard" && <Leaderboard leaders={leaders} />}
+        {nav === "settings" && <SettingsView />}
         {nav === "system" && <SystemView />}
       </main>
     </div>
@@ -937,11 +940,6 @@ function Recognitions(props: { feed: FeedItem[]; onReload: () => Promise<void> }
   const { busy, msg, run } = useAction();
   const [title, setTitle] = useState("");
   const [message, setMessage] = useState("");
-  const [recogPoints, setRecogPoints] = useState<number | null>(null);
-
-  useEffect(() => {
-    void getSettings().then((s) => s && setRecogPoints(s.recognitionPoints));
-  }, []);
 
   async function hide(id: string) {
     if (!confirm("Hide this post from the community feed?")) return;
@@ -952,39 +950,6 @@ function Recognitions(props: { feed: FeedItem[]; onReload: () => Promise<void> }
   return (
     <div>
       <PageHeader title="Recognitions & announcements" subtitle="Speak to the feed, and moderate what's posted." />
-
-      {/* Recognition award setting */}
-      <Card className="mb-6">
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Trophy className="size-4" /> Recognition award
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="flex flex-wrap items-center gap-3">
-          <p className="text-sm text-muted-foreground">Points the sender earns for each recognition they give.</p>
-          <div className="ml-auto flex items-center gap-2">
-            <Input
-              type="number"
-              className="w-24"
-              value={recogPoints ?? 75}
-              onChange={(e) => setRecogPoints(Number(e.target.value) || 0)}
-            />
-            <Button
-              variant="outline"
-              disabled={busy !== null || recogPoints === null}
-              onClick={() =>
-                void run("recog", async () => {
-                  const r = await saveSettings({ recognitionPoints: recogPoints ?? 75 });
-                  return r?.ok ? "Saved." : "Failed to save.";
-                })
-              }
-            >
-              {busy === "recog" ? <Loader2 className="size-4 animate-spin" /> : null}
-              Save
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
 
       {/* Announcement composer */}
       <Card className="mb-6">

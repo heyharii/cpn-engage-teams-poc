@@ -62,18 +62,49 @@ export async function initFeed(): Promise<void> {
   console.log("[feed] connected + feed tables ready");
 }
 
-async function insertPost(f: FeedItem): Promise<void> {
+async function insertPost(f: FeedItem, opts?: { authorKey?: string | null; pending?: boolean }): Promise<void> {
   if (!sql) return;
   await sql`
-    insert into feed_posts (id, kind, title, summary, author, target, belief, message, created_at)
+    insert into feed_posts (id, kind, title, summary, author, target, belief, message, created_at, author_key, pending)
     values (${f.id}, ${f.kind}, ${f.title ?? null}, ${f.summary ?? null}, ${f.author ?? null},
-            ${f.target ?? null}, ${f.belief ?? null}, ${f.message ?? null}, coalesce(${f.createdAt ?? null}, now()))
+            ${f.target ?? null}, ${f.belief ?? null}, ${f.message ?? null}, coalesce(${f.createdAt ?? null}, now()),
+            ${opts?.authorKey ?? null}, ${opts?.pending ?? false})
     on conflict (id) do nothing
   `;
 }
 
-export async function addFeedPost(f: FeedItem): Promise<void> {
-  await insertPost(f);
+export async function addFeedPost(f: FeedItem, opts?: { authorKey?: string | null; pending?: boolean }): Promise<void> {
+  await insertPost(f, opts);
+}
+
+/** Recognition posts awaiting approval (for the admin queue). */
+export async function listPending(): Promise<(FeedItem & { authorKey: string | null })[]> {
+  if (!sql) return [];
+  const rows = await sql`select * from feed_posts where pending = true order by created_at desc`;
+  return rows.map((p) => {
+    const r = p as Record<string, unknown>;
+    return {
+      id: r.id as string,
+      kind: r.kind as FeedItem["kind"],
+      title: (r.title as string) ?? "",
+      summary: (r.summary as string) ?? "",
+      author: (r.author as string) ?? undefined,
+      target: (r.target as string) ?? undefined,
+      belief: (r.belief as string) ?? undefined,
+      message: (r.message as string) ?? undefined,
+      authorKey: (r.author_key as string) ?? null
+    };
+  });
+}
+
+/** Approve a pending post → it becomes visible. Returns its author_key (to award). */
+export async function approvePost(id: string): Promise<{ authorKey: string | null; belief: string | null; target: string | null } | null> {
+  if (!sql) return null;
+  const rows = await sql`select author_key, belief, target from feed_posts where id = ${id} and pending = true limit 1`;
+  if (rows.length === 0) return null;
+  await sql`update feed_posts set pending = false where id = ${id}`;
+  const r = rows[0] as Record<string, unknown>;
+  return { authorKey: (r.author_key as string) ?? null, belief: (r.belief as string) ?? null, target: (r.target as string) ?? null };
 }
 
 async function reactionsFor(feedId: string): Promise<{ emoji: string; count: number }[]> {
@@ -86,7 +117,7 @@ async function reactionsFor(feedId: string): Promise<{ emoji: string; count: num
 
 export async function listFeed(): Promise<FeedItem[]> {
   if (!sql) return demoFeed;
-  const posts = await sql`select * from feed_posts where hidden = false order by created_at desc`;
+  const posts = await sql`select * from feed_posts where hidden = false and pending = false order by created_at desc`;
   const reacts = await sql<{ feed_id: string; emoji: string; count: number }[]>`
     select feed_id, emoji, count(*)::int as count from feed_reactions group by feed_id, emoji
   `;
@@ -207,8 +238,8 @@ export async function listFeedPage(
     return { items, nextCursor: null };
   }
   const posts = before
-    ? await sql`select * from feed_posts where hidden = false and created_at < ${before} order by created_at desc limit ${limit + 1}`
-    : await sql`select * from feed_posts where hidden = false order by created_at desc limit ${limit + 1}`;
+    ? await sql`select * from feed_posts where hidden = false and pending = false and created_at < ${before} order by created_at desc limit ${limit + 1}`
+    : await sql`select * from feed_posts where hidden = false and pending = false order by created_at desc limit ${limit + 1}`;
 
   const hasMore = posts.length > limit;
   const page = hasMore ? posts.slice(0, limit) : posts;

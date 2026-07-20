@@ -75,10 +75,8 @@ export async function startScheduler(): Promise<void> {
     await runPushJob(data, jobId);
   });
 
-  // Recurring cron — default 09:00 daily, Asia/Bangkok. Override via env.
-  const cron = process.env.CRON_DAILY_DROP?.trim() || "0 9 * * *";
-  const tz = process.env.CRON_TZ?.trim() || "Asia/Bangkok";
-  await boss.schedule(QUEUE, cron, {}, { tz });
+  // Recurring cron — from admin settings (daily_drop_time/tz), env fallback.
+  await applyDailySchedule();
 
   // Directory sync — refresh the local mirror from Graph daily (default 03:00).
   await boss.createQueue(QUEUE_DIR);
@@ -87,9 +85,43 @@ export async function startScheduler(): Promise<void> {
     console.log(`[scheduler] directory sync → fetched ${r.fetched}, upserted ${r.upserted}`);
   });
   const dirCron = process.env.CRON_DIRECTORY_SYNC?.trim() || "0 3 * * *";
-  await boss.schedule(QUEUE_DIR, dirCron, {}, { tz });
+  const dirTz = process.env.CRON_TZ?.trim() || "Asia/Bangkok";
+  await boss.schedule(QUEUE_DIR, dirCron, {}, { tz: dirTz });
 
-  console.log(`[scheduler] started · daily-drop="${cron}" · directory-sync="${dirCron}" tz=${tz}`);
+  console.log(`[scheduler] started · directory-sync="${dirCron}" tz=${dirTz}`);
+}
+
+/** Read the daily-drop time+tz from settings (env fallback) and (re)schedule. */
+export async function applyDailySchedule(): Promise<{ cron: string; tz: string }> {
+  const fallbackTime = process.env.CRON_DAILY_DROP_TIME?.trim() || "09:00";
+  const fallbackTz = process.env.CRON_TZ?.trim() || "Asia/Bangkok";
+  let time = fallbackTime;
+  let tz = fallbackTz;
+  // Pull the admin-configured time/tz from the shared settings table.
+  if (sql) {
+    try {
+      const rows = await sql<{ key: string; value: string }[]>`
+        select key, value from app_settings where key in ('daily_drop_time', 'daily_drop_tz')
+      `;
+      for (const r of rows) {
+        if (r.key === "daily_drop_time" && /^\d{1,2}:\d{2}$/.test(r.value)) time = r.value;
+        if (r.key === "daily_drop_tz" && r.value.trim()) tz = r.value.trim();
+      }
+    } catch {
+      /* use fallback */
+    }
+  }
+  const [hh, mm] = time.split(":");
+  const cron = `${Number(mm)} ${Number(hh)} * * *`;
+  if (boss) {
+    try {
+      await boss.schedule(QUEUE, cron, {}, { tz });
+      console.log(`[scheduler] daily drop scheduled "${cron}" tz=${tz}`);
+    } catch (err) {
+      console.warn("[scheduler] applyDailySchedule failed:", err instanceof Error ? err.message : err);
+    }
+  }
+  return { cron, tz };
 }
 
 /** Fire a one-off push after N seconds — for demoing the scheduler. */

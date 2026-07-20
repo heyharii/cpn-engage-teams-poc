@@ -26,7 +26,7 @@ import { installAppForUsers } from "./graph.ts";
 import { enrichAll } from "./enrich.ts";
 import { syncDirectory } from "./directory.ts";
 import { refreshModules } from "./content.ts";
-import { startScheduler, scheduleTestPush, scheduleBroadcast, listScheduled, cancelScheduled } from "./scheduler.ts";
+import { startScheduler, scheduleTestPush, scheduleBroadcast, listScheduled, cancelScheduled, applyDailySchedule } from "./scheduler.ts";
 
 const app = express();
 
@@ -278,6 +278,12 @@ app.post("/internal/schedule", async (req, res) => {
     at: body.at
   });
   res.status(result.ok ? 200 : 400).json(result);
+});
+
+// Re-apply the daily-drop schedule after the admin changed the time/tz.
+app.post("/internal/reschedule", async (_req, res) => {
+  const r = await applyDailySchedule();
+  res.json({ ok: true, ...r });
 });
 
 // List upcoming scheduled broadcasts.

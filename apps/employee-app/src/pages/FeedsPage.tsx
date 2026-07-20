@@ -57,15 +57,18 @@ export function FeedsPage() {
     [token]
   );
 
+  const [lbPeriod, setLbPeriod] = useState<"week" | "month" | "all">("all");
   const loadFirst = useCallback(async () => {
     setLoading(true);
-    const [feedRes, lb] = await Promise.all([
+    const [feedRes, lb, per] = await Promise.all([
       fetch(`${API}/api/feed/page?limit=15`).then((r) => r.json()),
-      fetch(`${API}/api/leaderboard`).then((r) => r.json()).catch(() => [])
+      fetch(`${API}/api/leaderboard`).then((r) => r.json()).catch(() => []),
+      fetch(`${API}/api/leaderboard/period`).then((r) => r.json()).catch(() => ({ period: "all" }))
     ]);
     setPosts(feedRes.items ?? []);
     setCursor(feedRes.nextCursor ?? null);
     setLeaders(Array.isArray(lb) ? lb : []);
+    setLbPeriod(per?.period ?? "all");
     setLoading(false);
   }, []);
 
@@ -218,7 +221,9 @@ export function FeedsPage() {
       ) : (
         <Card>
           <CardContent>
-            <h2 className="mb-4 text-base font-semibold">Weekly leaders</h2>
+            <h2 className="mb-4 text-base font-semibold">
+              {lbPeriod === "week" ? "This week's leaders" : lbPeriod === "month" ? "This month's leaders" : "All-time leaders"}
+            </h2>
             <ol className="flex flex-col">
               {leaderboard.map((entry, i) => {
                 const dept = (entry as { department?: string }).department;
