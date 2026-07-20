@@ -48,7 +48,7 @@ jobs:
             done
             ok=""
             for i in $(seq 1 15); do
-              if docker exec apitest wget -qO- http://localhost:4175/health 2>/dev/null | grep -q '"ok":true'; then
+              if docker exec apitest wget -qO- http://127.0.0.1:4175/health 2>/dev/null | grep -q '"ok":true'; then
                 ok=1; echo "API image boots + /health OK"; break
               fi
               sleep 2
