@@ -9,6 +9,10 @@ import {
   Zap,
   Megaphone,
   EyeOff,
+  Activity,
+  Download,
+  CheckCircle2 as CheckIcon,
+  XCircle,
   RefreshCw,
   Sparkles,
   Search,
@@ -47,12 +51,21 @@ import {
   verifyAdminKey,
   postAnnouncement,
   hideFeedPost,
+  getDebugBundle,
   type RosterUser,
   type LeaderRow
 } from "@/lib/api";
 import { Textarea } from "@/components/ui/textarea";
 
-type NavId = "overview" | "content" | "challenges" | "users" | "broadcast" | "recognitions" | "leaderboard";
+type NavId =
+  | "overview"
+  | "content"
+  | "challenges"
+  | "users"
+  | "broadcast"
+  | "recognitions"
+  | "leaderboard"
+  | "system";
 const NAV: { id: NavId; label: string; icon: typeof Users }[] = [
   { id: "overview", label: "Overview", icon: LayoutDashboard },
   { id: "content", label: "Content", icon: BookOpen },
@@ -60,7 +73,8 @@ const NAV: { id: NavId; label: string; icon: typeof Users }[] = [
   { id: "users", label: "Users", icon: Users },
   { id: "broadcast", label: "Broadcast", icon: Send },
   { id: "recognitions", label: "Recognitions", icon: Heart },
-  { id: "leaderboard", label: "Leaderboard", icon: Trophy }
+  { id: "leaderboard", label: "Leaderboard", icon: Trophy },
+  { id: "system", label: "System", icon: Activity }
 ];
 
 export function App() {
@@ -214,6 +228,7 @@ function Console() {
         )}
         {nav === "recognitions" && <Recognitions feed={boot?.feed ?? []} onReload={loadAll} />}
         {nav === "leaderboard" && <Leaderboard leaders={leaders} />}
+        {nav === "system" && <SystemView />}
       </main>
     </div>
   );
@@ -775,6 +790,147 @@ function Leaderboard(props: { leaders: LeaderRow[] }) {
           </Table>
         </CardContent>
       </Card>
+    </div>
+  );
+}
+
+type DebugBundle = {
+  version?: string;
+  commit?: string | null;
+  node?: string;
+  uptimeSeconds?: number;
+  db?: { reachable?: boolean; rowCounts?: Record<string, number | string>; migrations?: { id: string; name: string }[] };
+  config?: Record<string, { set: boolean; sha8?: string; value?: string }>;
+  recentClientErrors?: { surface?: string; message?: string; created_at?: string }[];
+};
+
+function SystemView() {
+  const [bundle, setBundle] = useState<DebugBundle | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  async function load() {
+    setLoading(true);
+    setBundle((await getDebugBundle()) as DebugBundle | null);
+    setLoading(false);
+  }
+  useEffect(() => {
+    void load();
+  }, []);
+
+  function download() {
+    if (!bundle) return;
+    const blob = new Blob([JSON.stringify(bundle, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `cpn-engage-debug-${new Date().toISOString().slice(0, 19).replace(/[:T]/g, "-")}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
+  const dbOk = bundle?.db?.reachable;
+
+  return (
+    <div>
+      <div className="mb-6 flex items-start justify-between">
+        <div>
+          <h1 className="text-2xl font-bold">System</h1>
+          <p className="text-sm text-muted-foreground">
+            Health + a one-file debug bundle. When something breaks, download it and send it to support.
+          </p>
+        </div>
+        <div className="flex gap-2">
+          <Button variant="outline" size="sm" onClick={() => void load()}>
+            <RefreshCw className={cn("size-3.5", loading && "animate-spin")} /> Refresh
+          </Button>
+          <Button size="sm" disabled={!bundle} onClick={download}>
+            <Download className="size-3.5" /> Download debug bundle
+          </Button>
+        </div>
+      </div>
+
+      {loading ? (
+        <p className="text-sm text-muted-foreground">Loading…</p>
+      ) : !bundle ? (
+        <p className="text-sm text-destructive">Could not reach the API.</p>
+      ) : (
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+          <Card>
+            <CardHeader>
+              <CardTitle>Status</CardTitle>
+            </CardHeader>
+            <CardContent className="flex flex-col gap-2 text-sm">
+              <Row label="API version" value={bundle.version ?? "—"} />
+              <Row label="Node" value={bundle.node ?? "—"} />
+              <Row label="Uptime" value={`${Math.round((bundle.uptimeSeconds ?? 0) / 60)} min`} />
+              <div className="flex items-center justify-between">
+                <span className="text-muted-foreground">Database</span>
+                <span className={cn("inline-flex items-center gap-1.5 font-medium", dbOk ? "text-emerald-600" : "text-destructive")}>
+                  {dbOk ? <CheckIcon className="size-4" /> : <XCircle className="size-4" />}
+                  {dbOk ? "Reachable" : "Down"}
+                </span>
+              </div>
+              <Row label="Migrations applied" value={String(bundle.db?.migrations?.length ?? 0)} />
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Data</CardTitle>
+            </CardHeader>
+            <CardContent className="grid grid-cols-2 gap-x-4 gap-y-1 text-sm">
+              {Object.entries(bundle.db?.rowCounts ?? {}).map(([t, n]) => (
+                <Row key={t} label={t} value={String(n)} />
+              ))}
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Configuration</CardTitle>
+            </CardHeader>
+            <CardContent className="flex flex-col gap-1 text-sm">
+              {Object.entries(bundle.config ?? {}).map(([k, v]) => (
+                <div key={k} className="flex items-center justify-between">
+                  <span className="text-muted-foreground">{k}</span>
+                  <span className="font-mono text-xs">
+                    {v.set ? (v.value ?? `set · ${v.sha8}`) : <span className="text-destructive">not set</span>}
+                  </span>
+                </div>
+              ))}
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Recent client errors ({bundle.recentClientErrors?.length ?? 0})</CardTitle>
+            </CardHeader>
+            <CardContent className="flex flex-col gap-2 text-sm">
+              {(bundle.recentClientErrors ?? []).length === 0 ? (
+                <p className="text-muted-foreground">None reported. 🎉</p>
+              ) : (
+                bundle.recentClientErrors!.slice(0, 8).map((e, i) => (
+                  <div key={i} className="border-b border-border pb-2 last:border-0">
+                    <p className="font-medium">{e.message}</p>
+                    <p className="text-xs text-muted-foreground">
+                      {e.surface} · {e.created_at?.slice(0, 19).replace("T", " ")}
+                    </p>
+                  </div>
+                ))
+              )}
+            </CardContent>
+          </Card>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function Row(props: { label: string; value: string }) {
+  return (
+    <div className="flex items-center justify-between">
+      <span className="text-muted-foreground">{props.label}</span>
+      <span className="font-medium">{props.value}</span>
     </div>
   );
 }

@@ -28,6 +28,7 @@ import {
 } from "./drops.js";
 import { resolveIdentity } from "./identity.js";
 import { requireAdmin } from "./authz.js";
+import { buildDebugBundle, recordClientError } from "./debug.js";
 import {
   touchProfile,
   completeModuleForUser,
@@ -863,6 +864,19 @@ app.delete<{ Params: { id: string } }>("/api/admin/drops/:id", async (request) =
   await deleteDrop(request.params.id);
   return { ok: true };
 });
+
+// One-file support bundle for post-distribution debugging (admin-gated).
+app.get("/api/admin/debug-bundle", async () => buildDebugBundle());
+
+// Ingest a client-side error from any tab (ring-buffered). Open (no admin key)
+// so tabs can report crashes; surfaced only inside the admin debug bundle.
+app.post<{ Body: { surface?: string; message?: string; detail?: string; url?: string } }>(
+  "/api/client-errors",
+  async (request) => {
+    await recordClientError(request.body ?? {});
+    return { ok: true };
+  }
+);
 
 // Announcements — admins post to the community feed (pinned announcement kind).
 app.post<{ Body: { title?: string; message?: string } }>("/api/admin/announce", async (request, reply) => {

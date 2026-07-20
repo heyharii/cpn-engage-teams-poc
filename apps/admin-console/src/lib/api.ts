@@ -94,6 +94,12 @@ export const pushBroadcast = (type: "challenge" | "module", moduleId?: string) =
 export const scheduleTest = (seconds: number) =>
   post<{ ok: boolean; scheduledInSeconds: number | null }>(`${BOT}/internal/schedule-test?seconds=${seconds}`);
 
+// --- System / debug ---
+export const getDebugBundle = () => get<Record<string, unknown>>(`${API}/api/admin/debug-bundle`);
+export function debugBundleUrl(): string {
+  return `${API}/api/admin/debug-bundle`;
+}
+
 // --- Announcements + moderation ---
 export const postAnnouncement = (title: string, message: string) =>
   post<{ ok: boolean }>(`${API}/api/admin/announce`, { title, message });

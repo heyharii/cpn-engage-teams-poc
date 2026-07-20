@@ -69,6 +69,23 @@ const MIGRATIONS: Migration[] = [
     up: async (db) => {
       await db`alter table if exists score_events add column if not exists belief text`;
     }
+  },
+  {
+    id: "0003",
+    name: "client_errors ring buffer (post-distribution debugging)",
+    up: async (db) => {
+      await db`
+        create table if not exists client_errors (
+          id bigserial primary key,
+          surface text,
+          message text,
+          detail text,
+          url text,
+          created_at timestamptz not null default now()
+        )
+      `;
+      await db`create index if not exists client_errors_time_idx on client_errors (created_at desc)`;
+    }
   }
 ];
 

@@ -1,0 +1,133 @@
+# CPN Engage — on-prem production stack.
+#
+# Run via ./install.sh (generates .env with strong secrets). Images are pulled
+# from the registry by pinned tag — no source build on the client box. Every
+# service restarts unless stopped, has a healthcheck, and rotates its logs.
+name: cpn-engage
+
+x-logging: &logging
+  logging:
+    driver: json-file
+    options:
+      max-size: "10m"
+      max-file: "5"
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    <<: *logging
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    volumes:
+      - cpn_pg:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  # Nightly pg_dump, keeps 7 days. Simple, restore-tested, no extra infra.
+  pg-backup:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    <<: *logging
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      PGUSER: ${POSTGRES_USER}
+      PGPASSWORD: ${POSTGRES_PASSWORD}
+      PGDATABASE: ${POSTGRES_DB}
+    volumes:
+      - ./backups:/backups
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        while true; do
+          ts=$$(date +%Y%m%d-%H%M%S)
+          pg_dump -h postgres "$$PGDATABASE" | gzip > "/backups/cpn-$$ts.sql.gz" \
+            && echo "[backup] wrote cpn-$$ts.sql.gz" \
+            || echo "[backup] FAILED at $$ts"
+          find /backups -name 'cpn-*.sql.gz' -mtime +7 -delete
+          sleep 86400
+        done
+
+  api:
+    image: ${REGISTRY}/cpn-engage-api:${TAG}
+    restart: unless-stopped
+    <<: *logging
+    environment:
+      PORT: 4175
+      NODE_ENV: production
+      APP_VERSION: ${TAG}
+      DATABASE_URL: postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+      NOTIFICATION_BOT_URL: http://bot:4177
+      ADMIN_KEY: ${ADMIN_KEY}
+      ALLOW_GUEST: "false"
+      ALLOWED_ORIGINS: ${ALLOWED_ORIGINS}
+      TEAMS_APP_ID: ${TEAMS_APP_ID:-}
+      TEAMS_APP_TENANT_ID: ${TEAMS_APP_TENANT_ID:-}
+      APPLICATION_ID_URI: ${APPLICATION_ID_URI:-}
+    ports:
+      - "${API_PORT:-4175}:4175"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:4175/readyz"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+
+  bot:
+    image: ${REGISTRY}/cpn-engage-bot:${TAG}
+    restart: unless-stopped
+    <<: *logging
+    environment:
+      PORT: 4177
+      NODE_ENV: production
+      APP_VERSION: ${TAG}
+      DATABASE_URL: postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+      API_BASE_URL: http://api:4175
+      ADMIN_KEY: ${ADMIN_KEY}
+      PUSH_TOKEN: ${PUSH_TOKEN}
+      ADMIN_ORIGIN: ${ADMIN_ORIGIN}
+      TEAMS_APP_TYPE: ${TEAMS_APP_TYPE:-SingleTenant}
+      TEAMS_APP_ID: ${TEAMS_APP_ID:-}
+      TEAMS_APP_PASSWORD: ${TEAMS_APP_PASSWORD:-}
+      TEAMS_APP_TENANT_ID: ${TEAMS_APP_TENANT_ID:-}
+    ports:
+      - "${BOT_PORT:-4177}:4177"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:4177/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+
+  home:
+    image: ${REGISTRY}/cpn-engage-home:${TAG}
+    restart: unless-stopped
+    <<: *logging
+    ports:
+      - "${HOME_PORT:-4173}:80"
+    depends_on:
+      - api
+
+  admin:
+    image: ${REGISTRY}/cpn-engage-admin:${TAG}
+    restart: unless-stopped
+    <<: *logging
+    ports:
+      - "${ADMIN_PORT:-4174}:80"
+    depends_on:
+      - api
+      - bot
+
+volumes:
+  cpn_pg:

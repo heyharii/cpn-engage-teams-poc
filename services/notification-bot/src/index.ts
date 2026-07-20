@@ -77,6 +77,10 @@ app.get("/health", (_req, res) => {
   res.status(200).json({ ok: true, service: "notification-bot" });
 });
 
+app.get("/version", (_req, res) => {
+  res.json({ service: "notification-bot", version: process.env.APP_VERSION ?? "dev", commit: process.env.GIT_SHA ?? null });
+});
+
 // Internal relay from the CPN API. Not a Bot Framework activity — just log it.
 app.post("/internal/notify", (req, res) => {
   try {
