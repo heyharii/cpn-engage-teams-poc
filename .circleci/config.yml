@@ -64,7 +64,11 @@ jobs:
       - run:
           name: Log in to GHCR
           command: |
-            if [ -z "${GHCR_TOKEN:-}" ]; then echo "GHCR_TOKEN not set — skipping push"; circleci-agent step halt; fi
+            if [ -z "${GHCR_TOKEN:-}" ]; then
+              echo "GHCR_TOKEN not set — images built + smoke-tested, skipping push."
+              circleci-agent step halt
+              exit 0
+            fi
             echo "$GHCR_TOKEN" | docker login ghcr.io -u "$GHCR_USER" --password-stdin
       - run:
           name: Tag :latest on release tags
