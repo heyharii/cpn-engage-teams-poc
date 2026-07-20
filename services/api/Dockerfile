@@ -28,4 +28,4 @@ RUN rm -rf services/api/src packages/shared/src services/notification-bot/src
 
 ENV NODE_ENV=production
 EXPOSE 4175
-CMD ["node", "services/api/dist/server.cjs"]
+CMD ["node", "services/api/dist/server.mjs"]

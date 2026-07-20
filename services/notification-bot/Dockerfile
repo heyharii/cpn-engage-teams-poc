@@ -26,4 +26,4 @@ RUN rm -rf services/notification-bot/src packages/shared/src
 
 ENV NODE_ENV=production
 EXPOSE 4177
-CMD ["node", "services/notification-bot/dist/server.cjs"]
+CMD ["node", "services/notification-bot/dist/server.mjs"]
