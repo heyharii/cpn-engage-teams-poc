@@ -52,6 +52,10 @@ export async function initFeed(): Promise<void> {
     )
   `;
   await sql`create index if not exists feed_comments_feed_idx on feed_comments (feed_id, created_at)`;
+  // Columns added after the original feed_posts shipped — ALTER so fresh AND
+  // existing databases converge (a plain CREATE would skip an existing table).
+  await sql`alter table feed_posts add column if not exists author_key text`;
+  await sql`alter table feed_posts add column if not exists pending boolean not null default false`;
   // Moderation: soft-hide a post instead of hard-deleting (keeps an audit trail).
   await sql`alter table feed_posts add column if not exists hidden boolean not null default false`;
   const n = await sql`select count(*)::int as n from feed_posts`;
