@@ -37,7 +37,7 @@ generate_env() {
 # CPN Engage — generated $(date -u +%Y-%m-%dT%H:%M:%SZ). Keep this file secret.
 
 # Image source (set REGISTRY to your GHCR/registry path).
-REGISTRY=ghcr.io/YOUR_ORG
+REGISTRY=ghcr.io/heyharii
 TAG=latest
 
 # Database

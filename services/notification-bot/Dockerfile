@@ -1,7 +1,10 @@
-# CPN Engage — Teams bot (chat SDK + pg-boss scheduler). Runs via tsx (the
-# bot's own "build" script is type-check only, no emit — this matches how it
-# already runs on Render). Build context MUST be the repo root:
-#   docker build -f services/notification-bot/Dockerfile -t cpn-engage-bot .
+# CPN Engage — Teams bot (chat SDK + pg-boss scheduler). Build context MUST be
+# the repo root.
+#
+# Source-hiding build: our TypeScript (services/notification-bot/src +
+# packages/shared/src) is bundled by esbuild into a single dist/server.cjs and
+# then DELETED, so the shipped image contains no readable source of ours. npm
+# dependencies stay in node_modules (third-party, not our code).
 FROM node:24-alpine
 
 WORKDIR /app
@@ -17,8 +20,10 @@ RUN pnpm install --frozen-lockfile
 
 COPY packages/shared packages/shared
 COPY services/notification-bot services/notification-bot
-RUN pnpm --filter @cpn-engage/shared build && pnpm --filter @cpn-engage/notification-bot typecheck
+RUN pnpm --filter @cpn-engage/notification-bot bundle
+
+RUN rm -rf services/notification-bot/src packages/shared/src
 
 ENV NODE_ENV=production
 EXPOSE 4177
-CMD ["pnpm", "--filter", "@cpn-engage/notification-bot", "start"]
+CMD ["node", "services/notification-bot/dist/server.cjs"]

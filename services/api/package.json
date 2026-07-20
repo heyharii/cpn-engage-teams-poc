@@ -7,7 +7,8 @@
     "dev": "tsx watch src/index.ts",
     "start": "node dist/index.js",
     "build": "tsc -p tsconfig.json",
-    "typecheck": "tsc -p tsconfig.json --noEmit"
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "bundle": "esbuild src/index.ts --bundle --platform=node --format=cjs --outfile=dist/server.cjs --external:fastify --external:@fastify/cors --external:jose --external:postgres"
   },
   "dependencies": {
     "@cpn-engage/shared": "workspace:*",
@@ -19,6 +20,7 @@
   "devDependencies": {
     "@types/node": "^24.0.8",
     "tsx": "^4.20.3",
-    "typescript": "^5.8.3"
+    "typescript": "^5.8.3",
+    "esbuild": "^0.27.7"
   }
 }

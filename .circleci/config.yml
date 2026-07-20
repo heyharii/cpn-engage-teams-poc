@@ -1,0 +1,70 @@
+# CircleCI — build the 4 CPN Engage images and push them to GHCR.
+#
+# Runs on a git tag like v1.2.0 (and on main → the "edge" tag). The images ship
+# only compiled output (no source). Clients pull them from GHCR by tag.
+#
+# Required project env vars (Project Settings → Environment Variables):
+#   GHCR_USER   your GitHub username/org that owns the packages (e.g. heyharii)
+#   GHCR_TOKEN  a GitHub PAT (classic) with the `write:packages` scope
+#
+version: 2.1
+
+jobs:
+  build-and-push:
+    machine:
+      image: ubuntu-2404:current
+    resource_class: medium
+    steps:
+      - checkout
+      - run:
+          name: Resolve image tag
+          command: |
+            # Tag build → use the git tag; branch build → "edge".
+            if [ -n "${CIRCLE_TAG:-}" ]; then
+              echo "export IMG_TAG=${CIRCLE_TAG}" >> "$BASH_ENV"
+            else
+              echo "export IMG_TAG=edge" >> "$BASH_ENV"
+            fi
+            echo "export REG=ghcr.io/${GHCR_USER}" >> "$BASH_ENV"
+      - run:
+          name: Log in to GHCR
+          command: echo "$GHCR_TOKEN" | docker login ghcr.io -u "$GHCR_USER" --password-stdin
+      - run:
+          name: Build images
+          command: |
+            set -eux
+            docker build -f services/api/Dockerfile               -t "$REG/cpn-engage-api:$IMG_TAG"   .
+            docker build -f services/notification-bot/Dockerfile  -t "$REG/cpn-engage-bot:$IMG_TAG"   .
+            docker build -f apps/employee-app/Dockerfile          -t "$REG/cpn-engage-home:$IMG_TAG"  .
+            docker build -f apps/admin-console/Dockerfile         -t "$REG/cpn-engage-admin:$IMG_TAG" .
+      - run:
+          name: Tag :latest on release tags
+          command: |
+            set -eux
+            if [ -n "${CIRCLE_TAG:-}" ]; then
+              for s in api bot home admin; do
+                docker tag "$REG/cpn-engage-$s:$IMG_TAG" "$REG/cpn-engage-$s:latest"
+              done
+            fi
+      - run:
+          name: Push images
+          command: |
+            set -eux
+            for s in api bot home admin; do
+              docker push "$REG/cpn-engage-$s:$IMG_TAG"
+            done
+            if [ -n "${CIRCLE_TAG:-}" ]; then
+              for s in api bot home admin; do
+                docker push "$REG/cpn-engage-$s:latest"
+              done
+            fi
+
+workflows:
+  publish:
+    jobs:
+      - build-and-push:
+          filters:
+            tags:
+              only: /^v.*/
+            branches:
+              only: main

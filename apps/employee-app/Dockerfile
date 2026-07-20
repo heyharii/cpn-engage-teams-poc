@@ -20,11 +20,11 @@ RUN pnpm install --frozen-lockfile
 COPY packages/shared packages/shared
 COPY apps/employee-app apps/employee-app
 
-ARG VITE_API_BASE_URL=http://localhost:4175
+ARG VITE_API_BASE_URL=
 ENV VITE_API_BASE_URL=$VITE_API_BASE_URL
 RUN pnpm --filter @cpn-engage/shared build && pnpm --filter @cpn-engage/employee-app build
 
 FROM nginx:alpine
-COPY docker/nginx-spa.conf /etc/nginx/conf.d/default.conf
+COPY docker/nginx-home.conf /etc/nginx/conf.d/default.conf
 COPY --from=build /app/apps/employee-app/dist /usr/share/nginx/html
 EXPOSE 80

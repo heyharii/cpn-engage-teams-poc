@@ -20,8 +20,8 @@ RUN pnpm install --frozen-lockfile
 COPY packages/shared packages/shared
 COPY apps/admin-console apps/admin-console
 
-ARG VITE_API_BASE_URL=http://localhost:4175
-ARG VITE_BOT_BASE_URL=http://localhost:4177
+ARG VITE_API_BASE_URL=
+ARG VITE_BOT_BASE_URL=
 # Optional: bake a default admin key for frictionless LOCAL dev. Leave unset for
 # production builds so the login gate appears and the operator types their key.
 ARG VITE_ADMIN_KEY=
@@ -31,6 +31,6 @@ ENV VITE_ADMIN_KEY=$VITE_ADMIN_KEY
 RUN pnpm --filter @cpn-engage/shared build && pnpm --filter @cpn-engage/admin-console build
 
 FROM nginx:alpine
-COPY docker/nginx-spa.conf /etc/nginx/conf.d/default.conf
+COPY docker/nginx-admin.conf /etc/nginx/conf.d/default.conf
 COPY --from=build /app/apps/admin-console/dist /usr/share/nginx/html
 EXPOSE 80
