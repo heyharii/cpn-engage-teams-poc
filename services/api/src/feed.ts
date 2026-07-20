@@ -52,6 +52,8 @@ export async function initFeed(): Promise<void> {
     )
   `;
   await sql`create index if not exists feed_comments_feed_idx on feed_comments (feed_id, created_at)`;
+  // Moderation: soft-hide a post instead of hard-deleting (keeps an audit trail).
+  await sql`alter table feed_posts add column if not exists hidden boolean not null default false`;
   const n = await sql`select count(*)::int as n from feed_posts`;
   if (n[0].n === 0) {
     for (const f of demoFeed.filter((f) => f.kind !== "leaderboard")) await insertPost(f);
@@ -84,7 +86,7 @@ async function reactionsFor(feedId: string): Promise<{ emoji: string; count: num
 
 export async function listFeed(): Promise<FeedItem[]> {
   if (!sql) return demoFeed;
-  const posts = await sql`select * from feed_posts order by created_at desc`;
+  const posts = await sql`select * from feed_posts where hidden = false order by created_at desc`;
   const reacts = await sql<{ feed_id: string; emoji: string; count: number }[]>`
     select feed_id, emoji, count(*)::int as count from feed_reactions group by feed_id, emoji
   `;
@@ -205,8 +207,8 @@ export async function listFeedPage(
     return { items, nextCursor: null };
   }
   const posts = before
-    ? await sql`select * from feed_posts where created_at < ${before} order by created_at desc limit ${limit + 1}`
-    : await sql`select * from feed_posts order by created_at desc limit ${limit + 1}`;
+    ? await sql`select * from feed_posts where hidden = false and created_at < ${before} order by created_at desc limit ${limit + 1}`
+    : await sql`select * from feed_posts where hidden = false order by created_at desc limit ${limit + 1}`;
 
   const hasMore = posts.length > limit;
   const page = hasMore ? posts.slice(0, limit) : posts;
@@ -246,6 +248,12 @@ export async function listFeedPage(
 
   const nextCursor = hasMore ? items[items.length - 1]?.createdAt ?? null : null;
   return { items, nextCursor };
+}
+
+/** Moderation: soft-hide (or unhide) a post so it drops out of the feed. */
+export async function setPostHidden(feedId: string, hidden: boolean): Promise<void> {
+  if (!sql) return;
+  await sql`update feed_posts set hidden = ${hidden} where id = ${feedId}`;
 }
 
 /** Clear all feed posts + reactions + comments (used by the demo reset). */

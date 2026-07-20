@@ -7,6 +7,8 @@ import {
   Trophy,
   BookOpen,
   Zap,
+  Megaphone,
+  EyeOff,
   RefreshCw,
   Sparkles,
   Search,
@@ -43,9 +45,12 @@ import {
   getAdminKey,
   setAdminKey,
   verifyAdminKey,
+  postAnnouncement,
+  hideFeedPost,
   type RosterUser,
   type LeaderRow
 } from "@/lib/api";
+import { Textarea } from "@/components/ui/textarea";
 
 type NavId = "overview" | "content" | "challenges" | "users" | "broadcast" | "recognitions" | "leaderboard";
 const NAV: { id: NavId; label: string; icon: typeof Users }[] = [
@@ -207,7 +212,7 @@ function Console() {
             modules={modules.filter((m) => m.isLive !== false)}
           />
         )}
-        {nav === "recognitions" && <Recognitions feed={boot?.feed ?? []} />}
+        {nav === "recognitions" && <Recognitions feed={boot?.feed ?? []} onReload={loadAll} />}
         {nav === "leaderboard" && <Leaderboard leaders={leaders} />}
       </main>
     </div>
@@ -633,22 +638,102 @@ function Broadcast(props: { audienceCount: number; boot: BootstrapResponse | nul
   );
 }
 
-function Recognitions(props: { feed: FeedItem[] }) {
-  const recognitions = props.feed.filter((f) => f.kind === "recognition");
+function Recognitions(props: { feed: FeedItem[]; onReload: () => Promise<void> }) {
+  const { feed, onReload } = props;
+  const recognitions = feed.filter((f) => f.kind === "recognition");
+  const announcements = feed.filter((f) => f.kind === "announcement");
+  const { busy, msg, run } = useAction();
+  const [title, setTitle] = useState("");
+  const [message, setMessage] = useState("");
+
+  async function hide(id: string) {
+    if (!confirm("Hide this post from the community feed?")) return;
+    await hideFeedPost(id, true);
+    await onReload();
+  }
+
   return (
     <div>
-      <PageHeader title="Recognitions" subtitle="Live recognition posts from the Community Feed (no approval needed)." />
-      <div className="flex flex-col gap-3">
+      <PageHeader title="Recognitions & announcements" subtitle="Speak to the feed, and moderate what's posted." />
+
+      {/* Announcement composer */}
+      <Card className="mb-6">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Megaphone className="size-4" /> Post an announcement
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="flex flex-col gap-3">
+          <Input placeholder="Title (e.g. Q3 Recognition Campaign)" value={title} onChange={(e) => setTitle(e.target.value)} />
+          <Textarea
+            rows={3}
+            placeholder="Write your message to everyone…"
+            value={message}
+            onChange={(e) => setMessage(e.target.value)}
+          />
+          <div className="flex items-center gap-3">
+            <Button
+              disabled={busy !== null || !title.trim() || !message.trim()}
+              onClick={() =>
+                void run("announce", async () => {
+                  const r = await postAnnouncement(title.trim(), message.trim());
+                  if (r?.ok) {
+                    setTitle("");
+                    setMessage("");
+                    await onReload();
+                    return "Announcement posted to the feed.";
+                  }
+                  return "Failed to post.";
+                })
+              }
+            >
+              {busy === "announce" ? <Loader2 className="size-4 animate-spin" /> : <Megaphone className="size-4" />}
+              Post to feed
+            </Button>
+            {msg ? <span className="text-sm text-muted-foreground">{msg}</span> : null}
+          </div>
+        </CardContent>
+      </Card>
+
+      {announcements.length > 0 ? (
+        <div className="mb-6">
+          <p className="mb-2 text-sm font-semibold">Live announcements</p>
+          <div className="flex flex-col gap-2">
+            {announcements.map((a) => (
+              <Card key={a.id}>
+                <CardContent className="flex items-start gap-3">
+                  <Megaphone className="mt-0.5 size-4 shrink-0 text-primary" />
+                  <div className="min-w-0 flex-1">
+                    <p className="font-semibold">{a.title}</p>
+                    <p className="text-sm text-muted-foreground">{a.message ?? a.summary}</p>
+                  </div>
+                  <Button size="sm" variant="ghost" onClick={() => void hide(a.id)}>
+                    <EyeOff className="size-3.5" /> Hide
+                  </Button>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        </div>
+      ) : null}
+
+      <p className="mb-2 text-sm font-semibold">Recognition posts</p>
+      <div className="flex flex-col gap-2">
         {recognitions.map((r) => (
           <Card key={r.id}>
-            <CardContent className="pt-6">
-              <div className="mb-1 flex items-center gap-2">
-                <span className="font-semibold">{r.author}</span>
-                <span className="text-sm text-muted-foreground">recognised</span>
-                <span className="font-semibold">{r.target}</span>
-                {r.belief ? <Badge variant="secondary">{r.belief}</Badge> : null}
+            <CardContent className="flex items-start gap-3">
+              <div className="min-w-0 flex-1">
+                <div className="mb-1 flex flex-wrap items-center gap-2">
+                  <span className="font-semibold">{r.author}</span>
+                  <span className="text-sm text-muted-foreground">recognised</span>
+                  <span className="font-semibold">{r.target}</span>
+                  {r.belief ? <Badge variant="secondary">{r.belief}</Badge> : null}
+                </div>
+                <p className="text-sm">{r.message ?? r.summary}</p>
               </div>
-              <p className="text-sm">{r.message ?? r.summary}</p>
+              <Button size="sm" variant="ghost" className="shrink-0" onClick={() => void hide(r.id)}>
+                <EyeOff className="size-3.5" /> Hide
+              </Button>
             </CardContent>
           </Card>
         ))}

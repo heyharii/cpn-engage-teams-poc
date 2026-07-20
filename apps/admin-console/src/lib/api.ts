@@ -94,6 +94,12 @@ export const pushBroadcast = (type: "challenge" | "module", moduleId?: string) =
 export const scheduleTest = (seconds: number) =>
   post<{ ok: boolean; scheduledInSeconds: number | null }>(`${BOT}/internal/schedule-test?seconds=${seconds}`);
 
+// --- Announcements + moderation ---
+export const postAnnouncement = (title: string, message: string) =>
+  post<{ ok: boolean }>(`${API}/api/admin/announce`, { title, message });
+export const hideFeedPost = (id: string, hidden = true) =>
+  post<{ ok: boolean }>(`${API}/api/admin/feed/${encodeURIComponent(id)}/hide`, { hidden });
+
 // --- Daily-drop (challenge) authoring ---
 export type DropOption = { id: string; label: string; isBest?: boolean };
 export type AdminDrop = {

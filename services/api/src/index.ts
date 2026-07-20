@@ -12,7 +12,8 @@ import {
   listComments,
   addComment,
   clearFeed,
-  feedPersistent
+  feedPersistent,
+  setPostHidden
 } from "./feed.js";
 import { runMigrations, dbPing } from "./db.js";
 import {
@@ -862,6 +863,42 @@ app.delete<{ Params: { id: string } }>("/api/admin/drops/:id", async (request) =
   await deleteDrop(request.params.id);
   return { ok: true };
 });
+
+// Announcements — admins post to the community feed (pinned announcement kind).
+app.post<{ Body: { title?: string; message?: string } }>("/api/admin/announce", async (request, reply) => {
+  const title = (request.body?.title ?? "").trim();
+  const message = (request.body?.message ?? "").trim();
+  if (!title || !message) {
+    return reply.code(400).send({ ok: false, error: "title and message required" });
+  }
+  const item = {
+    id: `feed-ann-${Date.now()}`,
+    kind: "announcement" as const,
+    title,
+    summary: message,
+    message,
+    createdAt: new Date().toISOString(),
+    reactions: [] as { emoji: string; count: number }[]
+  };
+  if (feedPersistent) {
+    await addFeedPost(item);
+    state.feed = await listFeed();
+  } else {
+    state.feed = [item, ...state.feed];
+  }
+  return { ok: true, announcement: item };
+});
+
+// Moderation — hide/unhide a feed post so it drops out of the community feed.
+app.post<{ Params: { id: string }; Body: { hidden?: boolean } }>(
+  "/api/admin/feed/:id/hide",
+  async (request) => {
+    const hidden = request.body?.hidden ?? true;
+    await setPostHidden(request.params.id, hidden);
+    if (feedPersistent) state.feed = await listFeed();
+    return { ok: true, hidden };
+  }
+);
 
 const port = Number(process.env.PORT || 4175);
 
