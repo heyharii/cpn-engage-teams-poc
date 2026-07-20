@@ -8,8 +8,9 @@ import postgres from "postgres";
 import { demoModuleContent, type ModuleContent } from "@cpn-engage/shared";
 
 const url = process.env.DATABASE_URL?.trim();
+const isLocalDb = (u: string) => ["localhost", "127.0.0.1", "postgres"].includes(new URL(u).hostname);
 const sql = url
-  ? postgres(url, { ssl: url.includes("localhost") ? false : "require", max: 5 })
+  ? postgres(url, { ssl: isLocalDb(url) ? false : "require", max: 5 })
   : null;
 
 export const modulesEnabled = Boolean(sql);

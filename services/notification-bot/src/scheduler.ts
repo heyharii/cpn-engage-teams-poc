@@ -33,9 +33,10 @@ export async function startScheduler(): Promise<void> {
     console.log("[scheduler] no DATABASE_URL — scheduler disabled");
     return;
   }
+  const isLocalDb = ["localhost", "127.0.0.1", "postgres"].includes(new URL(url).hostname);
   boss = new PgBoss({
     connectionString: url,
-    ssl: url.includes("localhost") ? false : { rejectUnauthorized: false }
+    ssl: isLocalDb ? false : { rejectUnauthorized: false }
   });
   boss.on("error", (e: unknown) => console.warn("[scheduler] error:", e instanceof Error ? e.message : e));
   await boss.start();
