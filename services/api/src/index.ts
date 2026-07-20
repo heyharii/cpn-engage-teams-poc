@@ -528,7 +528,7 @@ app.post<{
 
 app.post<{
   Params: { id: string };
-  Body: { userKey?: string; userName?: string; best?: boolean };
+  Body: { userKey?: string; userName?: string; best?: boolean; questionId?: string; last?: boolean };
 }>("/api/challenges/:id/submit", async (request, reply) => {
   const { id } = request.params;
   // Accept either a demo challenge OR an admin-authored daily drop with this id.
@@ -542,16 +542,22 @@ app.post<{
 
   if (request.body?.userKey) {
     const pts = request.body.best ? drop?.bestPoints ?? 50 : drop?.basePoints ?? 20;
+    // One score event per question (ref includes questionId so it's idempotent
+    // and multi-question drops award per answer, not once).
+    const qref = request.body.questionId ? `:${request.body.questionId}` : "";
     await recordScore({
       userKey: request.body.userKey,
       userName: request.body.userName,
       points: pts,
       reason: `Challenge: ${target.title}`,
-      ref: `challenge:${id}:${request.body.userKey}`,
+      ref: `challenge:${id}${qref}:${request.body.userKey}`,
       belief: target.behavior ?? null
     });
-    // Per-user challenge run — drives THIS user's streak + "answered today".
-    await recordChallengeRun(request.body.userKey, id, Boolean(request.body.best), pts);
+    // Per-user challenge run — recorded once per drop (on the last question, or
+    // for a single-question drop) so the streak counts the drop, not each Q.
+    if (request.body.last !== false) {
+      await recordChallengeRun(request.body.userKey, id, Boolean(request.body.best), pts);
+    }
   }
 
   state.challenges = state.challenges.map((item) =>

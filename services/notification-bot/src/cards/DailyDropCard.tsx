@@ -1,24 +1,26 @@
 /** @jsxImportSource chat */
 import { Card, CardText, Section, Actions, Button, Divider } from "chat";
-import type { DailyDrop } from "@cpn-engage/shared";
+import type { DailyDrop, DropQuestion } from "@cpn-engage/shared";
 
 /**
- * The daily drop question. Options are shown in full as body text, with
- * numbered buttons underneath (Teams truncates long button labels).
+ * One question of the daily drop. A drop may have several questions — `qNum`/
+ * `total` show progress ("Question 2 of 3"). Options are shown in full as body
+ * text with numbered buttons underneath (Teams truncates long button labels).
  */
-export function DailyDropCard(opts: { drop: DailyDrop }) {
-  const { drop } = opts;
+export function DailyDropCard(opts: { drop: DailyDrop; question: DropQuestion; qNum: number; total: number }) {
+  const { drop, question, qNum, total } = opts;
+  const progress = total > 1 ? ` · Question ${qNum} of ${total}` : "";
   return (
     <Card
       title={`⚡ ${drop.title} · ⏱️ ${drop.timeLimit}`}
-      subtitle={`${drop.behavior} · ${drop.rewardLabel}`}
+      subtitle={`${drop.behavior} · ${drop.rewardLabel}${progress}`}
     >
       <Section>
-        <CardText>{drop.question}</CardText>
+        <CardText>{question.question}</CardText>
       </Section>
       <Divider />
       <Section>
-        {drop.options.map((o, i) => (
+        {question.options.map((o, i) => (
           <CardText key={o.id}>{`**${i + 1}.** ${o.label}`}</CardText>
         ))}
       </Section>
@@ -27,8 +29,8 @@ export function DailyDropCard(opts: { drop: DailyDrop }) {
         <CardText>Tap your answer:</CardText>
       </Section>
       <Actions>
-        {drop.options.map((o, i) => (
-          <Button key={o.id} id="submit_answer" value={`${drop.id}|${o.id}`}>
+        {question.options.map((o, i) => (
+          <Button key={o.id} id="submit_answer" value={`${drop.id}|${question.id}|${o.id}`}>
             {String(i + 1)}
           </Button>
         ))}

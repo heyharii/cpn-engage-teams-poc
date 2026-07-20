@@ -172,6 +172,7 @@ export const hideFeedPost = (id: string, hidden = true) =>
 
 // --- Daily-drop (challenge) authoring ---
 export type DropOption = { id: string; label: string; isBest?: boolean };
+export type DropQuestion = { id: string; question: string; options: DropOption[] };
 export type AdminDrop = {
   id: string;
   title: string;
@@ -180,6 +181,7 @@ export type AdminDrop = {
   rewardLabel?: string;
   timeLimit?: string;
   options: DropOption[];
+  questions?: DropQuestion[];
   bestPoints?: number;
   basePoints?: number;
   status?: string;

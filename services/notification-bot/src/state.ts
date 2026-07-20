@@ -19,8 +19,8 @@ export type ThreadState =
       correct: number; // running correct count (idempotent — never double-counts)
       answered: string[]; // quiz ids already answered, to guard stale presses
     }
-  // Challenge: a single MCQ, guarded against re-answering
-  | { kind: "challenge"; dropId: string; answered: boolean }
+  // Challenge: a mini-quiz of 1..n MCQs; tracks progress + running score
+  | { kind: "challenge"; dropId: string; qIndex: number; score: number; answeredQ: string[] }
   // Recognition: who → belief → description → media → confirm → send
   | {
       kind: "recognise";

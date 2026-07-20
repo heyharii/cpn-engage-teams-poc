@@ -728,10 +728,13 @@ function Broadcast(props: { audienceCount: number; boot: BootstrapResponse | nul
                       {kind === "challenge" ? (
                         drop ? (
                           <div className="flex flex-col gap-2">
-                            <p className="text-[11px] font-semibold uppercase tracking-wide text-primary">Daily challenge</p>
+                            <p className="text-[11px] font-semibold uppercase tracking-wide text-primary">
+                              Daily challenge
+                              {(drop.questions?.length ?? 1) > 1 ? ` · ${drop.questions!.length} questions` : ""}
+                            </p>
                             <Badge variant="secondary" className="w-fit">{drop.behavior}</Badge>
                             <p className="text-sm font-medium">{drop.question}</p>
-                            {/* Real options from the database */}
+                            {/* First question's options from the database */}
                             <div className="flex flex-col gap-1">
                               {(Array.isArray(drop.options) ? drop.options : []).map((o) => (
                                 <div

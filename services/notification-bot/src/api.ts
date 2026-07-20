@@ -59,10 +59,10 @@ export async function getLeaderboard(): Promise<LeaderboardEntry[]> {
 /** Identity used to attribute points to the right person (oid keyed). */
 export type ScoreIdentity = { userKey: string; userName?: string | null };
 
-/** Completing the daily drop — awards points to the answering user. */
+/** Answering one daily-drop question — awards that question's points. */
 export async function submitChallenge(
   challengeId: string,
-  identity?: ScoreIdentity & { best?: boolean }
+  identity?: ScoreIdentity & { best?: boolean; questionId?: string; last?: boolean }
 ): Promise<BootstrapResponse | null> {
   const data = await call<{ ok: boolean; bootstrap: BootstrapResponse }>(
     `/api/challenges/${challengeId}/submit`,

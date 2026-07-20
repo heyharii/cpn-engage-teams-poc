@@ -25,16 +25,26 @@ export type DailyDropOption = {
   isBest?: boolean;
 };
 
+/** One question within a daily drop (a drop can hold several — a mini-quiz). */
+export type DropQuestion = {
+  id: string;
+  question: string;
+  options: DailyDropOption[];
+};
+
 export type DailyDrop = {
   id: string;
   title: string;
   behavior: string;
   rewardLabel: string;
   timeLimit: string;
+  /** A drop can have multiple questions. `question`/`options` mirror questions[0]
+   *  for backward compatibility with older single-question callers. */
+  questions: DropQuestion[];
   question: string;
   options: DailyDropOption[];
-  bestPoints?: number; // awarded for the ⭐ best option (default 50)
-  basePoints?: number; // awarded for any other option (default 20)
+  bestPoints?: number; // awarded per ⭐ best answer (default 50)
+  basePoints?: number; // awarded per other answer (default 20)
   status: "pending" | "completed";
 };
 
@@ -369,30 +379,42 @@ export const demoChallenges: Challenge[] = [
   }
 ];
 
+const demoDropOptions: DailyDropOption[] = [
+  {
+    id: "option-1",
+    label: "Clarify what the customer needs most urgently and align the team on an immediate recovery move.",
+    isBest: true
+  },
+  { id: "option-2", label: "Ask the team to follow the standard queue and solve the concern later." },
+  { id: "option-3", label: "Escalate straight to senior leadership before understanding the root issue." }
+];
+
 export const demoDailyDrop: DailyDrop = {
   id: "challenge-1",
   title: "Daily Drop Challenge",
   behavior: "Customers",
   rewardLabel: "Up to 50 points",
   timeLimit: "30 sec",
-  question: "A peak-hour tenant escalation is rising. What is the best next step?",
-  options: [
+  questions: [
     {
-      id: "option-1",
-      label: "Clarify what the customer needs most urgently and align the team on an immediate recovery move.",
-      isBest: true
-    },
-    {
-      id: "option-2",
-      label: "Ask the team to follow the standard queue and solve the concern later."
-    },
-    {
-      id: "option-3",
-      label: "Escalate straight to senior leadership before understanding the root issue."
+      id: "q1",
+      question: "A peak-hour tenant escalation is rising. What is the best next step?",
+      options: demoDropOptions
     }
   ],
+  question: "A peak-hour tenant escalation is rising. What is the best next step?",
+  options: demoDropOptions,
   status: "pending"
 };
+
+/** Ensure a drop has a `questions` array + mirrored top-level question/options. */
+export function normalizeDrop(d: DailyDrop): DailyDrop {
+  const questions =
+    Array.isArray(d.questions) && d.questions.length > 0
+      ? d.questions
+      : [{ id: "q1", question: d.question ?? "", options: d.options ?? [] }];
+  return { ...d, questions, question: questions[0].question, options: questions[0].options };
+}
 
 export const demoCurrentUser: CurrentUser = {
   id: "user-1",

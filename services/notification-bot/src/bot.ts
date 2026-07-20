@@ -127,9 +127,11 @@ bot.onAction("quiz_answer", guardAction("quiz_answer", async (e) => {
 // Challenge
 bot.onAction("submit_answer", guardAction("submit_answer", async (e) => {
   if (!e.thread) return;
-  const [dropId, optionId] = ((e.value ?? "") as string).split("|");
+  // value = "dropId|questionId|optionId" (questionId added for multi-question drops).
+  const parts = ((e.value ?? "") as string).split("|");
+  const [dropId, questionId, optionId] = parts.length === 3 ? parts : [parts[0], "q1", parts[1]];
   if (!dropId || !optionId) throw new Error(`bad submit_answer: "${e.value}"`);
-  await onSubmitAnswer(e.thread, { dropId, optionId }, { userId: e.user?.userId, fullName: e.user?.fullName });
+  await onSubmitAnswer(e.thread, { dropId, questionId, optionId }, { userId: e.user?.userId, fullName: e.user?.fullName });
 }));
 
 // Recognition
