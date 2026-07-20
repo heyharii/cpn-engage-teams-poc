@@ -25,6 +25,8 @@ function blankDrop(): AdminDrop {
     question: "",
     rewardLabel: "Up to 50 points",
     timeLimit: "30 sec",
+    bestPoints: 50,
+    basePoints: 20,
     options: [
       { id: "o1", label: "", isBest: true },
       { id: "o2", label: "" },
@@ -217,7 +219,23 @@ function DropEditor(props: { initial: AdminDrop; beliefs: string[]; onClose: () 
                 <Input value={d.timeLimit ?? ""} onChange={(e) => set({ timeLimit: e.target.value })} placeholder="30 sec" />
               </Field>
             </div>
-            <Field label="Reward label">
+            <div className="grid grid-cols-2 gap-3">
+              <Field label="Points — ⭐ best answer">
+                <Input
+                  type="number"
+                  value={d.bestPoints ?? 50}
+                  onChange={(e) => set({ bestPoints: Number(e.target.value) || 0 })}
+                />
+              </Field>
+              <Field label="Points — other answers">
+                <Input
+                  type="number"
+                  value={d.basePoints ?? 20}
+                  onChange={(e) => set({ basePoints: Number(e.target.value) || 0 })}
+                />
+              </Field>
+            </div>
+            <Field label="Reward label (shown on the card)">
               <Input
                 value={d.rewardLabel ?? ""}
                 onChange={(e) => set({ rewardLabel: e.target.value })}
@@ -261,7 +279,7 @@ function DropEditor(props: { initial: AdminDrop; beliefs: string[]; onClose: () 
               </div>
             ))}
             <p className="mt-1 text-xs text-muted-foreground">
-              The ⭐ option awards the full 50 points; others award 20.
+              The ⭐ option awards {d.bestPoints ?? 50} points; others award {d.basePoints ?? 20}.
             </p>
           </CardContent>
         </Card>

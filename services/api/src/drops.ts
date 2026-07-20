@@ -32,6 +32,9 @@ export async function initDrops(): Promise<void> {
       updated_at timestamptz not null default now()
     )
   `;
+  // Editable point values (default 50 best / 20 base).
+  await sql`alter table daily_drops add column if not exists best_points integer not null default 50`;
+  await sql`alter table daily_drops add column if not exists base_points integer not null default 20`;
   const n = await sql`select count(*)::int as n from daily_drops`;
   if (n[0].n === 0) {
     await upsertDrop({ ...demoDailyDrop });
@@ -50,6 +53,8 @@ function rowToDrop(r: Record<string, unknown>): DailyDrop & { isActive: boolean;
     rewardLabel: (r.reward_label as string) ?? "Up to 50 points",
     timeLimit: (r.time_limit as string) ?? "30 sec",
     options: (r.options as DailyDrop["options"]) ?? [],
+    bestPoints: (r.best_points as number) ?? 50,
+    basePoints: (r.base_points as number) ?? 20,
     status: "pending",
     isActive: (r.is_active as boolean) ?? false,
     scheduledDate: (r.scheduled_date as string) ?? null
@@ -92,13 +97,15 @@ export async function getDrop(id: string): Promise<DailyDrop | null> {
 export async function upsertDrop(drop: DailyDrop & { scheduledDate?: string | null }): Promise<DailyDrop> {
   if (!sql) return drop;
   await sql`
-    insert into daily_drops (id, title, behavior, question, reward_label, time_limit, options, scheduled_date, updated_at)
+    insert into daily_drops (id, title, behavior, question, reward_label, time_limit, options, best_points, base_points, scheduled_date, updated_at)
     values (${drop.id}, ${drop.title}, ${drop.behavior}, ${drop.question}, ${drop.rewardLabel ?? null},
-            ${drop.timeLimit ?? null}, ${JSON.stringify(drop.options)}::jsonb, ${drop.scheduledDate ?? null}, now())
+            ${drop.timeLimit ?? null}, ${JSON.stringify(drop.options)}::jsonb, ${drop.bestPoints ?? 50}, ${drop.basePoints ?? 20},
+            ${drop.scheduledDate ?? null}, now())
     on conflict (id) do update set
       title = excluded.title, behavior = excluded.behavior, question = excluded.question,
       reward_label = excluded.reward_label, time_limit = excluded.time_limit,
-      options = excluded.options, scheduled_date = excluded.scheduled_date, updated_at = now()
+      options = excluded.options, best_points = excluded.best_points, base_points = excluded.base_points,
+      scheduled_date = excluded.scheduled_date, updated_at = now()
   `;
   return drop;
 }

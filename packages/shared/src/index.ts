@@ -33,6 +33,8 @@ export type DailyDrop = {
   timeLimit: string;
   question: string;
   options: DailyDropOption[];
+  bestPoints?: number; // awarded for the ⭐ best option (default 50)
+  basePoints?: number; // awarded for any other option (default 20)
   status: "pending" | "completed";
 };
 
@@ -85,6 +87,7 @@ export type ModuleContent = {
   outcome?: string;
   lesson: { heading: string; body: string };
   questions: QuizQuestion[];
+  points?: number; // awarded on completion (default 75)
   isLive?: boolean;
   orderIdx?: number;
 };

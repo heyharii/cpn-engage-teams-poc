@@ -153,6 +153,8 @@ export type AdminDrop = {
   rewardLabel?: string;
   timeLimit?: string;
   options: DropOption[];
+  bestPoints?: number;
+  basePoints?: number;
   status?: string;
   isActive?: boolean;
   scheduledDate?: string | null;

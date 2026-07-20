@@ -14,6 +14,8 @@ import {
   Download,
   CheckCircle2 as CheckIcon,
   XCircle,
+  PanelLeftClose,
+  PanelLeftOpen,
   RefreshCw,
   Sparkles,
   Search,
@@ -164,6 +166,7 @@ function LoginGate(props: { onAuthed: () => void }) {
 
 function Console() {
   const [nav, setNav] = useState<NavId>("overview");
+  const [collapsed, setCollapsed] = useState(false);
   const [boot, setBoot] = useState<BootstrapResponse | null>(null);
   const [roster, setRoster] = useState<RosterUser[]>([]);
   const [directoryCount, setDirectoryCount] = useState(0);
@@ -186,37 +189,55 @@ function Console() {
 
   return (
     <div className="flex min-h-screen bg-background text-foreground">
-      {/* Sidebar */}
-      <aside className="flex w-60 flex-col border-r border-border bg-sidebar p-4">
-        <div className="mb-8 flex items-center gap-2 px-2">
-          <div className="flex size-8 items-center justify-center rounded-lg bg-primary font-bold text-primary-foreground">
+      {/* Sidebar — collapsible so editors get more width */}
+      <aside
+        className={cn(
+          "flex shrink-0 flex-col border-r border-border bg-sidebar p-3 transition-all",
+          collapsed ? "w-16" : "w-60"
+        )}
+      >
+        <div className={cn("mb-6 flex items-center gap-2", collapsed ? "justify-center" : "px-2")}>
+          <div className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-primary font-bold text-primary-foreground">
             C
           </div>
-          <div>
-            <p className="text-sm font-bold leading-tight text-sidebar-foreground">CPN Engage</p>
-            <p className="text-xs text-sidebar-foreground/50">Admin Console</p>
-          </div>
+          {!collapsed ? (
+            <div className="min-w-0">
+              <p className="truncate text-sm font-bold leading-tight text-sidebar-foreground">CPN Engage</p>
+              <p className="truncate text-xs text-sidebar-foreground/50">Admin Console</p>
+            </div>
+          ) : null}
         </div>
         <nav className="flex flex-col gap-1">
           {NAV.map((item) => (
             <button
               key={item.id}
               onClick={() => setNav(item.id)}
+              title={collapsed ? item.label : undefined}
               className={cn(
-                "flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors",
+                "flex items-center rounded-md py-2 text-sm font-medium transition-colors",
+                collapsed ? "justify-center px-0" : "gap-3 px-3",
                 nav === item.id
                   ? "bg-sidebar-accent text-sidebar-accent-foreground"
                   : "text-sidebar-foreground/60 hover:bg-sidebar-accent/60 hover:text-sidebar-foreground"
               )}
             >
-              <item.icon className="size-4" />
-              {item.label}
+              <item.icon className="size-4 shrink-0" />
+              {!collapsed ? item.label : null}
             </button>
           ))}
         </nav>
-        <div className="mt-auto px-2 pt-4">
-          <Button variant="outline" size="sm" className="w-full" onClick={() => void loadAll()}>
-            <RefreshCw className="size-3.5" /> Refresh
+        <div className="mt-auto flex flex-col gap-2 pt-4">
+          <Button
+            variant="ghost"
+            size="sm"
+            className={cn(collapsed ? "px-0" : "justify-start")}
+            onClick={() => setCollapsed((c) => !c)}
+            title={collapsed ? "Expand" : "Collapse"}
+          >
+            {collapsed ? <PanelLeftOpen className="size-4" /> : <><PanelLeftClose className="size-4" /> Collapse</>}
+          </Button>
+          <Button variant="outline" size="sm" className={cn(collapsed && "px-0")} onClick={() => void loadAll()}>
+            <RefreshCw className="size-3.5" /> {!collapsed ? "Refresh" : null}
           </Button>
         </div>
       </aside>

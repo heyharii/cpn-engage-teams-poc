@@ -36,6 +36,8 @@ export async function initModules(): Promise<void> {
       updated_at timestamptz not null default now()
     )
   `;
+  // Editable completion award (default 75).
+  await sql`alter table modules add column if not exists points integer not null default 75`;
   const existing = await sql`select count(*)::int as n from modules`;
   if (existing[0].n === 0) {
     for (const m of demoModuleContent) await upsertModule(m);
@@ -55,6 +57,7 @@ function rowToModule(r: Record<string, unknown>): ModuleContent {
     outcome: (r.outcome as string) ?? undefined,
     lesson: (r.lesson as { heading: string; body: string }) ?? { heading: "", body: "" },
     questions: (r.questions as ModuleContent["questions"]) ?? [],
+    points: (r.points as number) ?? 75,
     isLive: (r.is_live as boolean) ?? true,
     orderIdx: (r.order_idx as number) ?? 0
   };
@@ -76,16 +79,16 @@ export async function listModules(opts?: { liveOnly?: boolean }): Promise<Module
 export async function upsertModule(m: ModuleContent): Promise<ModuleContent> {
   if (!sql) return m;
   await sql`
-    insert into modules (id, track, title, summary, duration_min, video_url, outcome, lesson, questions, is_live, order_idx, updated_at)
+    insert into modules (id, track, title, summary, duration_min, video_url, outcome, lesson, questions, points, is_live, order_idx, updated_at)
     values (
       ${m.id}, ${m.track}, ${m.title}, ${m.summary ?? ""}, ${m.durationMin ?? 0}, ${m.videoUrl ?? null},
       ${m.outcome ?? null}, ${sql.json(m.lesson ?? { heading: "", body: "" })},
-      ${sql.json(m.questions ?? [])}, ${m.isLive ?? true}, ${m.orderIdx ?? 0}, now()
+      ${sql.json(m.questions ?? [])}, ${m.points ?? 75}, ${m.isLive ?? true}, ${m.orderIdx ?? 0}, now()
     )
     on conflict (id) do update set
       track = excluded.track, title = excluded.title, summary = excluded.summary,
       duration_min = excluded.duration_min, video_url = excluded.video_url, outcome = excluded.outcome,
-      lesson = excluded.lesson, questions = excluded.questions, is_live = excluded.is_live,
+      lesson = excluded.lesson, questions = excluded.questions, points = excluded.points, is_live = excluded.is_live,
       order_idx = excluded.order_idx, updated_at = now()
   `;
   return m;

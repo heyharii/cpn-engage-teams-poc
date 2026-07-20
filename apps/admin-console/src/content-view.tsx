@@ -59,6 +59,7 @@ function blankModule(): ModuleContent {
     outcome: "",
     lesson: { heading: "", body: "" },
     questions: [blankQuestion(1)],
+    points: 75,
     isLive: true,
     orderIdx: 0
   };
@@ -323,6 +324,13 @@ function ModuleEditor(props: { initial: ModuleContent; beliefs: string[]; onClos
                   />
                 </Field>
               </div>
+              <Field label="Points on completion">
+                <Input
+                  type="number"
+                  value={m.points ?? 75}
+                  onChange={(e) => set({ points: Number(e.target.value) || 0 })}
+                />
+              </Field>
               <Field label="Summary">
                 <Textarea value={m.summary} onChange={(e) => set({ summary: e.target.value })} rows={2} />
               </Field>

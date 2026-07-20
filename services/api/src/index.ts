@@ -461,17 +461,21 @@ app.post<{
   Body: { userKey?: string; userName?: string };
 }>("/api/modules/:id/complete", async (request, reply) => {
   const { id } = request.params;
-  const target = state.modules.find((item) => item.id === id);
+  // Prefer the authored module (from the table); fall back to demo state.
+  const authored = (await listModules()).find((m) => m.id === id);
+  const target = authored ?? state.modules.find((item) => item.id === id);
 
   if (!target) {
     return reply.code(404).send({ ok: false, message: "Module not found" });
   }
 
+  const modulePoints = (target as { points?: number }).points ?? 75;
+
   if (request.body?.userKey) {
     await recordScore({
       userKey: request.body.userKey,
       userName: request.body.userName,
-      points: 75,
+      points: modulePoints,
       reason: `Completed ${target.title}`,
       ref: `module:${id}:${request.body.userKey}`,
       belief: (target as { track?: string }).track ?? null
@@ -489,17 +493,17 @@ app.post<{
       : item
   );
 
-  if (target.status !== "completed") {
+  if ((target as { status?: string }).status !== "completed") {
     state.passport.modulesCompleted = Math.min(
       state.passport.modulesTotal,
       state.passport.modulesCompleted + 1
     );
-    state.passport.score += 75;
-    state.persona.points += 75;
+    state.passport.score += modulePoints;
+    state.persona.points += modulePoints;
     appendPassportEntry({
       title: `${target.title} completed`,
       behavior: state.behaviors[0]?.name ?? "Learning journey",
-      points: 75,
+      points: modulePoints,
       status: "completed"
     });
   }
@@ -531,7 +535,7 @@ app.post<{
   }
 
   if (request.body?.userKey) {
-    const pts = request.body.best ? 50 : 20;
+    const pts = request.body.best ? drop?.bestPoints ?? 50 : drop?.basePoints ?? 20;
     await recordScore({
       userKey: request.body.userKey,
       userName: request.body.userName,
@@ -867,7 +871,14 @@ app.delete<{ Params: { id: string } }>("/api/admin/modules/:id", async (request)
 // serves the active drop; the employee tabs show it as "today's drop".
 app.get("/api/admin/drops", async () => listDrops());
 app.post<{ Body: DailyDrop & { scheduledDate?: string | null } }>("/api/admin/drops", async (request) => {
-  const drop = { ...request.body, id: request.body.id || `drop-${Date.now()}` };
+  const b = request.body;
+  const drop = {
+    ...b,
+    id: b.id || `drop-${Date.now()}`,
+    title: b.title || "Daily Drop",
+    rewardLabel: b.rewardLabel || "Up to 50 points",
+    timeLimit: b.timeLimit || "30 sec"
+  };
   const saved = await upsertDrop(drop);
   return { ok: true, drop: saved };
 });
