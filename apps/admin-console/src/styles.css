@@ -49,21 +49,21 @@
 }
 
 :root {
-    /* Int Labs brand pink #E5007D as the primary; dark sidebar; light content. */
+    /* CPN brand pink #E5007D; flat light canvas, white surfaces, light sidebar. */
     --brand: oklch(0.593 0.242 357);
-    --background: oklch(0.985 0 0);
-    --foreground: oklch(0.145 0 0);
+    --background: oklch(0.98 0 0);
+    --foreground: oklch(0.16 0 0);
     --card: oklch(1 0 0);
-    --card-foreground: oklch(0.145 0 0);
+    --card-foreground: oklch(0.16 0 0);
     --popover: oklch(1 0 0);
-    --popover-foreground: oklch(0.145 0 0);
+    --popover-foreground: oklch(0.16 0 0);
     --primary: var(--brand);
     --primary-foreground: oklch(1 0 0);
     --secondary: oklch(0.97 0 0);
     --secondary-foreground: oklch(0.205 0 0);
     --muted: oklch(0.97 0 0);
-    --muted-foreground: oklch(0.556 0 0);
-    --accent: oklch(0.955 0.02 357);
+    --muted-foreground: oklch(0.55 0 0);
+    --accent: oklch(0.955 0.03 357);
     --accent-foreground: var(--brand);
     --destructive: oklch(0.577 0.245 27.325);
     --border: oklch(0.922 0 0);
@@ -75,14 +75,14 @@
     --chart-4: oklch(0.439 0 0);
     --chart-5: oklch(0.269 0 0);
     --radius: 0.625rem;
-    /* Dark sidebar (#111) with pink accents — matches the Int Labs dashboard. */
-    --sidebar: oklch(0.17 0 0);
-    --sidebar-foreground: oklch(0.97 0 0);
+    /* Flat LIGHT sidebar (white with pink active state) — no more dark block. */
+    --sidebar: oklch(1 0 0);
+    --sidebar-foreground: oklch(0.16 0 0);
     --sidebar-primary: var(--brand);
     --sidebar-primary-foreground: oklch(1 0 0);
-    --sidebar-accent: oklch(0.593 0.242 357 / 16%);
-    --sidebar-accent-foreground: oklch(0.7 0.22 357);
-    --sidebar-border: oklch(1 0 0 / 8%);
+    --sidebar-accent: oklch(0.955 0.03 357);
+    --sidebar-accent-foreground: var(--brand);
+    --sidebar-border: oklch(0.922 0 0);
     --sidebar-ring: var(--brand);
 }
 

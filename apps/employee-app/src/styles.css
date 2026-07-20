@@ -1,750 +1,94 @@
+/*
+ * CPN Engage — Flat shadcn theme (shared with the Admin Console).
+ * Light surfaces, hairline borders, one pink brand accent, no drop shadows.
+ */
+@import "tailwindcss";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
+@import "@fontsource-variable/inter";
+
+@custom-variant dark (&:is(.dark *));
+
+@theme inline {
+  --font-heading: var(--font-sans);
+  --font-sans: "Inter Variable", sans-serif;
+  --color-sidebar-ring: var(--sidebar-ring);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar: var(--sidebar);
+  --color-ring: var(--ring);
+  --color-input: var(--input);
+  --color-border: var(--border);
+  --color-destructive: var(--destructive);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-accent: var(--accent);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-muted: var(--muted);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-secondary: var(--secondary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary: var(--primary);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-popover: var(--popover);
+  --color-card-foreground: var(--card-foreground);
+  --color-card: var(--card);
+  --color-foreground: var(--foreground);
+  --color-background: var(--background);
+  --radius-sm: calc(var(--radius) * 0.6);
+  --radius-md: calc(var(--radius) * 0.8);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) * 1.4);
+}
+
 :root {
-  color-scheme: light;
-  --bg: #f4ede5;
-  --surface: rgba(255, 250, 245, 0.92);
-  --surface-strong: #fffdf8;
-  --ink: #221c18;
-  --muted: #6e6259;
-  --line: rgba(34, 28, 24, 0.1);
-  --accent: #e34d2f;
-  --accent-soft: rgba(227, 77, 47, 0.12);
-  --teal: #0c8a82;
-  --teal-soft: rgba(12, 138, 130, 0.12);
-  --gold: #d29c2d;
-  --shadow: 0 20px 60px rgba(71, 43, 25, 0.08);
-  /* Feeds page reuses the same palette family (Community Feed was merged in). */
-  --panel: rgba(255, 252, 248, 0.9);
-  --accent-2: #2d7d74;
+  /* CPN brand pink #E5007D primary; flat light canvas + white cards. */
+  --brand: oklch(0.593 0.242 357);
+  --background: oklch(0.98 0 0);
+  --foreground: oklch(0.16 0 0);
+  --card: oklch(1 0 0);
+  --card-foreground: oklch(0.16 0 0);
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0.16 0 0);
+  --primary: var(--brand);
+  --primary-foreground: oklch(1 0 0);
+  --secondary: oklch(0.97 0 0);
+  --secondary-foreground: oklch(0.205 0 0);
+  --muted: oklch(0.97 0 0);
+  --muted-foreground: oklch(0.55 0 0);
+  --accent: oklch(0.955 0.03 357);
+  --accent-foreground: var(--brand);
+  --destructive: oklch(0.577 0.245 27.325);
+  --border: oklch(0.922 0 0);
+  --input: oklch(0.922 0 0);
+  --ring: var(--brand);
+  --radius: 0.625rem;
+  /* Flat LIGHT sidebar (not the old dark block). */
+  --sidebar: oklch(1 0 0);
+  --sidebar-foreground: oklch(0.16 0 0);
+  --sidebar-primary: var(--brand);
+  --sidebar-primary-foreground: oklch(1 0 0);
+  --sidebar-accent: oklch(0.955 0.03 357);
+  --sidebar-accent-foreground: var(--brand);
+  --sidebar-border: oklch(0.922 0 0);
+  --sidebar-ring: var(--brand);
 }
 
-* {
-  box-sizing: border-box;
-}
-
-body {
-  margin: 0;
-  font-family: "Manrope", sans-serif;
-  color: var(--ink);
-  background:
-    radial-gradient(circle at top left, rgba(227, 77, 47, 0.18), transparent 22%),
-    radial-gradient(circle at top right, rgba(12, 138, 130, 0.1), transparent 18%),
-    linear-gradient(180deg, #fcf7f1 0%, var(--bg) 100%);
-}
-
-button {
-  font: inherit;
-  cursor: pointer;
-}
-
-.app-shell {
-  min-height: 100vh;
-  display: grid;
-  grid-template-columns: 184px 1fr;
-}
-
-.rail {
-  padding: 20px 16px;
-  border-right: 1px solid var(--line);
-  background: rgba(255, 248, 242, 0.78);
-  backdrop-filter: blur(18px);
-  position: sticky;
-  top: 0;
-  align-self: start;
-  height: 100vh;
-}
-
-.brand {
-  width: 52px;
-  height: 52px;
-  display: grid;
-  place-items: center;
-  border-radius: 16px;
-  background: linear-gradient(135deg, var(--accent), #f18a65);
-  color: white;
-  font-weight: 900;
-  margin-bottom: 24px;
-  box-shadow: var(--shadow);
-}
-
-.rail nav {
-  display: grid;
-  gap: 10px;
-}
-
-.nav-item {
-  display: flex;
-  align-items: center;
-  gap: 11px;
-  border: 1px solid transparent;
-  background: transparent;
-  color: var(--muted);
-  text-align: left;
-  padding: 11px 12px;
-  border-radius: 12px;
-  font-weight: 600;
-  font-size: 0.95rem;
-  transition: background 0.15s ease, color 0.15s ease;
-}
-
-.nav-item .nav-icon {
-  font-size: 1.05rem;
-  width: 22px;
-  text-align: center;
-  flex: 0 0 22px;
-}
-
-.nav-item:hover {
-  background: rgba(227, 77, 47, 0.06);
-  color: var(--ink);
-}
-
-.nav-item.active {
-  background: var(--accent-soft);
-  color: var(--accent);
-  border-color: rgba(227, 77, 47, 0.16);
-}
-
-@media (max-width: 720px) {
-  .app-shell {
-    grid-template-columns: 1fr;
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
   }
-  .rail {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    padding: 12px 16px;
+  body {
+    @apply bg-background text-foreground;
   }
-  .rail .brand {
-    margin-bottom: 0;
+  html {
+    @apply font-sans;
   }
-  .rail nav {
-    grid-auto-flow: column;
-    gap: 6px;
-  }
-  .nav-item .nav-label {
-    display: none;
-  }
-}
-
-.main {
-  padding: 28px;
-}
-
-.hero {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) 240px;
-  gap: 24px;
-  padding: 30px;
-  border: 1px solid var(--line);
-  border-radius: 28px;
-  background:
-    linear-gradient(135deg, rgba(255, 255, 255, 0.96), rgba(255, 246, 238, 0.84)),
-    linear-gradient(135deg, rgba(227, 77, 47, 0.06), rgba(12, 138, 130, 0.08));
-  box-shadow: var(--shadow);
-}
-
-.hero-copy {
-  min-width: 0;
-}
-
-.eyebrow {
-  margin: 0 0 12px;
-  text-transform: uppercase;
-  font-size: 12px;
-  letter-spacing: 0.08em;
-  color: var(--accent);
-  font-weight: 800;
-}
-
-.hero h1,
-.panel h2,
-.panel h3,
-.panel strong {
-  margin: 0;
-}
-
-.hero h1 {
-  font-size: clamp(2rem, 3vw, 3.5rem);
-  line-height: 1.02;
-  max-width: 13ch;
-}
-
-.subtle {
-  margin: 14px 0 0;
-  color: var(--muted);
-  max-width: 62ch;
-}
-
-.runtime-badges {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 10px;
-  margin-top: 18px;
-}
-
-.runtime-badge,
-.mini-pill,
-.trait-pill,
-.state-tag,
-.mini-state {
-  display: inline-flex;
-  align-items: center;
-  min-height: 34px;
-  padding: 0 12px;
-  border-radius: 999px;
-  font-size: 0.9rem;
-  font-weight: 700;
-}
-
-/* Bot pointer banner — daily actions live in the Chat tab */
-.bot-pointer {
-  margin-top: 18px;
-  display: flex;
-  align-items: center;
-  gap: 16px;
-  padding: 18px 20px;
-  border-radius: 18px;
-  border: 1px solid var(--teal-soft);
-  background: linear-gradient(135deg, var(--teal-soft), rgba(255, 253, 248, 0.9));
-  box-shadow: var(--shadow);
-}
-.bot-pointer-icon {
-  font-size: 1.6rem;
-  width: 48px;
-  height: 48px;
-  flex: 0 0 48px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: 14px;
-  background: var(--surface-strong);
-  border: 1px solid var(--line);
-}
-.bot-pointer strong {
-  display: block;
-  margin-bottom: 2px;
-}
-.bot-pointer p {
-  margin: 0;
-  color: var(--muted);
-  font-size: 0.95rem;
-  line-height: 1.45;
-}
-.pointer-state {
-  margin-left: auto;
-  flex: 0 0 auto;
-  align-self: flex-start;
-  display: inline-flex;
-  align-items: center;
-  padding: 4px 12px;
-  border-radius: 999px;
-  font-size: 0.82rem;
-  font-weight: 700;
-  text-transform: capitalize;
-  background: var(--accent-soft);
-  color: var(--accent);
-}
-.pointer-state.done {
-  background: var(--teal-soft);
-  color: var(--teal);
-}
-.chat-hint {
-  margin-top: 10px;
-  color: var(--teal);
-  font-weight: 700;
-  font-size: 0.9rem;
-}
-
-.runtime-badge {
-  background: var(--accent-soft);
-  color: var(--accent);
-}
-
-.runtime-badge.muted {
-  background: var(--teal-soft);
-  color: var(--teal);
-}
-
-.hero-actions {
-  margin-top: 18px;
-}
-
-.hero-actions button,
-.secondary-cta {
-  min-height: 42px;
-  padding: 0 16px;
-  border-radius: 12px;
-  border: 1px solid var(--line);
-  background: rgba(255, 255, 255, 0.9);
-}
-
-.status-note {
-  margin-top: 14px;
-  color: var(--teal);
-  font-weight: 800;
-}
-
-.hero-stat {
-  display: grid;
-  align-content: center;
-  gap: 8px;
-  padding: 24px;
-  border-radius: 24px;
-  background: linear-gradient(180deg, #fff7f0 0%, #fffdf9 100%);
-  border: 1px solid var(--line);
-  text-align: right;
-}
-
-.hero-stat span {
-  font-size: 3rem;
-  font-weight: 900;
-  color: var(--accent);
-}
-
-.hero-stat small,
-.hero-stat strong,
-.panel p,
-.panel span,
-.panel small {
-  color: var(--muted);
-}
-
-.hero-stat strong {
-  color: var(--ink);
-  font-size: 1rem;
-}
-
-.grid {
-  display: grid;
-  grid-template-columns: repeat(12, minmax(0, 1fr));
-  gap: 18px;
-  margin-top: 18px;
-}
-
-.panel {
-  border: 1px solid var(--line);
-  border-radius: 24px;
-  background: var(--surface);
-  padding: 22px;
-  box-shadow: var(--shadow);
-}
-
-.daily-drop-panel {
-  grid-column: span 5;
-}
-
-.passport-panel,
-.streak-panel,
-.rank-panel,
-.module-panel,
-.capstone-panel,
-.recognition-panel,
-.persona-panel,
-.notifications-panel,
-.passport-entries-panel {
-  grid-column: span 4;
-}
-
-.behaviors {
-  grid-column: span 12;
-}
-
-.panel-title {
-  display: flex;
-  justify-content: space-between;
-  gap: 16px;
-  margin-bottom: 14px;
-}
-
-.panel-title h2 {
-  font-size: 1.1rem;
-}
-
-.challenge-badges,
-.trait-list {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 10px;
-  margin-bottom: 14px;
-}
-
-.mini-pill {
-  background: rgba(88, 70, 56, 0.08);
-  color: var(--ink);
-}
-
-.mini-pill.reward {
-  background: rgba(210, 156, 45, 0.14);
-  color: #8c6514;
-}
-
-.daily-drop-panel h3,
-.capstone-panel strong {
-  font-size: 1.45rem;
-  line-height: 1.2;
-}
-
-.option-list,
-.passport-values,
-.notification-list,
-.entry-list {
-  display: grid;
-  gap: 12px;
-}
-
-.option-item,
-.passport-value,
-.notification-item,
-.entry-item {
-  display: flex;
-  gap: 12px;
-  align-items: flex-start;
-  padding: 14px;
-  border-radius: 16px;
-  border: 1px solid var(--line);
-  background: rgba(255, 255, 255, 0.7);
-}
-
-.option-marker {
-  width: 18px;
-  height: 18px;
-  margin-top: 4px;
-  border-radius: 999px;
-  border: 2px solid var(--accent);
-  flex: none;
-}
-
-.option-item p,
-.notification-item p,
-.entry-item p {
-  margin: 0;
-}
-
-.passport-score-row {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 12px;
-  margin-bottom: 14px;
-}
-
-.passport-score-row > div {
-  padding: 16px;
-  border-radius: 18px;
-  background: rgba(255, 255, 255, 0.76);
-  border: 1px solid var(--line);
-}
-
-.passport-score {
-  display: block;
-  font-size: 1.7rem;
-  font-weight: 900;
-  color: var(--ink);
-}
-
-.passport-value {
-  justify-content: space-between;
-}
-
-.state-tag {
-  background: rgba(88, 70, 56, 0.08);
-  color: var(--muted);
-  text-transform: capitalize;
-}
-
-.state-tag.done {
-  background: var(--teal-soft);
-  color: var(--teal);
-}
-
-.big-number {
-  display: block;
-  font-size: 2.6rem;
-  font-weight: 900;
-  color: var(--accent);
-  margin-bottom: 8px;
-}
-
-.capstone-panel {
-  background:
-    linear-gradient(180deg, rgba(35, 16, 24, 0.96), rgba(27, 21, 18, 0.96)),
-    var(--surface);
-}
-
-.capstone-panel h2,
-.capstone-panel strong,
-.capstone-panel p,
-.capstone-panel span {
-  color: #f9efe8;
-}
-
-.capstone-meta {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 12px;
-  margin-top: 14px;
-}
-
-.capstone-meta span {
-  padding: 10px 12px;
-  border-radius: 14px;
-  background: rgba(255, 255, 255, 0.08);
-}
-
-.action-row {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  margin-top: 18px;
-  flex-wrap: wrap;
-}
-
-.cta {
-  min-height: 46px;
-  padding: 0 18px;
-  border: 0;
-  border-radius: 14px;
-  background: linear-gradient(135deg, var(--accent), #f06f4d);
-  color: white;
-  font-weight: 800;
-}
-
-.mini-state {
-  background: var(--teal-soft);
-  color: var(--teal);
-  text-transform: capitalize;
-}
-
-.entry-item {
-  justify-content: space-between;
-}
-
-.entry-points {
-  color: var(--accent);
-  font-weight: 800;
-}
-
-.behavior-list {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 14px;
-}
-
-.behavior-chip {
-  padding: 18px;
-  border-radius: 18px;
-  border: 1px solid var(--line);
-  background: rgba(255, 255, 255, 0.72);
-}
-
-.behavior-chip strong {
-  display: block;
-  margin-bottom: 6px;
-}
-
-@media (max-width: 1180px) {
-  .hero {
-    grid-template-columns: 1fr;
-  }
-
-  .daily-drop-panel,
-  .passport-panel,
-  .streak-panel,
-  .module-panel,
-  .capstone-panel,
-  .recognition-panel,
-  .persona-panel,
-  .notifications-panel,
-  .passport-entries-panel,
-  .behaviors {
-    grid-column: span 12;
-  }
-}
-
-@media (max-width: 980px) {
-  .app-shell {
-    grid-template-columns: 1fr;
-  }
-
-  .rail {
-    border-right: 0;
-    border-bottom: 1px solid var(--line);
-  }
-
-  .rail nav {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-  }
-
-  .passport-score-row,
-  .behavior-list {
-    grid-template-columns: 1fr;
-  }
-}
-
-/* ==========================================================================
-   Feeds page (merged from the former standalone community-feed app — same
-   domain now, so Teams SSO works here too). Reuses the shared design tokens
-   above (.panel/.eyebrow/.subtle come from the Profile styles).
-   ========================================================================== */
-.feed-shell {
-  min-height: 100vh;
-  padding: 28px;
-}
-
-.feed-header {
-  display: flex;
-  justify-content: space-between;
-  gap: 24px;
-  align-items: flex-start;
-}
-
-.feed-header h1 {
-  margin: 0;
-  font-size: clamp(2rem, 2.8vw, 3.2rem);
-  line-height: 1.05;
-  max-width: 14ch;
-}
-
-.refresh-button {
-  min-height: 38px;
-  padding: 0 14px;
-  border-radius: 8px;
-  border: 1px solid var(--line);
-  background: rgba(255, 255, 255, 0.9);
-  font: inherit;
-}
-
-.feed-toggle {
-  display: inline-flex;
-  gap: 4px;
-  margin: 22px 0 18px;
-  padding: 4px;
-  background: rgba(34, 28, 24, 0.05);
-  border: 1px solid var(--line);
-  border-radius: 999px;
-}
-.feed-toggle-btn {
-  border: 0;
-  background: transparent;
-  color: var(--muted);
-  font-weight: 700;
-  font-size: 14px;
-  padding: 8px 18px;
-  border-radius: 999px;
-  cursor: pointer;
-}
-.feed-toggle-btn.active {
-  background: var(--panel);
-  color: var(--ink);
-  box-shadow: 0 1px 3px rgba(34, 28, 24, 0.12);
-}
-
-.feed-single {
-  max-width: 620px;
-  margin: 0 auto;
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-}
-
-.post.panel {
-  padding: 18px 20px;
-}
-.post-head {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  margin-bottom: 10px;
-}
-.post-avatar,
-.rank-avatar {
-  display: grid;
-  place-items: center;
-  width: 40px;
-  height: 40px;
-  border-radius: 50%;
-  background: linear-gradient(135deg, var(--accent), var(--accent-2));
-  color: #fff;
-  font-weight: 800;
-  font-size: 13px;
-  flex: none;
-}
-.post-headtext { display: flex; flex-direction: column; gap: 3px; }
-.post-headtext strong { font-size: 15px; }
-.post-headtext .muted { color: var(--muted); font-weight: 500; }
-.post-sub { display: flex; align-items: center; gap: 8px; }
-.belief-chip {
-  font-size: 11px;
-  font-weight: 800;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  color: var(--accent-2);
-  background: rgba(45, 125, 116, 0.12);
-  padding: 2px 8px;
-  border-radius: 999px;
-}
-.post-time { font-size: 12px; color: var(--muted); }
-.post-body {
-  margin: 4px 0 14px;
-  font-size: 15px;
-  line-height: 1.5;
-  color: var(--ink) !important;
-}
-
-.post-reactions { display: flex; gap: 8px; flex-wrap: wrap; }
-.reaction {
-  position: relative;
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  border: 1px solid var(--line);
-  background: var(--panel);
-  border-radius: 999px;
-  padding: 5px 11px;
-  font-size: 15px;
-  cursor: pointer;
-  overflow: visible;
-}
-.reaction.has { border-color: var(--accent); background: rgba(227, 77, 47, 0.08); }
-.reaction-emoji { line-height: 1; }
-.reaction-count { font-size: 13px; font-weight: 700; color: var(--ink); }
-/* Facebook-style float-up burst emitted on tap. */
-.reaction-burst {
-  position: absolute;
-  left: 50%;
-  top: 0;
-  translate: -50% 0;
-  pointer-events: none;
-  font-size: 22px;
-  z-index: 5;
-}
-
-.leaderboard-full { max-width: 620px; margin: 0 auto; padding: 22px 24px; }
-.leaderboard-full h2 { margin: 0 0 16px; }
-.leaderboard-ranked { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
-.leaderboard-ranked li {
-  display: flex;
-  align-items: center;
-  gap: 14px;
-  padding: 10px 12px;
-  border: 1px solid var(--line);
-  border-radius: 14px;
-  background: var(--panel);
-}
-.rank {
-  display: grid; place-items: center;
-  width: 26px; height: 26px; border-radius: 50%;
-  font-weight: 800; font-size: 13px;
-  background: rgba(34, 28, 24, 0.08); color: var(--muted); flex: none;
-}
-.rank-1 { background: #f6c453; color: #5a4300; }
-.rank-2 { background: #d6d3cd; color: #3a352f; }
-.rank-3 { background: #e0a878; color: #4a2c12; }
-.rank-name { flex: 1; font-weight: 700; display: flex; flex-direction: column; gap: 1px; }
-.rank-dept { font-size: 11px; font-weight: 600; color: var(--muted); }
-.rank-points { font-weight: 800; color: var(--accent); }
-
-@media (max-width: 700px) {
-  .feed-header {
-    flex-direction: column;
+  /* Flat: strip the default component drop shadows. */
+  [data-slot="card"] {
+    @apply shadow-none;
   }
 }

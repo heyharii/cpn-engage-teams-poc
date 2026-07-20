@@ -2,6 +2,11 @@ import { type BootstrapResponse, type FeedItem } from "@cpn-engage/shared";
 import { app as teamsApp, authentication } from "@microsoft/teams-js";
 import { useEffect, useMemo, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
+import { RefreshCw } from "lucide-react";
+import { Card, CardContent } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { cn } from "@/lib/utils";
 
 const REACTIONS = ["👍", "🎉", "❤️", "👏", "🔥"];
 type View = "recognitions" | "leaderboard";
@@ -23,7 +28,6 @@ function initials(name?: string): string {
   return name.trim().split(/\s+/).slice(0, 2).map((p) => p[0]?.toUpperCase() ?? "").join("");
 }
 
-/** Stable per-browser reactor id (fallback when Teams context is unavailable). */
 function localReactorId(): string {
   try {
     const k = "cpn-reactor-id";
@@ -61,10 +65,6 @@ export function FeedsPage() {
     async function init() {
       try {
         await teamsApp.initialize();
-        // Teams context gives a stable user id (no login) for attributing
-        // reactions — enough to let everyone react. SSO token is a bonus, and
-        // now that Feeds lives on the same domain as the App ID URI (merged
-        // with Profile), it actually succeeds here too.
         try {
           const ctx = await teamsApp.getContext();
           if (!cancelled && ctx.user?.id) setReactorId(ctx.user.id);
@@ -121,65 +121,78 @@ export function FeedsPage() {
   const leaderboard = leaders.length > 0 ? leaders : bootstrap?.leaderboard ?? [];
 
   return (
-    <main className="feed-shell">
-      <header className="feed-header">
+    <main className="mx-auto min-h-screen w-full max-w-2xl bg-background px-4 pb-16 pt-7 text-foreground">
+      <header className="mb-5 flex items-start justify-between gap-4">
         <div>
-          <p className="eyebrow">Community Feed</p>
-          <h1>Recognition &amp; the four Beliefs, shared with everyone.</h1>
+          <p className="text-xs font-bold uppercase tracking-wider text-primary">Community Feed</p>
+          <h1 className="mt-1 text-xl font-bold tracking-tight">Recognition & the four Beliefs.</h1>
         </div>
-        <button className="refresh-button" onClick={() => void refreshFeed()}>
-          {refreshing ? "Refreshing…" : "Refresh"}
-        </button>
+        <Button variant="outline" size="sm" onClick={() => void refreshFeed()}>
+          <RefreshCw className={cn("size-3.5", refreshing && "animate-spin")} />
+          {refreshing ? "…" : "Refresh"}
+        </Button>
       </header>
 
       {/* View toggle */}
-      <div className="feed-toggle" role="tablist">
-        <button
-          className={`feed-toggle-btn${view === "recognitions" ? " active" : ""}`}
-          onClick={() => setView("recognitions")}
-        >
-          🎉 Recognitions
-        </button>
-        <button
-          className={`feed-toggle-btn${view === "leaderboard" ? " active" : ""}`}
-          onClick={() => setView("leaderboard")}
-        >
-          🏆 Leaderboard
-        </button>
+      <div className="mb-5 grid grid-cols-2 gap-1 rounded-lg border border-border bg-card p-1">
+        {(["recognitions", "leaderboard"] as View[]).map((v) => (
+          <button
+            key={v}
+            onClick={() => setView(v)}
+            className={cn(
+              "rounded-md py-2 text-sm font-medium capitalize transition-colors",
+              view === v ? "bg-accent text-accent-foreground" : "text-muted-foreground hover:text-foreground"
+            )}
+          >
+            {v === "recognitions" ? "🎉 Recognitions" : "🏆 Leaderboard"}
+          </button>
+        ))}
       </div>
 
       {view === "recognitions" ? (
-        <section className="feed-single">
+        <section className="flex flex-col gap-3">
           {recognitions.length === 0 ? (
-            <p className="subtle">No recognitions yet — send one from the Chat tab.</p>
+            <p className="py-8 text-center text-sm text-muted-foreground">
+              No recognitions yet — send one from the Chat tab.
+            </p>
           ) : (
-            recognitions.map((item) => (
-              <RecognitionPost key={item.id} item={item} onReact={react} />
-            ))
+            recognitions.map((item) => <RecognitionPost key={item.id} item={item} onReact={react} />)
           )}
         </section>
       ) : (
-        <section className="feed-single">
-          <div className="leaderboard-full panel">
-            <h2>Weekly leaders</h2>
-            <ol className="leaderboard-ranked">
+        <Card>
+          <CardContent>
+            <h2 className="mb-4 text-base font-semibold">Weekly leaders</h2>
+            <ol className="flex flex-col">
               {leaderboard.map((entry, i) => {
                 const dept = (entry as { department?: string }).department;
                 return (
-                  <li key={`${entry.name}-${i}`}>
-                    <span className={`rank rank-${i + 1}`}>{i + 1}</span>
-                    <span className="rank-avatar">{initials(entry.name)}</span>
-                    <span className="rank-name">
-                      {entry.name}
-                      {dept ? <small className="rank-dept">{dept}</small> : null}
+                  <li
+                    key={`${entry.name}-${i}`}
+                    className="flex items-center gap-3 border-b border-border py-3 last:border-0"
+                  >
+                    <span
+                      className={cn(
+                        "w-6 text-center text-sm font-bold",
+                        i === 0 ? "text-primary" : "text-muted-foreground"
+                      )}
+                    >
+                      {i + 1}
                     </span>
-                    <span className="rank-points">{entry.points} pts</span>
+                    <span className="flex size-9 items-center justify-center rounded-full bg-accent text-sm font-semibold text-accent-foreground">
+                      {initials(entry.name)}
+                    </span>
+                    <span className="flex-1 text-sm font-medium">
+                      {entry.name}
+                      {dept ? <small className="block text-xs font-normal text-muted-foreground">{dept}</small> : null}
+                    </span>
+                    <span className="text-sm font-bold text-primary">{entry.points} pts</span>
                   </li>
                 );
               })}
             </ol>
-          </div>
-        </section>
+          </CardContent>
+        </Card>
       )}
     </main>
   );
@@ -202,78 +215,90 @@ function RecognitionPost(props: { item: FeedItem; onReact: (id: string, emoji: s
   }
 
   return (
-    <article className="post panel">
-      <div className="post-head">
-        <span className="post-avatar">{initials(item.author ?? item.title)}</span>
-        <div className="post-headtext">
-          <strong>
-            {isRecognition ? (
-              <>
-                {item.author} <span className="muted">recognised</span> {item.target}
-              </>
-            ) : (
-              item.title
-            )}
-          </strong>
-          <span className="post-sub">
-            {item.belief ? <span className="belief-chip">{item.belief}</span> : null}
-            {item.createdAt ? <span className="post-time">{timeAgo(item.createdAt)}</span> : null}
+    <Card>
+      <CardContent className="flex flex-col gap-3">
+        <div className="flex items-center gap-3">
+          <span className="flex size-10 items-center justify-center rounded-full bg-accent text-sm font-semibold text-accent-foreground">
+            {initials(item.author ?? item.title)}
           </span>
+          <div className="flex flex-col gap-0.5">
+            <strong className="text-sm font-semibold">
+              {isRecognition ? (
+                <>
+                  {item.author} <span className="font-normal text-muted-foreground">recognised</span>{" "}
+                  {item.target}
+                </>
+              ) : (
+                item.title
+              )}
+            </strong>
+            <span className="flex items-center gap-2">
+              {item.belief ? (
+                <Badge variant="secondary" className="h-5 px-2 text-[11px]">
+                  {item.belief}
+                </Badge>
+              ) : null}
+              {item.createdAt ? (
+                <span className="text-xs text-muted-foreground">{timeAgo(item.createdAt)}</span>
+              ) : null}
+            </span>
+          </div>
         </div>
-      </div>
 
-      <p className="post-body">{item.message ?? item.summary}</p>
+        <p className="text-sm leading-relaxed">{item.message ?? item.summary}</p>
 
-      <div className="post-reactions">
-        {REACTIONS.map((emoji) => {
-          const count = item.reactions?.find((r) => r.emoji === emoji)?.count ?? 0;
-          return (
-            <motion.button
-              key={emoji}
-              type="button"
-              className={`reaction${count > 0 ? " has" : ""}`}
-              onClick={() => handleReact(emoji)}
-              whileHover={{ scale: 1.35, y: -4 }}
-              whileTap={{ scale: 0.8 }}
-              transition={{ type: "spring", stiffness: 500, damping: 18 }}
-            >
-              <span className="reaction-emoji">{emoji}</span>
-              <AnimatePresence mode="popLayout">
-                {count > 0 ? (
-                  <motion.span
-                    key={count}
-                    className="reaction-count"
-                    initial={{ y: 8, opacity: 0, scale: 0.6 }}
-                    animate={{ y: 0, opacity: 1, scale: 1 }}
-                    exit={{ y: -8, opacity: 0 }}
-                    transition={{ type: "spring", stiffness: 600, damping: 20 }}
-                  >
-                    {count}
-                  </motion.span>
-                ) : null}
-              </AnimatePresence>
-
-              {/* Facebook-style float-up burst on tap */}
-              <AnimatePresence>
-                {bursts
-                  .filter((b) => b.emoji === emoji)
-                  .map((b) => (
+        <div className="flex gap-1.5 border-t border-border pt-3">
+          {REACTIONS.map((emoji) => {
+            const count = item.reactions?.find((r) => r.emoji === emoji)?.count ?? 0;
+            return (
+              <motion.button
+                key={emoji}
+                type="button"
+                className={cn(
+                  "relative inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-[15px] leading-none",
+                  count > 0 ? "border-primary bg-accent" : "border-border bg-card"
+                )}
+                onClick={() => handleReact(emoji)}
+                whileHover={{ scale: 1.15, y: -2 }}
+                whileTap={{ scale: 0.85 }}
+                transition={{ type: "spring", stiffness: 500, damping: 18 }}
+              >
+                <span>{emoji}</span>
+                <AnimatePresence mode="popLayout">
+                  {count > 0 ? (
                     <motion.span
-                      key={b.id}
-                      className="reaction-burst"
-                      initial={{ y: 0, opacity: 1, scale: 1 }}
-                      animate={{ y: -42, opacity: 0, scale: 1.6 }}
-                      exit={{ opacity: 0 }}
-                      transition={{ duration: 0.85, ease: "easeOut" }}
+                      key={count}
+                      className="text-xs font-bold text-primary"
+                      initial={{ y: 8, opacity: 0, scale: 0.6 }}
+                      animate={{ y: 0, opacity: 1, scale: 1 }}
+                      exit={{ y: -8, opacity: 0 }}
+                      transition={{ type: "spring", stiffness: 600, damping: 20 }}
                     >
-                      {emoji}
+                      {count}
                     </motion.span>
-                  ))}
-              </AnimatePresence>
-            </motion.button>
-          );
-        })}
-      </div>
-    </article>
+                  ) : null}
+                </AnimatePresence>
+                <AnimatePresence>
+                  {bursts
+                    .filter((b) => b.emoji === emoji)
+                    .map((b) => (
+                      <motion.span
+                        key={b.id}
+                        className="pointer-events-none absolute left-1/2 top-0 -translate-x-1/2 text-lg"
+                        initial={{ y: 0, opacity: 1, scale: 1 }}
+                        animate={{ y: -42, opacity: 0, scale: 1.6 }}
+                        exit={{ opacity: 0 }}
+                        transition={{ duration: 0.85, ease: "easeOut" }}
+                      >
+                        {emoji}
+                      </motion.span>
+                    ))}
+                </AnimatePresence>
+              </motion.button>
+            );
+          })}
+        </div>
+      </CardContent>
+    </Card>
   );
 }
