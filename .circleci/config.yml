@@ -41,6 +41,11 @@ jobs:
           command: |
             set -eux
             docker run -d --name apitest -e PORT=4175 "$REG/cpn-engage-api:$IMG_TAG"
+            # Wait for the server to log that it's listening (boot can be slow on CI).
+            for i in $(seq 1 40); do
+              docker logs apitest 2>&1 | grep -q "Server listening" && break
+              sleep 1
+            done
             ok=""
             for i in $(seq 1 15); do
               if docker exec apitest wget -qO- http://localhost:4175/health 2>/dev/null | grep -q '"ok":true'; then
