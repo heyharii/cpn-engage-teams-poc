@@ -86,6 +86,23 @@ const MIGRATIONS: Migration[] = [
       `;
       await db`create index if not exists client_errors_time_idx on client_errors (created_at desc)`;
     }
+  },
+  {
+    id: "0004",
+    name: "broadcasts history",
+    up: async (db) => {
+      await db`
+        create table if not exists broadcasts (
+          id bigserial primary key,
+          kind text not null,
+          label text,
+          sent integer not null default 0,
+          total integer not null default 0,
+          created_at timestamptz not null default now()
+        )
+      `;
+      await db`create index if not exists broadcasts_time_idx on broadcasts (created_at desc)`;
+    }
   }
 ];
 

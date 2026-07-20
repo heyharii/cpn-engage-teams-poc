@@ -253,3 +253,21 @@ export async function updateConversationProfile(
     console.warn("[db] updateConversationProfile failed:", err instanceof Error ? err.message : err);
   }
 }
+
+/** Log a broadcast send to the shared history (table owned by the API migration). */
+export async function recordBroadcast(b: {
+  kind: string;
+  label?: string | null;
+  sent: number;
+  total: number;
+}): Promise<void> {
+  if (!sql) return;
+  try {
+    await sql`
+      insert into broadcasts (kind, label, sent, total)
+      values (${b.kind}, ${b.label ?? null}, ${b.sent}, ${b.total})
+    `;
+  } catch (err) {
+    console.warn("[db] recordBroadcast failed:", err instanceof Error ? err.message : err);
+  }
+}

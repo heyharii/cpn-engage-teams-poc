@@ -54,8 +54,12 @@ import {
   postAnnouncement,
   hideFeedPost,
   getDebugBundle,
+  getAnalytics,
+  getBroadcasts,
   type RosterUser,
-  type LeaderRow
+  type LeaderRow,
+  type Analytics,
+  type BroadcastRow
 } from "@/lib/api";
 import { Textarea } from "@/components/ui/textarea";
 
@@ -261,36 +265,120 @@ function StatCard({ label, value, hint }: { label: string; value: string | numbe
 }
 
 function Overview(props: { boot: BootstrapResponse | null; audienceCount: number; leaders: LeaderRow[] }) {
-  const { boot, audienceCount, leaders } = props;
-  const recognitions = (boot?.feed ?? []).filter((f) => f.kind === "recognition").length;
+  const { audienceCount, leaders } = props;
+  const [a, setA] = useState<Analytics | null>(null);
+  useEffect(() => {
+    void getAnalytics().then((r) => r && setA(r));
+  }, []);
+
+  const maxDept = Math.max(1, ...(a?.departmentLeague ?? []).map((d) => d.points));
+
   return (
     <div>
-      <PageHeader title="Overview" subtitle="Engagement at a glance across CPN Engage." />
+      <PageHeader title="Overview" subtitle="Engagement at a glance — real numbers from actual activity." />
+
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <StatCard label="Reachable audience" value={audienceCount} hint="captured conversations" />
-        <StatCard label="Recognitions" value={recognitions} hint="posted to the feed" />
-        <StatCard label="Top scorer" value={leaders[0]?.name ?? "—"} hint={leaders[0] ? `${leaders[0].points} pts` : ""} />
-        <StatCard label="Modules" value={boot?.modules.length ?? 0} hint="in the learning journey" />
+        <StatCard label="People" value={a?.totals.users ?? "—"} hint="profiles created" />
+        <StatCard label="Reachable" value={audienceCount} hint="can be DM'd by the bot" />
+        <StatCard label="Points earned" value={a?.totals.points ?? "—"} hint="across everyone" />
+        <StatCard label="Recognitions" value={a?.totals.recognitions ?? "—"} hint="posted to the feed" />
       </div>
-      <Card className="mt-6">
-        <CardHeader>
-          <CardTitle>Recent activity</CardTitle>
-        </CardHeader>
-        <CardContent className="flex flex-col gap-3">
-          {(boot?.notifications ?? []).slice(0, 6).map((n) => (
-            <div key={n.id} className="flex items-start gap-3 border-b border-border pb-3 last:border-0 last:pb-0">
-              <Badge variant="secondary">{n.type.replace(/-/g, " ")}</Badge>
-              <div>
-                <p className="text-sm font-medium">{n.title}</p>
-                <p className="text-xs text-muted-foreground">{n.summary}</p>
-              </div>
-            </div>
-          ))}
-          {(boot?.notifications ?? []).length === 0 ? (
-            <p className="text-sm text-muted-foreground">No recent activity.</p>
-          ) : null}
-        </CardContent>
-      </Card>
+
+      <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-2">
+        {/* Participation trend */}
+        <Card>
+          <CardHeader>
+            <CardTitle>Daily challenge participation</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <MiniBars data={(a?.participationByDay ?? []).map((d) => ({ label: d.day.slice(5), value: d.users }))} />
+          </CardContent>
+        </Card>
+
+        {/* Recognitions trend */}
+        <Card>
+          <CardHeader>
+            <CardTitle>Recognitions posted</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <MiniBars data={(a?.recognitionsByDay ?? []).map((d) => ({ label: d.day.slice(5), value: d.count }))} />
+          </CardContent>
+        </Card>
+
+        {/* Department league */}
+        <Card>
+          <CardHeader>
+            <CardTitle>Department league</CardTitle>
+          </CardHeader>
+          <CardContent className="flex flex-col gap-3">
+            {(a?.departmentLeague ?? []).length === 0 ? (
+              <p className="text-sm text-muted-foreground">No points earned yet.</p>
+            ) : (
+              a!.departmentLeague.map((d) => (
+                <div key={d.department}>
+                  <div className="mb-1 flex items-center justify-between text-sm">
+                    <span className="font-medium">{d.department}</span>
+                    <span className="text-muted-foreground">
+                      {d.points} pts · {d.people} {d.people === 1 ? "person" : "people"}
+                    </span>
+                  </div>
+                  <div className="h-2 overflow-hidden rounded-full bg-muted">
+                    <div className="h-full rounded-full bg-primary" style={{ width: `${(d.points / maxDept) * 100}%` }} />
+                  </div>
+                </div>
+              ))
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Top learners */}
+        <Card>
+          <CardHeader>
+            <CardTitle>Top learners</CardTitle>
+          </CardHeader>
+          <CardContent className="flex flex-col gap-2">
+            {(a?.topLearners ?? []).length === 0 ? (
+              <p className="text-sm text-muted-foreground">No modules completed yet.</p>
+            ) : (
+              a!.topLearners.map((l, i) => (
+                <div key={l.name} className="flex items-center justify-between border-b border-border py-2 text-sm last:border-0">
+                  <span>
+                    <span className="mr-2 font-bold text-muted-foreground">{i + 1}</span>
+                    {l.name}
+                  </span>
+                  <Badge variant="secondary">{l.completed} modules</Badge>
+                </div>
+              ))
+            )}
+            {(a?.topLearners ?? []).length === 0 && leaders[0] ? null : null}
+          </CardContent>
+        </Card>
+      </div>
+    </div>
+  );
+}
+
+/** Lightweight flat bar chart (no chart lib needed — pure divs). */
+function MiniBars(props: { data: { label: string; value: number }[] }) {
+  const max = Math.max(1, ...props.data.map((d) => d.value));
+  const total = props.data.reduce((s, d) => s + d.value, 0);
+  return (
+    <div>
+      <div className="flex h-32 items-end gap-1">
+        {props.data.map((d, i) => (
+          <div key={i} className="flex flex-1 flex-col items-center justify-end" title={`${d.label}: ${d.value}`}>
+            <div
+              className="w-full rounded-t bg-primary/80"
+              style={{ height: `${Math.max(2, (d.value / max) * 100)}%` }}
+            />
+          </div>
+        ))}
+      </div>
+      <div className="mt-2 flex justify-between text-[10px] text-muted-foreground">
+        <span>{props.data[0]?.label}</span>
+        <span>{total} total</span>
+        <span>{props.data[props.data.length - 1]?.label}</span>
+      </div>
     </div>
   );
 }
@@ -483,6 +571,15 @@ function Broadcast(props: { audienceCount: number; boot: BootstrapResponse | nul
   const { busy, msg, run } = useAction();
   const [kind, setKind] = useState<"challenge" | "module">("challenge");
   const [moduleId, setModuleId] = useState<string>("");
+  const [history, setHistory] = useState<BroadcastRow[]>([]);
+
+  async function loadHistory() {
+    const r = await getBroadcasts();
+    if (r?.broadcasts) setHistory(r.broadcasts);
+  }
+  useEffect(() => {
+    void loadHistory();
+  }, [msg]); // refresh after a send
 
   const selectedModule = modules.find((m) => m.id === moduleId) ?? modules[0] ?? null;
   const drop = boot?.dailyDrop ?? null;
@@ -652,6 +749,37 @@ function Broadcast(props: { audienceCount: number; boot: BootstrapResponse | nul
             {busy === "schedule" ? <Loader2 className="size-4 animate-spin" /> : <Clock className="size-4" />}
             Schedule test push
           </Button>
+        </CardContent>
+      </Card>
+
+      {/* Broadcast history */}
+      <Card className="mt-6">
+        <CardHeader>
+          <CardTitle>Broadcast history</CardTitle>
+        </CardHeader>
+        <CardContent>
+          {history.length === 0 ? (
+            <p className="text-sm text-muted-foreground">No broadcasts sent yet.</p>
+          ) : (
+            <div className="flex flex-col">
+              {history.map((b, i) => (
+                <div key={i} className="flex items-center justify-between border-b border-border py-2.5 text-sm last:border-0">
+                  <div className="flex items-center gap-2">
+                    <Badge variant="secondary" className="capitalize">
+                      {b.kind}
+                    </Badge>
+                    <span className="font-medium">{b.label ?? "—"}</span>
+                  </div>
+                  <div className="flex items-center gap-4 text-muted-foreground">
+                    <span>
+                      {b.sent}/{b.total} delivered
+                    </span>
+                    <span className="text-xs">{new Date(b.created_at).toLocaleString()}</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
         </CardContent>
       </Card>
     </div>

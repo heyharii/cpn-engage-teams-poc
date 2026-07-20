@@ -16,7 +16,7 @@ import express from "express";
 import { bot } from "./bot.ts";
 import { config } from "./config.ts";
 import { state } from "./state.ts";
-import { initDb, listConversations, listDirectory } from "./db.ts";
+import { initDb, listConversations, listDirectory, recordBroadcast } from "./db.ts";
 import { pushCardToAll } from "./proactive.ts";
 import { getBootstrap } from "./api.ts";
 import { firstAssignedModule, getModule } from "./content.ts";
@@ -206,8 +206,25 @@ app.post("/internal/push", async (req, res) => {
           timeLimit: boot.dailyDrop.timeLimit
         });
   const result = await pushCardToAll(card);
+  const label =
+    type === "module"
+      ? (moduleId ? getModule(moduleId)?.title : firstAssignedModule().title) ?? "Module"
+      : boot.dailyDrop.behavior;
+  await recordBroadcast({ kind: type, label, sent: result.sent, total: result.total });
   console.log(`[push] type=${type}${moduleId ? ` moduleId=${moduleId}` : ""} sent=${result.sent}/${result.total}`);
   res.json({ ok: true, type, ...result });
+});
+
+// Recent broadcast history (from the shared broadcasts table).
+app.get("/internal/broadcasts", async (_req, res) => {
+  const { sql } = await import("./db.ts");
+  if (!sql) return res.json({ ok: true, broadcasts: [] });
+  try {
+    const rows = await sql`select kind, label, sent, total, created_at from broadcasts order by created_at desc limit 20`;
+    res.json({ ok: true, broadcasts: [...rows] });
+  } catch {
+    res.json({ ok: true, broadcasts: [] });
+  }
 });
 
 /**

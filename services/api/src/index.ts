@@ -29,6 +29,7 @@ import {
 import { resolveIdentity } from "./identity.js";
 import { requireAdmin } from "./authz.js";
 import { buildDebugBundle, recordClientError } from "./debug.js";
+import { getAnalytics } from "./analytics.js";
 import {
   initBeliefs,
   listBeliefs,
@@ -878,6 +879,9 @@ app.delete<{ Params: { id: string } }>("/api/admin/drops/:id", async (request) =
   await deleteDrop(request.params.id);
   return { ok: true };
 });
+
+// Engagement analytics for the admin Overview (real aggregates).
+app.get("/api/admin/analytics", async () => getAnalytics(14));
 
 // One-file support bundle for post-distribution debugging (admin-gated).
 app.get("/api/admin/debug-bundle", async () => buildDebugBundle());

@@ -111,6 +111,19 @@ export async function deleteBeliefApi(id: string): Promise<boolean> {
   }
 }
 
+// --- Analytics + broadcast history ---
+export type Analytics = {
+  totals: { users: number; points: number; recognitions: number; modulesCompleted: number };
+  participationByDay: { day: string; users: number }[];
+  recognitionsByDay: { day: string; count: number }[];
+  departmentLeague: { department: string; points: number; people: number }[];
+  topLearners: { name: string; completed: number }[];
+};
+export const getAnalytics = () => get<Analytics>(`${API}/api/admin/analytics`);
+export type BroadcastRow = { kind: string; label: string | null; sent: number; total: number; created_at: string };
+export const getBroadcasts = () =>
+  get<{ ok: boolean; broadcasts: BroadcastRow[] }>(`${BOT}/internal/broadcasts`);
+
 // --- System / debug ---
 export const getDebugBundle = () => get<Record<string, unknown>>(`${API}/api/admin/debug-bundle`);
 export function debugBundleUrl(): string {
