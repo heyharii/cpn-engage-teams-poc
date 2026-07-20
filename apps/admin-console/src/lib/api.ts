@@ -30,6 +30,15 @@ async function post<T>(url: string, body?: unknown): Promise<T | null> {
 
 export type AudienceUser = { name: string; jobTitle: string | null; department: string | null };
 export type LeaderRow = { name: string; points: number; department?: string | null };
+export type RosterUser = {
+  oid: string;
+  name: string;
+  email: string | null;
+  jobTitle: string | null;
+  department: string | null;
+  enabled: boolean;
+  reachable: boolean;
+};
 
 // --- API (shared state) ---
 export const getBootstrap = () => get<BootstrapResponse>(`${API}/api/bootstrap`);
@@ -42,8 +51,14 @@ export const syncDirectory = () =>
   post<{ ok: boolean; fetched: number; upserted: number; error?: string }>(`${BOT}/internal/sync-directory`);
 export const enrichAudience = () =>
   post<{ ok: boolean; total: number; named: number; titled: number }>(`${BOT}/internal/enrich`);
-export const pushBroadcast = (type: "challenge" | "module") =>
-  post<{ ok: boolean; sent: number; total: number }>(`${BOT}/internal/push?type=${type}`);
+export const getUsers = () =>
+  get<{ ok: boolean; directoryCount: number; reachableCount: number; users: RosterUser[] }>(
+    `${BOT}/internal/users`
+  );
+export const pushBroadcast = (type: "challenge" | "module", moduleId?: string) =>
+  post<{ ok: boolean; sent: number; total: number }>(
+    `${BOT}/internal/push?type=${type}${moduleId ? `&moduleId=${encodeURIComponent(moduleId)}` : ""}`
+  );
 export const scheduleTest = (seconds: number) =>
   post<{ ok: boolean; scheduledInSeconds: number | null }>(`${BOT}/internal/schedule-test?seconds=${seconds}`);
 

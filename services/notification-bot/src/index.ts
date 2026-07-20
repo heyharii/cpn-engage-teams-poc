@@ -16,10 +16,10 @@ import express from "express";
 import { bot } from "./bot.ts";
 import { config } from "./config.ts";
 import { state } from "./state.ts";
-import { initDb, listConversations } from "./db.ts";
+import { initDb, listConversations, listDirectory } from "./db.ts";
 import { pushCardToAll } from "./proactive.ts";
 import { getBootstrap } from "./api.ts";
-import { firstAssignedModule } from "./content.ts";
+import { firstAssignedModule, getModule } from "./content.ts";
 import { ChallengeReminderCard, ModuleAssignedCard } from "./cards/index.ts";
 import { captureFromRawActivity } from "./install-capture.ts";
 import { installAppForUsers } from "./graph.ts";
@@ -80,6 +80,56 @@ app.get("/internal/audience", async (_req, res) => {
   });
 });
 
+/**
+ * Full user roster for the admin Users view: every directory user (from the
+ * Graph sync) merged with captured conversations, so admins can see who is
+ * reachable vs not yet. Falls back to conversations-only when the directory
+ * hasn't been synced (e.g. local demo without Graph credentials).
+ */
+app.get("/internal/users", async (_req, res) => {
+  const [dir, refs] = await Promise.all([listDirectory(), listConversations()]);
+  const reachedOids = new Set(refs.map((r) => r.userId).filter(Boolean));
+  const reachedNames = new Set(refs.map((r) => r.userName?.trim().toLowerCase()).filter(Boolean));
+
+  const users = dir.map((u) => ({
+    oid: u.oid,
+    name: u.displayName ?? u.email ?? u.oid,
+    email: u.email,
+    jobTitle: u.jobTitle,
+    department: u.department,
+    enabled: u.accountEnabled !== false,
+    reachable: reachedOids.has(u.oid) || reachedNames.has((u.displayName ?? "").trim().toLowerCase())
+  }));
+
+  // Conversations with no directory match (demo users, pre-sync captures).
+  const dirOids = new Set(dir.map((u) => u.oid));
+  const dirNames = new Set(dir.map((u) => (u.displayName ?? "").trim().toLowerCase()));
+  for (const r of refs) {
+    const matched =
+      (r.userId && dirOids.has(r.userId)) ||
+      (r.userName && dirNames.has(r.userName.trim().toLowerCase()));
+    if (!matched) {
+      users.push({
+        oid: r.userId ?? r.threadId,
+        name: r.userName ?? r.userId ?? "Unknown user",
+        email: null,
+        jobTitle: r.jobTitle ?? null,
+        department: r.department ?? null,
+        enabled: true,
+        reachable: true
+      });
+    }
+  }
+
+  users.sort((a, b) => a.name.localeCompare(b.name));
+  res.json({
+    ok: true,
+    directoryCount: dir.length,
+    reachableCount: users.filter((u) => u.reachable).length,
+    users
+  });
+});
+
 // Sync the Microsoft directory into Postgres (people picker + segmentation).
 app.post("/internal/sync-directory", async (req, res) => {
   const required = process.env.PUSH_TOKEN?.trim();
@@ -102,7 +152,8 @@ app.post("/internal/enrich", async (req, res) => {
 
 /**
  * Admin-triggered proactive PUSH. Sends a card to every captured conversation.
- *   POST /internal/push?type=challenge|module   (header x-push-token if PUSH_TOKEN set)
+ *   POST /internal/push?type=challenge|module[&moduleId=…]
+ *   (header x-push-token if PUSH_TOKEN set)
  * This is the manual "send now"; the scheduled (cron) path reuses pushCardToAll.
  */
 app.post("/internal/push", async (req, res) => {
@@ -111,11 +162,16 @@ app.post("/internal/push", async (req, res) => {
     return res.status(401).json({ ok: false, error: "bad push token" });
   }
   const type = String(req.query.type ?? "challenge");
+  const moduleId = typeof req.query.moduleId === "string" ? req.query.moduleId : null;
   const boot = await getBootstrap();
+  if (type === "module") {
+    // Refresh so a just-authored module is pushable immediately.
+    await refreshModules();
+  }
   const card =
     type === "module"
       ? (() => {
-          const m = firstAssignedModule();
+          const m = (moduleId ? getModule(moduleId) : null) ?? firstAssignedModule();
           return ModuleAssignedCard({ moduleId: m.id, title: m.title, track: m.track, durationMin: m.durationMin });
         })()
       : ChallengeReminderCard({
@@ -124,7 +180,7 @@ app.post("/internal/push", async (req, res) => {
           timeLimit: boot.dailyDrop.timeLimit
         });
   const result = await pushCardToAll(card);
-  console.log(`[push] type=${type} sent=${result.sent}/${result.total}`);
+  console.log(`[push] type=${type}${moduleId ? ` moduleId=${moduleId}` : ""} sent=${result.sent}/${result.total}`);
   res.json({ ok: true, type, ...result });
 });
 

@@ -127,6 +127,25 @@ export async function searchDirectory(query: string, limit = 6): Promise<Directo
   }
 }
 
+/** Every non-guest directory user, for the admin Users view. */
+export async function listDirectory(): Promise<DirectoryUser[]> {
+  if (!sql) return [];
+  try {
+    const rows = await sql<DirectoryUser[]>`
+      select oid, display_name as "displayName", email, job_title as "jobTitle",
+             department, company, office_location as "officeLocation",
+             account_enabled as "accountEnabled", user_type as "userType"
+      from directory_users
+      where user_type is distinct from 'Guest'
+      order by display_name asc nulls last
+    `;
+    return [...rows];
+  } catch (err) {
+    console.warn("[db] listDirectory failed:", err instanceof Error ? err.message : err);
+    return [];
+  }
+}
+
 /** Look up one directory user by oid (to resolve a picked candidate). */
 export async function getDirectoryUser(oid: string): Promise<DirectoryUser | null> {
   if (!sql) return null;

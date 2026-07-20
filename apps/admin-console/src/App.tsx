@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   LayoutDashboard,
   Users,
@@ -8,14 +8,18 @@ import {
   BookOpen,
   RefreshCw,
   Sparkles,
-  UserPlus,
-  Loader2
+  Search,
+  Clock,
+  Loader2,
+  CheckCircle2,
+  CircleDashed
 } from "lucide-react";
 import { ContentView } from "@/content-view";
-import type { BootstrapResponse, FeedItem } from "@cpn-engage/shared";
+import type { BootstrapResponse, FeedItem, ModuleContent } from "@cpn-engage/shared";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
 import {
   Table,
   TableBody,
@@ -28,20 +32,21 @@ import { cn } from "@/lib/utils";
 import {
   getBootstrap,
   getLeaderboard,
-  getAudience,
+  getUsers,
+  getAdminModules,
   syncDirectory,
   enrichAudience,
   pushBroadcast,
   scheduleTest,
-  type AudienceUser,
+  type RosterUser,
   type LeaderRow
 } from "@/lib/api";
 
-type NavId = "overview" | "content" | "audience" | "broadcast" | "recognitions" | "leaderboard";
+type NavId = "overview" | "content" | "users" | "broadcast" | "recognitions" | "leaderboard";
 const NAV: { id: NavId; label: string; icon: typeof Users }[] = [
   { id: "overview", label: "Overview", icon: LayoutDashboard },
   { id: "content", label: "Content", icon: BookOpen },
-  { id: "audience", label: "Audience", icon: Users },
+  { id: "users", label: "Users", icon: Users },
   { id: "broadcast", label: "Broadcast", icon: Send },
   { id: "recognitions", label: "Recognitions", icon: Heart },
   { id: "leaderboard", label: "Leaderboard", icon: Trophy }
@@ -50,14 +55,20 @@ const NAV: { id: NavId; label: string; icon: typeof Users }[] = [
 export function App() {
   const [nav, setNav] = useState<NavId>("overview");
   const [boot, setBoot] = useState<BootstrapResponse | null>(null);
-  const [audience, setAudience] = useState<AudienceUser[]>([]);
+  const [roster, setRoster] = useState<RosterUser[]>([]);
+  const [directoryCount, setDirectoryCount] = useState(0);
   const [leaders, setLeaders] = useState<LeaderRow[]>([]);
+  const [modules, setModules] = useState<ModuleContent[]>([]);
 
   async function loadAll() {
-    const [b, a, l] = await Promise.all([getBootstrap(), getAudience(), getLeaderboard()]);
+    const [b, u, l, m] = await Promise.all([getBootstrap(), getUsers(), getLeaderboard(), getAdminModules()]);
     if (b) setBoot(b);
-    if (a) setAudience(a.users);
+    if (u) {
+      setRoster(u.users);
+      setDirectoryCount(u.directoryCount);
+    }
     if (l) setLeaders(l);
+    if (m) setModules(m);
   }
   useEffect(() => {
     void loadAll();
@@ -102,10 +113,20 @@ export function App() {
 
       {/* Main */}
       <main className="flex-1 overflow-auto p-8">
-        {nav === "overview" && <Overview boot={boot} audienceCount={audience.length} leaders={leaders} />}
+        {nav === "overview" && (
+          <Overview boot={boot} audienceCount={roster.filter((u) => u.reachable).length} leaders={leaders} />
+        )}
         {nav === "content" && <ContentView />}
-        {nav === "audience" && <Audience users={audience} onReload={loadAll} />}
-        {nav === "broadcast" && <Broadcast audienceCount={audience.length} />}
+        {nav === "users" && (
+          <UsersView roster={roster} directoryCount={directoryCount} leaders={leaders} onReload={loadAll} />
+        )}
+        {nav === "broadcast" && (
+          <Broadcast
+            audienceCount={roster.filter((u) => u.reachable).length}
+            boot={boot}
+            modules={modules.filter((m) => m.isLive !== false)}
+          />
+        )}
         {nav === "recognitions" && <Recognitions feed={boot?.feed ?? []} />}
         {nav === "leaderboard" && <Leaderboard leaders={leaders} />}
       </main>
@@ -186,42 +207,109 @@ function useAction() {
   return { busy, msg, run };
 }
 
-function Audience(props: { users: AudienceUser[]; onReload: () => Promise<void> }) {
-  const { users, onReload } = props;
+function UsersView(props: {
+  roster: RosterUser[];
+  directoryCount: number;
+  leaders: LeaderRow[];
+  onReload: () => Promise<void>;
+}) {
+  const { roster, directoryCount, leaders, onReload } = props;
   const { busy, msg, run } = useAction();
+  const [query, setQuery] = useState("");
+  const [dept, setDept] = useState<string>("all");
+
+  const pointsByName = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const l of leaders) map.set(l.name.trim().toLowerCase(), l.points);
+    return map;
+  }, [leaders]);
+
+  const departments = useMemo(
+    () => [...new Set(roster.map((u) => u.department).filter((d): d is string => Boolean(d)))].sort(),
+    [roster]
+  );
+
+  const filtered = roster.filter((u) => {
+    if (dept !== "all" && u.department !== dept) return false;
+    if (!query.trim()) return true;
+    const q = query.trim().toLowerCase();
+    return (
+      u.name.toLowerCase().includes(q) ||
+      (u.email ?? "").toLowerCase().includes(q) ||
+      (u.jobTitle ?? "").toLowerCase().includes(q)
+    );
+  });
+  const reachable = roster.filter((u) => u.reachable).length;
+
   return (
     <div>
-      <PageHeader title="Audience" subtitle="Everyone the bot can reach, resolved from the directory." />
-      <div className="mb-4 flex flex-wrap items-center gap-2">
-        <Button
-          disabled={busy !== null}
-          onClick={() =>
-            void run("sync", async () => {
-              const r = await syncDirectory();
-              await onReload();
-              return r?.ok ? `Synced ${r.upserted} directory users.` : r?.error ?? "Sync failed.";
-            })
-          }
-        >
-          {busy === "sync" ? <Loader2 className="size-4 animate-spin" /> : <RefreshCw className="size-4" />}
-          Sync directory
-        </Button>
-        <Button
-          variant="outline"
-          disabled={busy !== null}
-          onClick={() =>
-            void run("enrich", async () => {
-              const r = await enrichAudience();
-              await onReload();
-              return r?.ok ? `Enriched ${r.named} names, ${r.titled} titles.` : "Enrich failed.";
-            })
-          }
-        >
-          {busy === "enrich" ? <Loader2 className="size-4 animate-spin" /> : <Sparkles className="size-4" />}
-          Enrich
-        </Button>
-        {msg ? <span className="text-sm text-muted-foreground">{msg}</span> : null}
+      <PageHeader title="Users" subtitle="Everyone in the organization — directory, reachability, and points." />
+
+      <div className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-3">
+        <StatCard label="In directory" value={directoryCount || roster.length} hint="synced from Microsoft Graph" />
+        <StatCard label="Reachable by bot" value={reachable} hint="opened the app or were captured" />
+        <StatCard
+          label="Coverage"
+          value={roster.length ? `${Math.round((reachable / roster.length) * 100)}%` : "—"}
+          hint="reachable / total users"
+        />
       </div>
+
+      <div className="mb-4 flex flex-wrap items-center gap-2">
+        <div className="relative">
+          <Search className="absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            className="w-64 pl-8"
+            placeholder="Search name, email, title…"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+          />
+        </div>
+        <select
+          className="h-9 rounded-md border border-input bg-transparent px-3 text-sm"
+          value={dept}
+          onChange={(e) => setDept(e.target.value)}
+        >
+          <option value="all">All departments</option>
+          {departments.map((d) => (
+            <option key={d} value={d}>
+              {d}
+            </option>
+          ))}
+        </select>
+        <div className="ml-auto flex items-center gap-2">
+          <Button
+            variant="outline"
+            disabled={busy !== null}
+            onClick={() =>
+              void run("sync", async () => {
+                const r = await syncDirectory();
+                await onReload();
+                return r?.ok ? `Synced ${r.upserted} directory users.` : r?.error ?? "Sync failed.";
+              })
+            }
+          >
+            {busy === "sync" ? <Loader2 className="size-4 animate-spin" /> : <RefreshCw className="size-4" />}
+            Sync directory
+          </Button>
+          <Button
+            variant="outline"
+            disabled={busy !== null}
+            onClick={() =>
+              void run("enrich", async () => {
+                const r = await enrichAudience();
+                await onReload();
+                return r?.ok ? `Enriched ${r.named} names, ${r.titled} titles.` : "Enrich failed.";
+              })
+            }
+          >
+            {busy === "enrich" ? <Loader2 className="size-4 animate-spin" /> : <Sparkles className="size-4" />}
+            Enrich
+          </Button>
+        </div>
+      </div>
+      {msg ? <p className="mb-3 text-sm text-muted-foreground">{msg}</p> : null}
+
       <Card>
         <CardContent className="p-0">
           <Table>
@@ -230,26 +318,50 @@ function Audience(props: { users: AudienceUser[]; onReload: () => Promise<void> 
                 <TableHead>Name</TableHead>
                 <TableHead>Job title</TableHead>
                 <TableHead>Department</TableHead>
+                <TableHead>Status</TableHead>
+                <TableHead className="text-right">Points</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {users.map((u, i) => (
-                <TableRow key={`${u.name}-${i}`}>
-                  <TableCell className="font-medium">{u.name}</TableCell>
-                  <TableCell>{u.jobTitle ?? <span className="text-muted-foreground">—</span>}</TableCell>
-                  <TableCell>
-                    {u.department ? (
-                      <Badge variant="secondary">{u.department}</Badge>
-                    ) : (
-                      <span className="text-muted-foreground">—</span>
-                    )}
-                  </TableCell>
-                </TableRow>
-              ))}
-              {users.length === 0 ? (
+              {filtered.map((u) => {
+                const pts = pointsByName.get(u.name.trim().toLowerCase());
+                return (
+                  <TableRow key={u.oid}>
+                    <TableCell>
+                      <p className="font-medium">{u.name}</p>
+                      {u.email ? <p className="text-xs text-muted-foreground">{u.email}</p> : null}
+                    </TableCell>
+                    <TableCell>{u.jobTitle ?? <span className="text-muted-foreground">—</span>}</TableCell>
+                    <TableCell>
+                      {u.department ? (
+                        <Badge variant="secondary">{u.department}</Badge>
+                      ) : (
+                        <span className="text-muted-foreground">—</span>
+                      )}
+                    </TableCell>
+                    <TableCell>
+                      {u.reachable ? (
+                        <span className="inline-flex items-center gap-1.5 text-sm text-emerald-600">
+                          <CheckCircle2 className="size-3.5" /> Reachable
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center gap-1.5 text-sm text-muted-foreground">
+                          <CircleDashed className="size-3.5" /> Not yet
+                        </span>
+                      )}
+                    </TableCell>
+                    <TableCell className="text-right font-semibold">
+                      {pts ?? <span className="font-normal text-muted-foreground">—</span>}
+                    </TableCell>
+                  </TableRow>
+                );
+              })}
+              {filtered.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={3} className="text-center text-muted-foreground">
-                    No audience yet — install the app for users, then Sync directory.
+                  <TableCell colSpan={5} className="py-8 text-center text-muted-foreground">
+                    {roster.length === 0
+                      ? "No users yet — run Sync directory (needs Graph credentials), or ask employees to open the app once."
+                      : "No users match the current search/filter."}
                   </TableCell>
                 </TableRow>
               ) : null}
@@ -261,76 +373,182 @@ function Audience(props: { users: AudienceUser[]; onReload: () => Promise<void> 
   );
 }
 
-function Broadcast(props: { audienceCount: number }) {
-  const { audienceCount } = props;
+function Broadcast(props: { audienceCount: number; boot: BootstrapResponse | null; modules: ModuleContent[] }) {
+  const { audienceCount, boot, modules } = props;
   const { busy, msg, run } = useAction();
+  const [kind, setKind] = useState<"challenge" | "module">("challenge");
+  const [moduleId, setModuleId] = useState<string>("");
+
+  const selectedModule = modules.find((m) => m.id === moduleId) ?? modules[0] ?? null;
+  const drop = boot?.dailyDrop ?? null;
+
   return (
     <div>
-      <PageHeader title="Broadcast" subtitle={`Send a proactive card to all ${audienceCount} reachable users.`} />
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+      <PageHeader
+        title="Broadcast"
+        subtitle="Compose a proactive card, preview it, and send it to every reachable user's Teams chat."
+      />
+
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+        {/* Composer */}
         <Card>
           <CardHeader>
-            <CardTitle>Daily challenge</CardTitle>
+            <CardTitle>Compose</CardTitle>
           </CardHeader>
-          <CardContent>
-            <p className="mb-4 text-sm text-muted-foreground">Push the current daily drop to everyone now.</p>
+          <CardContent className="flex flex-col gap-4">
+            <div>
+              <p className="mb-2 text-xs font-medium text-muted-foreground">What to send</p>
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  onClick={() => setKind("challenge")}
+                  className={cn(
+                    "rounded-lg border p-3 text-left transition-colors",
+                    kind === "challenge" ? "border-primary bg-primary/5" : "border-border hover:bg-muted/50"
+                  )}
+                >
+                  <p className="text-sm font-semibold">Daily challenge</p>
+                  <p className="text-xs text-muted-foreground">Today's drop as a quiz card</p>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setKind("module")}
+                  className={cn(
+                    "rounded-lg border p-3 text-left transition-colors",
+                    kind === "module" ? "border-primary bg-primary/5" : "border-border hover:bg-muted/50"
+                  )}
+                >
+                  <p className="text-sm font-semibold">Learning module</p>
+                  <p className="text-xs text-muted-foreground">Assign a module to everyone</p>
+                </button>
+              </div>
+            </div>
+
+            {kind === "module" ? (
+              <div>
+                <p className="mb-2 text-xs font-medium text-muted-foreground">Module</p>
+                <select
+                  className="h-9 w-full rounded-md border border-input bg-transparent px-3 text-sm"
+                  value={selectedModule?.id ?? ""}
+                  onChange={(e) => setModuleId(e.target.value)}
+                >
+                  {modules.map((m) => (
+                    <option key={m.id} value={m.id}>
+                      {m.title} ({m.track} · {m.durationMin} min)
+                    </option>
+                  ))}
+                </select>
+                {modules.length === 0 ? (
+                  <p className="mt-2 text-xs text-muted-foreground">No live modules — author one in Content first.</p>
+                ) : null}
+              </div>
+            ) : null}
+
+            <div className="flex items-center justify-between rounded-lg bg-muted/50 px-3 py-2">
+              <p className="text-sm text-muted-foreground">Audience</p>
+              <p className="text-sm font-semibold">{audienceCount} reachable users</p>
+            </div>
+
             <Button
-              disabled={busy !== null}
+              className="self-start"
+              disabled={busy !== null || audienceCount === 0 || (kind === "module" && !selectedModule)}
               onClick={() =>
-                void run("challenge", async () => {
-                  const r = await pushBroadcast("challenge");
-                  return r?.ok ? `Sent to ${r.sent}/${r.total}.` : "Push failed.";
+                void run("send", async () => {
+                  const r = await pushBroadcast(kind, kind === "module" ? selectedModule?.id : undefined);
+                  return r?.ok ? `Delivered to ${r.sent} of ${r.total} users.` : "Push failed — check the bot logs.";
                 })
               }
             >
-              {busy === "challenge" ? <Loader2 className="size-4 animate-spin" /> : <Send className="size-4" />}
-              Send challenge
+              {busy === "send" ? <Loader2 className="size-4 animate-spin" /> : <Send className="size-4" />}
+              Send to {audienceCount} users
             </Button>
+            {msg ? <p className="text-sm font-medium text-emerald-600">{msg}</p> : null}
+            {audienceCount === 0 ? (
+              <p className="text-xs text-muted-foreground">
+                No reachable users yet — employees appear here after they open the bot chat once.
+              </p>
+            ) : null}
           </CardContent>
         </Card>
-        <Card>
+
+        {/* Card preview — what lands in the employee's Teams chat */}
+        <Card className="self-start">
           <CardHeader>
-            <CardTitle>Learning module</CardTitle>
+            <CardTitle>Teams card preview</CardTitle>
           </CardHeader>
           <CardContent>
-            <p className="mb-4 text-sm text-muted-foreground">Assign the first module to everyone now.</p>
-            <Button
-              disabled={busy !== null}
-              onClick={() =>
-                void run("module", async () => {
-                  const r = await pushBroadcast("module");
-                  return r?.ok ? `Sent to ${r.sent}/${r.total}.` : "Push failed.";
-                })
-              }
-            >
-              {busy === "module" ? <Loader2 className="size-4 animate-spin" /> : <Send className="size-4" />}
-              Send module
-            </Button>
+            <div className="rounded-xl border border-border bg-muted/30 p-4">
+              {kind === "challenge" ? (
+                drop ? (
+                  <div className="flex flex-col gap-2">
+                    <p className="text-xs font-semibold uppercase tracking-wide text-primary">Daily challenge</p>
+                    <p className="font-semibold">{drop.behavior}</p>
+                    <p className="text-sm text-muted-foreground">{drop.question}</p>
+                    <div className="mt-1 flex items-center gap-3 text-xs text-muted-foreground">
+                      <span className="inline-flex items-center gap-1">
+                        <Trophy className="size-3.5" /> {drop.rewardLabel}
+                      </span>
+                      <span className="inline-flex items-center gap-1">
+                        <Clock className="size-3.5" /> {drop.timeLimit}
+                      </span>
+                    </div>
+                    <div className="mt-2 rounded-md bg-primary px-3 py-1.5 text-center text-sm font-medium text-primary-foreground">
+                      Play now
+                    </div>
+                  </div>
+                ) : (
+                  <p className="text-sm text-muted-foreground">Loading today's drop…</p>
+                )
+              ) : selectedModule ? (
+                <div className="flex flex-col gap-2">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-primary">New module assigned</p>
+                  <p className="font-semibold">{selectedModule.title}</p>
+                  <p className="text-sm text-muted-foreground">{selectedModule.summary}</p>
+                  <div className="mt-1 flex items-center gap-2">
+                    <Badge variant="secondary">{selectedModule.track}</Badge>
+                    <span className="text-xs text-muted-foreground">{selectedModule.durationMin} min</span>
+                    <span className="text-xs text-muted-foreground">· {selectedModule.questions.length} questions</span>
+                  </div>
+                  <div className="mt-2 rounded-md bg-primary px-3 py-1.5 text-center text-sm font-medium text-primary-foreground">
+                    Start module
+                  </div>
+                </div>
+              ) : (
+                <p className="text-sm text-muted-foreground">No module selected.</p>
+              )}
+            </div>
+            <p className="mt-3 text-xs text-muted-foreground">
+              Employees receive this as an Adaptive Card in their 1:1 chat with the CPN Engage bot.
+            </p>
           </CardContent>
         </Card>
       </div>
-      <Card className="mt-4">
+
+      {/* Utilities */}
+      <Card className="mt-6">
         <CardHeader>
-          <CardTitle>Test the scheduler</CardTitle>
+          <CardTitle>Scheduler test</CardTitle>
         </CardHeader>
-        <CardContent>
-          <p className="mb-4 text-sm text-muted-foreground">Fire a scheduled push in 30 seconds (pg-boss cron demo).</p>
+        <CardContent className="flex items-center gap-4">
+          <p className="text-sm text-muted-foreground">
+            Fire a one-off scheduled push in 30 seconds to verify the cron path end-to-end.
+          </p>
           <Button
             variant="outline"
+            className="ml-auto shrink-0"
             disabled={busy !== null}
             onClick={() =>
               void run("schedule", async () => {
                 const r = await scheduleTest(30);
-                return r?.ok ? "Scheduled — watch your DM in ~30s." : "Scheduler not running.";
+                return r?.ok ? "Scheduled — watch your Teams DM in ~30s." : "Scheduler not running.";
               })
             }
           >
-            {busy === "schedule" ? <Loader2 className="size-4 animate-spin" /> : <UserPlus className="size-4" />}
+            {busy === "schedule" ? <Loader2 className="size-4 animate-spin" /> : <Clock className="size-4" />}
             Schedule test push
           </Button>
         </CardContent>
       </Card>
-      {msg ? <p className="mt-4 text-sm text-muted-foreground">{msg}</p> : null}
     </div>
   );
 }

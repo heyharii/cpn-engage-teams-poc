@@ -1,5 +1,5 @@
 import { useEffect, useState, type ReactNode } from "react";
-import { Plus, Pencil, Trash2, GripVertical, Loader2 } from "lucide-react";
+import { Plus, Pencil, Trash2, GripVertical, Loader2, ArrowLeft } from "lucide-react";
 import type { ModuleContent, QuizQuestion } from "@cpn-engage/shared";
 import {
   DndContext,
@@ -20,12 +20,10 @@ import {
 import { CSS } from "@dnd-kit/utilities";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Card, CardContent } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
-import { Separator } from "@/components/ui/separator";
-import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetFooter } from "@/components/ui/sheet";
 import { getAdminModules, saveModule, deleteModuleApi, reorderModules } from "@/lib/api";
 
 const BELIEFS = ["Dynamism", "Customers", "Communities", "Collaboration"];
@@ -95,6 +93,20 @@ export function ContentView() {
     await reorderModules(reordered.map((m, i) => ({ id: m.id, orderIdx: i })));
   }
 
+  // Inline full-page editor — authoring replaces the list, no overlay sheet.
+  if (editing) {
+    return (
+      <ModuleEditor
+        initial={editing}
+        onClose={() => setEditing(null)}
+        onSaved={async () => {
+          setEditing(null);
+          await load();
+        }}
+      />
+    );
+  }
+
   return (
     <div>
       <div className="mb-6 flex items-start justify-between">
@@ -132,17 +144,6 @@ export function ContentView() {
           })}
         </div>
       )}
-
-      {editing ? (
-        <ModuleEditor
-          initial={editing}
-          onClose={() => setEditing(null)}
-          onSaved={async () => {
-            setEditing(null);
-            await load();
-          }}
-        />
-      ) : null}
     </div>
   );
 }
@@ -256,85 +257,110 @@ function ModuleEditor(props: { initial: ModuleContent; onClose: () => void; onSa
   const valid = m.title.trim() && m.track && m.questions.every((q) => q.question.trim());
 
   return (
-    <Sheet open onOpenChange={(o) => !o && props.onClose()}>
-      <SheetContent className="w-full overflow-y-auto sm:max-w-xl">
-        <SheetHeader>
-          <SheetTitle>{props.initial.id ? "Edit module" : "New module"}</SheetTitle>
-        </SheetHeader>
-
-        <div className="flex flex-col gap-4 px-4">
-          <Field label="Title">
-            <Input value={m.title} onChange={(e) => set({ title: e.target.value })} placeholder="Building Customer Empathy" />
-          </Field>
-          <div className="grid grid-cols-2 gap-3">
-            <Field label="Belief">
-              <select
-                className="h-9 rounded-md border border-input bg-transparent px-3 text-sm"
-                value={m.track}
-                onChange={(e) => set({ track: e.target.value })}
-              >
-                {BELIEFS.map((b) => (
-                  <option key={b} value={b}>
-                    {b}
-                  </option>
-                ))}
-              </select>
-            </Field>
-            <Field label="Duration (min)">
-              <Input
-                type="number"
-                value={m.durationMin}
-                onChange={(e) => set({ durationMin: Number(e.target.value) || 0 })}
-              />
-            </Field>
+    <div>
+      {/* Header: back + title, with actions wrapping below on narrow screens. */}
+      <div className="mb-6 flex flex-wrap items-center gap-x-3 gap-y-4">
+        <div className="flex min-w-0 items-center gap-3">
+          <Button variant="ghost" size="icon" className="shrink-0" onClick={props.onClose}>
+            <ArrowLeft className="size-4" />
+          </Button>
+          <div className="min-w-0">
+            <h1 className="truncate text-2xl font-bold">{props.initial.id ? "Edit module" : "New module"}</h1>
+            <p className="truncate text-sm text-muted-foreground">
+              {props.initial.id ? m.title || "Untitled module" : "A new Learning Journey module."}
+            </p>
           </div>
-          <Field label="Summary">
-            <Textarea value={m.summary} onChange={(e) => set({ summary: e.target.value })} rows={2} />
-          </Field>
-          <Field label="Video URL (optional)">
-            <Input value={m.videoUrl ?? ""} onChange={(e) => set({ videoUrl: e.target.value })} placeholder="https://…" />
-          </Field>
-
-          <Separator />
-          <p className="text-sm font-semibold">Lesson</p>
-          <Field label="Heading">
-            <Input value={m.lesson.heading} onChange={(e) => set({ lesson: { ...m.lesson, heading: e.target.value } })} />
-          </Field>
-          <Field label="Body">
-            <Textarea value={m.lesson.body} onChange={(e) => set({ lesson: { ...m.lesson, body: e.target.value } })} rows={3} />
-          </Field>
-
-          <Separator />
-          <div className="flex items-center justify-between">
-            <p className="text-sm font-semibold">Quiz ({m.questions.length}) — drag to reorder</p>
-            <Button size="sm" variant="outline" onClick={addQuestion}>
-              <Plus className="size-3.5" /> Add question
-            </Button>
-          </div>
-          <SortableQuestionList questions={m.questions} onReorder={reorderQuestions}>
-            {(q, i) => (
-              <QuestionEditor q={q} onChange={(nq) => setQuestion(i, nq)} onRemove={() => removeQuestion(i)} />
-            )}
-          </SortableQuestionList>
-
-          <Separator />
+        </div>
+        <div className="ml-auto flex items-center gap-3">
           <label className="flex items-center gap-2 text-sm">
             <Switch checked={m.isLive ?? true} onCheckedChange={(v) => set({ isLive: v })} />
-            Live (visible to learners)
+            {m.isLive ?? true ? "Live" : "Draft"}
           </label>
-        </div>
-
-        <SheetFooter>
+          <Button variant="outline" onClick={props.onClose}>
+            Cancel
+          </Button>
           <Button disabled={!valid || saving} onClick={() => void save()}>
             {saving ? <Loader2 className="size-4 animate-spin" /> : null}
             Save module
           </Button>
-          <Button variant="outline" onClick={props.onClose}>
-            Cancel
-          </Button>
-        </SheetFooter>
-      </SheetContent>
-    </Sheet>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
+        {/* Left: module meta + lesson */}
+        <div className="flex flex-col gap-6">
+          <Card>
+            <CardHeader>
+              <CardTitle>Module</CardTitle>
+            </CardHeader>
+            <CardContent className="flex flex-col gap-4">
+              <Field label="Title">
+                <Input value={m.title} onChange={(e) => set({ title: e.target.value })} placeholder="Building Customer Empathy" />
+              </Field>
+              <div className="grid grid-cols-2 gap-3">
+                <Field label="Belief">
+                  <select
+                    className="h-9 rounded-md border border-input bg-transparent px-3 text-sm"
+                    value={m.track}
+                    onChange={(e) => set({ track: e.target.value })}
+                  >
+                    {BELIEFS.map((b) => (
+                      <option key={b} value={b}>
+                        {b}
+                      </option>
+                    ))}
+                  </select>
+                </Field>
+                <Field label="Duration (min)">
+                  <Input
+                    type="number"
+                    value={m.durationMin}
+                    onChange={(e) => set({ durationMin: Number(e.target.value) || 0 })}
+                  />
+                </Field>
+              </div>
+              <Field label="Summary">
+                <Textarea value={m.summary} onChange={(e) => set({ summary: e.target.value })} rows={2} />
+              </Field>
+              <Field label="Video URL (optional)">
+                <Input value={m.videoUrl ?? ""} onChange={(e) => set({ videoUrl: e.target.value })} placeholder="https://…" />
+              </Field>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Lesson</CardTitle>
+            </CardHeader>
+            <CardContent className="flex flex-col gap-4">
+              <Field label="Heading">
+                <Input value={m.lesson.heading} onChange={(e) => set({ lesson: { ...m.lesson, heading: e.target.value } })} />
+              </Field>
+              <Field label="Body">
+                <Textarea value={m.lesson.body} onChange={(e) => set({ lesson: { ...m.lesson, body: e.target.value } })} rows={5} />
+              </Field>
+            </CardContent>
+          </Card>
+        </div>
+
+        {/* Right: quiz */}
+        <Card className="self-start">
+          <CardHeader className="flex-row items-center justify-between space-y-0">
+            <CardTitle>Quiz ({m.questions.length})</CardTitle>
+            <Button size="sm" variant="outline" onClick={addQuestion}>
+              <Plus className="size-3.5" /> Add question
+            </Button>
+          </CardHeader>
+          <CardContent className="flex flex-col gap-3">
+            <SortableQuestionList questions={m.questions} onReorder={reorderQuestions}>
+              {(q, i) => (
+                <QuestionEditor q={q} onChange={(nq) => setQuestion(i, nq)} onRemove={() => removeQuestion(i)} />
+              )}
+            </SortableQuestionList>
+          </CardContent>
+        </Card>
+      </div>
+    </div>
   );
 }
 
