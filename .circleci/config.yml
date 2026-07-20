@@ -41,13 +41,17 @@ jobs:
           command: |
             set -eux
             docker run -d --name apitest -e PORT=4175 "$REG/cpn-engage-api:$IMG_TAG"
+            ok=""
             for i in $(seq 1 15); do
               if docker exec apitest wget -qO- http://localhost:4175/health 2>/dev/null | grep -q '"ok":true'; then
-                echo "API image boots + /health OK"; break
+                ok=1; echo "API image boots + /health OK"; break
               fi
               sleep 2
             done
-            docker exec apitest wget -qO- http://localhost:4175/health | grep -q '"ok":true'
+            if [ -z "$ok" ]; then
+              echo "=== API boot logs ==="; docker logs apitest || true
+              docker rm -f apitest; exit 1
+            fi
             # Prove the shipped image has NO TypeScript source of ours.
             test -z "$(docker exec apitest sh -c 'find /app/services /app/packages -name "*.ts" 2>/dev/null')" \
               && echo "confirmed: no .ts source in the image"
