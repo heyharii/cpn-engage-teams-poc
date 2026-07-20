@@ -6,6 +6,7 @@ import {
   Heart,
   Trophy,
   BookOpen,
+  Zap,
   RefreshCw,
   Sparkles,
   Search,
@@ -15,6 +16,7 @@ import {
   CircleDashed
 } from "lucide-react";
 import { ContentView } from "@/content-view";
+import { ChallengesView } from "@/challenges-view";
 import type { BootstrapResponse, FeedItem, ModuleContent } from "@cpn-engage/shared";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -45,10 +47,11 @@ import {
   type LeaderRow
 } from "@/lib/api";
 
-type NavId = "overview" | "content" | "users" | "broadcast" | "recognitions" | "leaderboard";
+type NavId = "overview" | "content" | "challenges" | "users" | "broadcast" | "recognitions" | "leaderboard";
 const NAV: { id: NavId; label: string; icon: typeof Users }[] = [
   { id: "overview", label: "Overview", icon: LayoutDashboard },
   { id: "content", label: "Content", icon: BookOpen },
+  { id: "challenges", label: "Challenges", icon: Zap },
   { id: "users", label: "Users", icon: Users },
   { id: "broadcast", label: "Broadcast", icon: Send },
   { id: "recognitions", label: "Recognitions", icon: Heart },
@@ -193,6 +196,7 @@ function Console() {
           <Overview boot={boot} audienceCount={roster.filter((u) => u.reachable).length} leaders={leaders} />
         )}
         {nav === "content" && <ContentView />}
+        {nav === "challenges" && <ChallengesView />}
         {nav === "users" && (
           <UsersView roster={roster} directoryCount={directoryCount} leaders={leaders} onReload={loadAll} />
         )}

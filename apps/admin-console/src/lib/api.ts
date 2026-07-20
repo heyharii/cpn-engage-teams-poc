@@ -94,6 +94,36 @@ export const pushBroadcast = (type: "challenge" | "module", moduleId?: string) =
 export const scheduleTest = (seconds: number) =>
   post<{ ok: boolean; scheduledInSeconds: number | null }>(`${BOT}/internal/schedule-test?seconds=${seconds}`);
 
+// --- Daily-drop (challenge) authoring ---
+export type DropOption = { id: string; label: string; isBest?: boolean };
+export type AdminDrop = {
+  id: string;
+  title: string;
+  behavior: string;
+  question: string;
+  rewardLabel?: string;
+  timeLimit?: string;
+  options: DropOption[];
+  status?: string;
+  isActive?: boolean;
+  scheduledDate?: string | null;
+};
+export const getAdminDrops = () => get<AdminDrop[]>(`${API}/api/admin/drops`);
+export const saveDrop = (d: AdminDrop) => post<{ ok: boolean; drop: AdminDrop }>(`${API}/api/admin/drops`, d);
+export const activateDrop = (id: string) =>
+  post<{ ok: boolean }>(`${API}/api/admin/drops/${encodeURIComponent(id)}/activate`);
+export async function deleteDropApi(id: string): Promise<boolean> {
+  try {
+    const r = await fetch(`${API}/api/admin/drops/${encodeURIComponent(id)}`, {
+      method: "DELETE",
+      headers: authHeaders()
+    });
+    return r.ok;
+  } catch {
+    return false;
+  }
+}
+
 // --- Learning Journey content authoring ---
 export const getAdminModules = () => get<ModuleContent[]>(`${API}/api/admin/modules`);
 export const saveModule = (m: ModuleContent) =>

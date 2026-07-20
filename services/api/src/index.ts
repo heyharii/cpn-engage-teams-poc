@@ -15,6 +15,16 @@ import {
   feedPersistent
 } from "./feed.js";
 import { runMigrations, dbPing } from "./db.js";
+import {
+  initDrops,
+  getActiveDrop,
+  getDrop,
+  listDrops,
+  upsertDrop,
+  activateDrop,
+  deleteDrop,
+  dropsEnabled
+} from "./drops.js";
 import { resolveIdentity } from "./identity.js";
 import { requireAdmin } from "./authz.js";
 import {
@@ -23,7 +33,7 @@ import {
   recordChallengeRun,
   getMyState
 } from "./users.js";
-import type { ModuleContent } from "@cpn-engage/shared";
+import type { ModuleContent, DailyDrop } from "@cpn-engage/shared";
 import {
   demoBootstrap,
   demoScenarios,
@@ -393,6 +403,7 @@ app.get("/api/me", async (request, reply) => {
   const liveModules = await listModules({ liveOnly: true });
   const me = await getMyState({ oid: id.oid, name: id.name, email: id.email }, liveModules.map((m) => m.id));
   if (feedPersistent) state.feed = await listFeed();
+  if (dropsEnabled) state.dailyDrop = await getActiveDrop();
   return {
     ok: true,
     verified: id.verified,
@@ -408,6 +419,7 @@ app.get("/api/me", async (request, reply) => {
 
 app.get("/api/bootstrap", async () => {
   if (feedPersistent) state.feed = await listFeed();
+  if (dropsEnabled) state.dailyDrop = await getActiveDrop();
   return state;
 });
 app.get("/api/users/me", async () => state.currentUser);
@@ -492,7 +504,10 @@ app.post<{
   Body: { userKey?: string; userName?: string; best?: boolean };
 }>("/api/challenges/:id/submit", async (request, reply) => {
   const { id } = request.params;
-  const target = state.challenges.find((item) => item.id === id);
+  // Accept either a demo challenge OR an admin-authored daily drop with this id.
+  const stateChallenge = state.challenges.find((item) => item.id === id);
+  const drop = stateChallenge ? null : await getDrop(id);
+  const target = stateChallenge ?? (drop ? { title: drop.title, behavior: drop.behavior, status: "pending" as const } : null);
 
   if (!target) {
     return reply.code(404).send({ ok: false, message: "Challenge not found" });
@@ -831,13 +846,32 @@ app.delete<{ Params: { id: string } }>("/api/admin/modules/:id", async (request)
   return { ok: true };
 });
 
+// Daily-drop authoring — admins create/edit drops and mark ONE active. The bot
+// serves the active drop; the employee tabs show it as "today's drop".
+app.get("/api/admin/drops", async () => listDrops());
+app.post<{ Body: DailyDrop & { scheduledDate?: string | null } }>("/api/admin/drops", async (request) => {
+  const drop = { ...request.body, id: request.body.id || `drop-${Date.now()}` };
+  const saved = await upsertDrop(drop);
+  return { ok: true, drop: saved };
+});
+app.post<{ Params: { id: string } }>("/api/admin/drops/:id/activate", async (request) => {
+  await activateDrop(request.params.id);
+  return { ok: true };
+});
+app.delete<{ Params: { id: string } }>("/api/admin/drops/:id", async (request) => {
+  await deleteDrop(request.params.id);
+  return { ok: true };
+});
+
 const port = Number(process.env.PORT || 4175);
 
 await runMigrations(); // per-user tables + schema_migrations before anything reads them
 await initScores();
 await initModules();
+await initDrops();
 await initFeed();
 if (feedPersistent) state.feed = await listFeed();
+if (dropsEnabled) state.dailyDrop = await getActiveDrop(); // serve the authored active drop
 
 app
   .listen({ port, host: "0.0.0.0" })
