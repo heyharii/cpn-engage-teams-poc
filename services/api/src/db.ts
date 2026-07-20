@@ -103,6 +103,24 @@ const MIGRATIONS: Migration[] = [
       `;
       await db`create index if not exists broadcasts_time_idx on broadcasts (created_at desc)`;
     }
+  },
+  {
+    id: "0005",
+    name: "scheduled_broadcasts",
+    up: async (db) => {
+      await db`
+        create table if not exists scheduled_broadcasts (
+          id text primary key,
+          kind text not null,
+          label text,
+          module_id text,
+          run_at timestamptz not null,
+          status text not null default 'scheduled',
+          created_at timestamptz not null default now()
+        )
+      `;
+      await db`create index if not exists sched_bc_runat_idx on scheduled_broadcasts (run_at)`;
+    }
   }
 ];
 

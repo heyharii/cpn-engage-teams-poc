@@ -56,10 +56,14 @@ import {
   getDebugBundle,
   getAnalytics,
   getBroadcasts,
+  getScheduled,
+  scheduleBroadcastApi,
+  cancelScheduledApi,
   type RosterUser,
   type LeaderRow,
   type Analytics,
-  type BroadcastRow
+  type BroadcastRow,
+  type ScheduledRow
 } from "@/lib/api";
 import { Textarea } from "@/components/ui/textarea";
 
@@ -572,10 +576,13 @@ function Broadcast(props: { audienceCount: number; boot: BootstrapResponse | nul
   const [kind, setKind] = useState<"challenge" | "module">("challenge");
   const [moduleId, setModuleId] = useState<string>("");
   const [history, setHistory] = useState<BroadcastRow[]>([]);
+  const [scheduled, setScheduled] = useState<ScheduledRow[]>([]);
+  const [scheduleAt, setScheduleAt] = useState<string>("");
 
   async function loadHistory() {
-    const r = await getBroadcasts();
-    if (r?.broadcasts) setHistory(r.broadcasts);
+    const [h, s] = await Promise.all([getBroadcasts(), getScheduled()]);
+    if (h?.broadcasts) setHistory(h.broadcasts);
+    if (s?.scheduled) setScheduled(s.scheduled);
   }
   useEffect(() => {
     void loadHistory();
@@ -726,29 +733,88 @@ function Broadcast(props: { audienceCount: number; boot: BootstrapResponse | nul
         </Card>
       </div>
 
-      {/* Utilities */}
+      {/* Schedule for later */}
       <Card className="mt-6">
         <CardHeader>
-          <CardTitle>Scheduler test</CardTitle>
+          <CardTitle>Schedule for later</CardTitle>
         </CardHeader>
-        <CardContent className="flex items-center gap-4">
-          <p className="text-sm text-muted-foreground">
-            Fire a one-off scheduled push in 30 seconds to verify the cron path end-to-end.
-          </p>
-          <Button
-            variant="outline"
-            className="ml-auto shrink-0"
-            disabled={busy !== null}
-            onClick={() =>
-              void run("schedule", async () => {
-                const r = await scheduleTest(30);
-                return r?.ok ? "Scheduled — watch your Teams DM in ~30s." : "Scheduler not running.";
-              })
-            }
-          >
-            {busy === "schedule" ? <Loader2 className="size-4 animate-spin" /> : <Clock className="size-4" />}
-            Schedule test push
-          </Button>
+        <CardContent className="flex flex-col gap-4">
+          <div className="flex flex-wrap items-end gap-3">
+            <div className="flex flex-col gap-1.5">
+              <label className="text-xs font-medium text-muted-foreground">Send at</label>
+              <Input
+                type="datetime-local"
+                className="w-56"
+                value={scheduleAt}
+                onChange={(e) => setScheduleAt(e.target.value)}
+              />
+            </div>
+            <Button
+              disabled={busy !== null || !scheduleAt || audienceCount === 0 || (kind === "module" && !selectedModule)}
+              onClick={() =>
+                void run("sched", async () => {
+                  const r = await scheduleBroadcastApi({
+                    type: kind,
+                    moduleId: kind === "module" ? selectedModule?.id : undefined,
+                    label: kind === "module" ? selectedModule?.title : drop?.behavior,
+                    at: new Date(scheduleAt).toISOString()
+                  });
+                  if (r?.ok) {
+                    setScheduleAt("");
+                    await loadHistory();
+                    return "Scheduled.";
+                  }
+                  return r?.error ?? "Could not schedule.";
+                })
+              }
+            >
+              {busy === "sched" ? <Loader2 className="size-4 animate-spin" /> : <Clock className="size-4" />}
+              Schedule this {kind === "module" ? "module" : "challenge"}
+            </Button>
+            <Button
+              variant="outline"
+              disabled={busy !== null}
+              onClick={() =>
+                void run("schedtest", async () => {
+                  const r = await scheduleTest(30);
+                  await loadHistory();
+                  return r?.ok ? "Test push in ~30s." : "Scheduler not running.";
+                })
+              }
+            >
+              {busy === "schedtest" ? <Loader2 className="size-4 animate-spin" /> : null}
+              Test (30s)
+            </Button>
+          </div>
+
+          {scheduled.length > 0 ? (
+            <div className="flex flex-col">
+              <p className="mb-1 text-sm font-semibold">Upcoming</p>
+              {scheduled.map((s) => (
+                <div key={s.id} className="flex items-center justify-between border-b border-border py-2 text-sm last:border-0">
+                  <div className="flex items-center gap-2">
+                    <Badge variant="secondary" className="capitalize">
+                      {s.kind}
+                    </Badge>
+                    <span className="font-medium">{s.label ?? "—"}</span>
+                    <span className="text-muted-foreground">{new Date(s.runAt).toLocaleString()}</span>
+                  </div>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    onClick={() =>
+                      void (async () => {
+                        await cancelScheduledApi(s.id);
+                        await loadHistory();
+                      })()
+                    }
+                  >
+                    Cancel
+                  </Button>
+                </div>
+              ))}
+            </div>
+          ) : null}
         </CardContent>
       </Card>
 

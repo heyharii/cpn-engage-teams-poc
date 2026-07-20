@@ -26,7 +26,7 @@ import { installAppForUsers } from "./graph.ts";
 import { enrichAll } from "./enrich.ts";
 import { syncDirectory } from "./directory.ts";
 import { refreshModules } from "./content.ts";
-import { startScheduler, scheduleTestPush } from "./scheduler.ts";
+import { startScheduler, scheduleTestPush, scheduleBroadcast, listScheduled, cancelScheduled } from "./scheduler.ts";
 
 const app = express();
 
@@ -260,6 +260,35 @@ app.post("/internal/schedule-test", async (req, res) => {
   const seconds = Number(req.query.seconds ?? 30);
   const ok = await scheduleTestPush(seconds);
   res.json({ ok, scheduledInSeconds: ok ? seconds : null, note: ok ? "watch your DM" : "scheduler not running (no DATABASE_URL)" });
+});
+
+// Schedule a real broadcast for a future time (challenge or a specific module).
+app.post("/internal/schedule", async (req, res) => {
+  let body: { type?: "challenge" | "module"; moduleId?: string; label?: string; at?: string } = {};
+  try {
+    body = Buffer.isBuffer(req.body) ? JSON.parse(req.body.toString("utf8")) : req.body;
+  } catch {
+    /* ignore */
+  }
+  if (!body.at) return res.status(400).json({ ok: false, error: "at (ISO time) required" });
+  const result = await scheduleBroadcast({
+    type: body.type === "module" ? "module" : "challenge",
+    moduleId: body.moduleId ?? null,
+    label: body.label ?? null,
+    at: body.at
+  });
+  res.status(result.ok ? 200 : 400).json(result);
+});
+
+// List upcoming scheduled broadcasts.
+app.get("/internal/scheduled", async (_req, res) => {
+  res.json({ ok: true, scheduled: await listScheduled() });
+});
+
+// Cancel a scheduled broadcast.
+app.post("/internal/scheduled/:id/cancel", async (req, res) => {
+  const ok = await cancelScheduled(req.params.id);
+  res.json({ ok });
 });
 
 app.post("/api/messages", async (req, res) => {

@@ -124,6 +124,13 @@ export type BroadcastRow = { kind: string; label: string | null; sent: number; t
 export const getBroadcasts = () =>
   get<{ ok: boolean; broadcasts: BroadcastRow[] }>(`${BOT}/internal/broadcasts`);
 
+export type ScheduledRow = { id: string; kind: string; label: string | null; runAt: string; status: string };
+export const getScheduled = () => get<{ ok: boolean; scheduled: ScheduledRow[] }>(`${BOT}/internal/scheduled`);
+export const scheduleBroadcastApi = (body: { type: "challenge" | "module"; moduleId?: string; label?: string; at: string }) =>
+  post<{ ok: boolean; id?: string; error?: string }>(`${BOT}/internal/schedule`, body);
+export const cancelScheduledApi = (id: string) =>
+  post<{ ok: boolean }>(`${BOT}/internal/scheduled/${encodeURIComponent(id)}/cancel`);
+
 // --- System / debug ---
 export const getDebugBundle = () => get<Record<string, unknown>>(`${API}/api/admin/debug-bundle`);
 export function debugBundleUrl(): string {
