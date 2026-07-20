@@ -68,6 +68,7 @@ function blankModule(): ModuleContent {
 export function ContentView() {
   const [modules, setModules] = useState<ModuleContent[]>([]);
   const [beliefs, setBeliefs] = useState<string[]>(DEFAULT_BELIEFS);
+  const [filter, setFilter] = useState<string>("all");
   const [loading, setLoading] = useState(true);
   const [editing, setEditing] = useState<ModuleContent | null>(null);
 
@@ -88,12 +89,8 @@ export function ContentView() {
     await load();
   }
 
-  async function reorderBelief(belief: string, reordered: ModuleContent[]) {
-    // Optimistic local update, then persist the new order for this belief's modules.
-    setModules((prev) => {
-      const others = prev.filter((m) => m.track !== belief);
-      return [...others, ...reordered];
-    });
+  async function reorderAll(reordered: ModuleContent[]) {
+    setModules(reordered);
     await reorderModules(reordered.map((m, i) => ({ id: m.id, orderIdx: i })));
   }
 
@@ -112,13 +109,16 @@ export function ContentView() {
     );
   }
 
+  const shown = filter === "all" ? modules : modules.filter((m) => m.track === filter);
+
   return (
     <div>
       <div className="mb-6 flex items-start justify-between">
         <div>
           <h1 className="text-2xl font-bold">Learning content</h1>
           <p className="text-sm text-muted-foreground">
-            Author modules, lessons, and quizzes for the four Beliefs. Drag <GripVertical className="inline size-3.5" /> to reorder.
+            Modules employees take in Teams. Each has a lesson (reading) + a quiz. Drag{" "}
+            <GripVertical className="inline size-3.5" /> to reorder.
           </p>
         </div>
         <Button onClick={() => setEditing(blankModule())}>
@@ -126,40 +126,63 @@ export function ContentView() {
         </Button>
       </div>
 
+      {/* Belief filter chips (flat list, belief is just a tag) */}
+      <div className="mb-4 flex flex-wrap gap-1.5">
+        <FilterChip active={filter === "all"} onClick={() => setFilter("all")}>
+          All ({modules.length})
+        </FilterChip>
+        {beliefs.map((b) => {
+          const n = modules.filter((m) => m.track === b).length;
+          return (
+            <FilterChip key={b} active={filter === b} onClick={() => setFilter(b)}>
+              {b} ({n})
+            </FilterChip>
+          );
+        })}
+      </div>
+
       {loading ? (
         <p className="text-sm text-muted-foreground">Loading…</p>
+      ) : shown.length === 0 ? (
+        <p className="text-sm text-muted-foreground">
+          {modules.length === 0 ? "No modules yet — create your first one." : "No modules for this Belief."}
+        </p>
       ) : (
-        <div className="flex flex-col gap-6">
-          {beliefs.map((belief) => {
-            const items = modules.filter((m) => m.track === belief);
-            return (
-              <div key={belief}>
-                <div className="mb-2 flex items-center gap-2">
-                  <Badge variant="secondary">{belief}</Badge>
-                  <span className="text-xs text-muted-foreground">{items.length} module(s)</span>
-                </div>
-                <SortableModuleList
-                  items={items}
-                  onReorder={(reordered) => void reorderBelief(belief, reordered)}
-                  onEdit={setEditing}
-                  onDelete={(id) => void remove(id)}
-                />
-              </div>
-            );
-          })}
-        </div>
+        <SortableModuleList
+          items={shown}
+          reorderable={filter === "all"}
+          onReorder={(reordered) => void reorderAll(reordered)}
+          onEdit={setEditing}
+          onDelete={(id) => void remove(id)}
+        />
       )}
     </div>
   );
 }
 
+function FilterChip(props: { active: boolean; onClick: () => void; children: React.ReactNode }) {
+  return (
+    <button
+      type="button"
+      onClick={props.onClick}
+      className={
+        "rounded-full border px-3 py-1 text-xs font-medium transition-colors " +
+        (props.active ? "border-primary bg-primary text-primary-foreground" : "border-border text-muted-foreground hover:bg-muted")
+      }
+    >
+      {props.children}
+    </button>
+  );
+}
+
 function SortableModuleList(props: {
   items: ModuleContent[];
+  reorderable: boolean;
   onReorder: (items: ModuleContent[]) => void;
   onEdit: (m: ModuleContent) => void;
   onDelete: (id: string) => void;
 }) {
-  const { items, onReorder, onEdit, onDelete } = props;
+  const { items, reorderable, onReorder, onEdit, onDelete } = props;
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
@@ -174,16 +197,18 @@ function SortableModuleList(props: {
     onReorder(arrayMove(items, oldIdx, newIdx));
   }
 
-  if (items.length === 0) {
-    return <p className="px-1 text-sm text-muted-foreground">No modules yet.</p>;
-  }
-
   return (
     <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
       <SortableContext items={items.map((m) => m.id)} strategy={verticalListSortingStrategy}>
         <div className="flex flex-col gap-2">
           {items.map((m) => (
-            <SortableModuleRow key={m.id} module={m} onEdit={() => onEdit(m)} onDelete={() => onDelete(m.id)} />
+            <SortableModuleRow
+              key={m.id}
+              module={m}
+              reorderable={reorderable}
+              onEdit={() => onEdit(m)}
+              onDelete={() => onDelete(m.id)}
+            />
           ))}
         </div>
       </SortableContext>
@@ -191,8 +216,8 @@ function SortableModuleList(props: {
   );
 }
 
-function SortableModuleRow(props: { module: ModuleContent; onEdit: () => void; onDelete: () => void }) {
-  const { module: m, onEdit, onDelete } = props;
+function SortableModuleRow(props: { module: ModuleContent; reorderable: boolean; onEdit: () => void; onDelete: () => void }) {
+  const { module: m, reorderable, onEdit, onDelete } = props;
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: m.id });
   const style = {
     transform: CSS.Transform.toString(transform),
@@ -203,21 +228,26 @@ function SortableModuleRow(props: { module: ModuleContent; onEdit: () => void; o
   return (
     <Card ref={setNodeRef} style={style}>
       <CardContent className="flex items-center gap-3 py-3">
-        <button
-          type="button"
-          className="cursor-grab touch-none text-muted-foreground active:cursor-grabbing"
-          {...attributes}
-          {...listeners}
-        >
-          <GripVertical className="size-4" />
-        </button>
-        <div className="flex-1">
-          <p className="font-medium">{m.title}</p>
+        {reorderable ? (
+          <button
+            type="button"
+            className="cursor-grab touch-none text-muted-foreground active:cursor-grabbing"
+            {...attributes}
+            {...listeners}
+          >
+            <GripVertical className="size-4" />
+          </button>
+        ) : (
+          <span className="w-4" />
+        )}
+        <div className="min-w-0 flex-1">
+          <p className="truncate font-medium">{m.title}</p>
           <p className="text-xs text-muted-foreground">
             {m.durationMin} min · {m.questions.length} question(s)
             {m.videoUrl ? " · video" : ""}
           </p>
         </div>
+        <Badge variant="secondary">{m.track}</Badge>
         {m.isLive === false ? <Badge variant="outline">Draft</Badge> : <Badge>Live</Badge>}
         <Button size="icon" variant="ghost" onClick={onEdit}>
           <Pencil className="size-4" />
@@ -291,18 +321,19 @@ function ModuleEditor(props: { initial: ModuleContent; beliefs: string[]; onClos
         </div>
       </div>
 
-      <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
-        {/* Left: module meta + lesson */}
+      <div className="grid grid-cols-1 gap-6 xl:grid-cols-[1.15fr_0.85fr]">
+        {/* Left: all editing (module meta → lesson → quiz) */}
         <div className="flex flex-col gap-6">
           <Card>
             <CardHeader>
               <CardTitle>Module</CardTitle>
+              <p className="text-xs text-muted-foreground">The overall unit — what gets assigned to employees.</p>
             </CardHeader>
             <CardContent className="flex flex-col gap-4">
               <Field label="Title">
                 <Input value={m.title} onChange={(e) => set({ title: e.target.value })} placeholder="Building Customer Empathy" />
               </Field>
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-3 gap-3">
                 <Field label="Belief">
                   <select
                     className="h-9 rounded-md border border-input bg-transparent px-3 text-sm"
@@ -317,20 +348,12 @@ function ModuleEditor(props: { initial: ModuleContent; beliefs: string[]; onClos
                   </select>
                 </Field>
                 <Field label="Duration (min)">
-                  <Input
-                    type="number"
-                    value={m.durationMin}
-                    onChange={(e) => set({ durationMin: Number(e.target.value) || 0 })}
-                  />
+                  <Input type="number" value={m.durationMin} onChange={(e) => set({ durationMin: Number(e.target.value) || 0 })} />
+                </Field>
+                <Field label="Points">
+                  <Input type="number" value={m.points ?? 75} onChange={(e) => set({ points: Number(e.target.value) || 0 })} />
                 </Field>
               </div>
-              <Field label="Points on completion">
-                <Input
-                  type="number"
-                  value={m.points ?? 75}
-                  onChange={(e) => set({ points: Number(e.target.value) || 0 })}
-                />
-              </Field>
               <Field label="Summary">
                 <Textarea value={m.summary} onChange={(e) => set({ summary: e.target.value })} rows={2} />
               </Field>
@@ -343,6 +366,7 @@ function ModuleEditor(props: { initial: ModuleContent; beliefs: string[]; onClos
           <Card>
             <CardHeader>
               <CardTitle>Lesson</CardTitle>
+              <p className="text-xs text-muted-foreground">The reading material shown before the quiz (a heading + body).</p>
             </CardHeader>
             <CardContent className="flex flex-col gap-4">
               <Field label="Heading">
@@ -353,24 +377,71 @@ function ModuleEditor(props: { initial: ModuleContent; beliefs: string[]; onClos
               </Field>
             </CardContent>
           </Card>
+
+          <Card>
+            <CardHeader className="flex-row items-center justify-between space-y-0">
+              <div>
+                <CardTitle>Quiz ({m.questions.length})</CardTitle>
+                <p className="text-xs text-muted-foreground">Questions asked after the lesson.</p>
+              </div>
+              <Button size="sm" variant="outline" onClick={addQuestion}>
+                <Plus className="size-3.5" /> Add question
+              </Button>
+            </CardHeader>
+            <CardContent className="flex flex-col gap-3">
+              <SortableQuestionList questions={m.questions} onReorder={reorderQuestions}>
+                {(q, i) => <QuestionEditor q={q} onChange={(nq) => setQuestion(i, nq)} onRemove={() => removeQuestion(i)} />}
+              </SortableQuestionList>
+            </CardContent>
+          </Card>
         </div>
 
-        {/* Right: quiz */}
-        <Card className="self-start">
-          <CardHeader className="flex-row items-center justify-between space-y-0">
-            <CardTitle>Quiz ({m.questions.length})</CardTitle>
-            <Button size="sm" variant="outline" onClick={addQuestion}>
-              <Plus className="size-3.5" /> Add question
-            </Button>
-          </CardHeader>
-          <CardContent className="flex flex-col gap-3">
-            <SortableQuestionList questions={m.questions} onReorder={reorderQuestions}>
-              {(q, i) => (
-                <QuestionEditor q={q} onChange={(nq) => setQuestion(i, nq)} onRemove={() => removeQuestion(i)} />
-              )}
-            </SortableQuestionList>
-          </CardContent>
-        </Card>
+        {/* Right: sticky live preview of the Teams card */}
+        <div className="xl:sticky xl:top-6 xl:self-start">
+          <Card>
+            <CardHeader>
+              <CardTitle>Preview</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="rounded-xl border border-border bg-muted/40 p-4">
+                <div className="flex gap-2.5">
+                  <div className="flex size-8 shrink-0 items-center justify-center rounded-full bg-primary text-xs font-bold text-primary-foreground">
+                    CP
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="mb-1 text-xs">
+                      <span className="font-semibold">CPN Engage</span>
+                      <span className="text-muted-foreground"> · bot · now</span>
+                    </p>
+                    <div className="rounded-lg border border-border bg-card p-3">
+                      <p className="text-[11px] font-semibold uppercase tracking-wide text-primary">New module assigned</p>
+                      <p className="mt-1 font-semibold">{m.title || "Untitled module"}</p>
+                      {m.summary ? <p className="mt-0.5 text-sm text-muted-foreground">{m.summary}</p> : null}
+                      {m.lesson.heading ? (
+                        <div className="mt-2 rounded-md bg-muted/60 p-2">
+                          <p className="text-xs font-semibold">{m.lesson.heading}</p>
+                          {m.lesson.body ? (
+                            <p className="mt-0.5 line-clamp-3 text-xs text-muted-foreground">{m.lesson.body}</p>
+                          ) : null}
+                        </div>
+                      ) : null}
+                      <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                        <Badge variant="secondary">{m.track}</Badge>
+                        <span>{m.durationMin} min</span>
+                        <span>· {m.questions.length} questions</span>
+                        <span>· {m.points ?? 75} pts</span>
+                      </div>
+                      <div className="mt-2 rounded-md bg-primary px-3 py-1.5 text-center text-sm font-medium text-primary-foreground">
+                        Start module
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <p className="mt-2 text-xs text-muted-foreground">How the assignment lands in the employee's Teams chat.</p>
+            </CardContent>
+          </Card>
+        </div>
       </div>
     </div>
   );

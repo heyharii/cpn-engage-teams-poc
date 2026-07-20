@@ -281,6 +281,55 @@ function DropEditor(props: { initial: AdminDrop; beliefs: string[]; onClose: () 
           </CardContent>
         </Card>
 
+        {/* Live preview of the first question as a Teams card */}
+        <Card className="self-start">
+          <CardHeader>
+            <CardTitle>Preview</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="rounded-xl border border-border bg-muted/40 p-4">
+              <div className="flex gap-2.5">
+                <div className="flex size-8 shrink-0 items-center justify-center rounded-full bg-primary text-xs font-bold text-primary-foreground">
+                  CP
+                </div>
+                <div className="min-w-0 flex-1">
+                  <p className="mb-1 text-xs">
+                    <span className="font-semibold">CPN Engage</span>
+                    <span className="text-muted-foreground"> · bot · now</span>
+                  </p>
+                  <div className="rounded-lg border border-border bg-card p-3">
+                    <p className="text-[11px] font-semibold uppercase tracking-wide text-primary">
+                      Daily challenge{questions.length > 1 ? ` · Question 1 of ${questions.length}` : ""}
+                    </p>
+                    <Badge variant="secondary" className="mt-1 w-fit">
+                      {d.behavior}
+                    </Badge>
+                    <p className="mt-1 text-sm font-medium">{questions[0]?.question || "Your question…"}</p>
+                    <div className="mt-1 flex flex-col gap-1">
+                      {(questions[0]?.options ?? []).map((o, i) => (
+                        <div
+                          key={o.id}
+                          className={
+                            "flex items-center gap-2 rounded-md border px-2.5 py-1.5 text-xs " +
+                            (o.isBest ? "border-primary bg-primary/5" : "border-border")
+                          }
+                        >
+                          {o.isBest ? <Star className="size-3 shrink-0 text-primary" /> : <span className="size-3 shrink-0" />}
+                          <span>{o.label || `Option ${i + 1}`}</span>
+                        </div>
+                      ))}
+                    </div>
+                    <div className="mt-2 rounded-md bg-primary px-3 py-1.5 text-center text-sm font-medium text-primary-foreground">
+                      {questions.length > 1 ? "Answer" : "Play now"}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <p className="mt-2 text-xs text-muted-foreground">How the first question lands in the employee's Teams chat.</p>
+          </CardContent>
+        </Card>
+
         {/* Right: questions */}
         <div className="flex flex-col gap-4">
           {questions.map((q, qi) => (
