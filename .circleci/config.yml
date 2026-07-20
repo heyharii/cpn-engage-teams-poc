@@ -25,10 +25,8 @@ jobs:
             else
               echo "export IMG_TAG=edge" >> "$BASH_ENV"
             fi
-            echo "export REG=ghcr.io/${GHCR_USER}" >> "$BASH_ENV"
-      - run:
-          name: Log in to GHCR
-          command: echo "$GHCR_TOKEN" | docker login ghcr.io -u "$GHCR_USER" --password-stdin
+            echo "export REG=ghcr.io/${GHCR_USER:-local}" >> "$BASH_ENV"
+      # Build FIRST — this validates the source-hiding Dockerfiles with no creds.
       - run:
           name: Build images
           command: |
@@ -37,6 +35,28 @@ jobs:
             docker build -f services/notification-bot/Dockerfile  -t "$REG/cpn-engage-bot:$IMG_TAG"   .
             docker build -f apps/employee-app/Dockerfile          -t "$REG/cpn-engage-home:$IMG_TAG"  .
             docker build -f apps/admin-console/Dockerfile         -t "$REG/cpn-engage-admin:$IMG_TAG" .
+      # Smoke test — the API image must boot and answer /health (no DB needed for that).
+      - run:
+          name: Smoke test the API image
+          command: |
+            set -eux
+            docker run -d --name apitest -e PORT=4175 "$REG/cpn-engage-api:$IMG_TAG"
+            for i in $(seq 1 15); do
+              if docker exec apitest wget -qO- http://localhost:4175/health 2>/dev/null | grep -q '"ok":true'; then
+                echo "API image boots + /health OK"; break
+              fi
+              sleep 2
+            done
+            docker exec apitest wget -qO- http://localhost:4175/health | grep -q '"ok":true'
+            # Prove the shipped image has NO TypeScript source of ours.
+            test -z "$(docker exec apitest sh -c 'find /app/services /app/packages -name "*.ts" 2>/dev/null')" \
+              && echo "confirmed: no .ts source in the image"
+            docker rm -f apitest
+      - run:
+          name: Log in to GHCR
+          command: |
+            if [ -z "${GHCR_TOKEN:-}" ]; then echo "GHCR_TOKEN not set — skipping push"; circleci-agent step halt; fi
+            echo "$GHCR_TOKEN" | docker login ghcr.io -u "$GHCR_USER" --password-stdin
       - run:
           name: Tag :latest on release tags
           command: |
