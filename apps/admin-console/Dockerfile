@@ -22,8 +22,12 @@ COPY apps/admin-console apps/admin-console
 
 ARG VITE_API_BASE_URL=http://localhost:4175
 ARG VITE_BOT_BASE_URL=http://localhost:4177
+# Optional: bake a default admin key for frictionless LOCAL dev. Leave unset for
+# production builds so the login gate appears and the operator types their key.
+ARG VITE_ADMIN_KEY=
 ENV VITE_API_BASE_URL=$VITE_API_BASE_URL
 ENV VITE_BOT_BASE_URL=$VITE_BOT_BASE_URL
+ENV VITE_ADMIN_KEY=$VITE_ADMIN_KEY
 RUN pnpm --filter @cpn-engage/shared build && pnpm --filter @cpn-engage/admin-console build
 
 FROM nginx:alpine

@@ -45,6 +45,7 @@ export async function recordScore(e: {
   points: number;
   reason: string;
   ref?: string | null;
+  belief?: string | null;
 }): Promise<void> {
   if (!sql || !e.userKey || e.points === 0) return;
   try {
@@ -53,8 +54,8 @@ export async function recordScore(e: {
       if (dup.length > 0) return; // already awarded for this ref (idempotent)
     }
     await sql`
-      insert into score_events (user_key, user_name, points, reason, ref)
-      values (${e.userKey}, ${e.userName ?? null}, ${e.points}, ${e.reason}, ${e.ref ?? null})
+      insert into score_events (user_key, user_name, points, reason, ref, belief)
+      values (${e.userKey}, ${e.userName ?? null}, ${e.points}, ${e.reason}, ${e.ref ?? null}, ${e.belief ?? null})
     `;
   } catch (err) {
     console.warn("[scores] recordScore failed:", err instanceof Error ? err.message : err);

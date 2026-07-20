@@ -35,9 +35,31 @@ const app = express();
 app.use((req, res, next) => {
   res.header("Access-Control-Allow-Origin", process.env.ADMIN_ORIGIN?.trim() || "*");
   res.header("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
-  res.header("Access-Control-Allow-Headers", "Content-Type, x-push-token");
+  res.header("Access-Control-Allow-Headers", "Content-Type, x-push-token, x-admin-key");
   if (req.method === "OPTIONS") {
     res.sendStatus(204);
+    return;
+  }
+  next();
+});
+
+/**
+ * Ops authorization for /internal/*. Accepts the admin key (from the console)
+ * or the push token (server-to-server). Fail-closed in production when a key is
+ * configured; open in dev when neither is set. Read endpoints and writes both
+ * use this so the roster/sync/broadcast surface isn't world-readable.
+ */
+const ADMIN_KEY = process.env.ADMIN_KEY?.trim() ?? "";
+const PUSH_TOKEN = process.env.PUSH_TOKEN?.trim() ?? "";
+function opsAuthorized(req: express.Request): boolean {
+  if (!ADMIN_KEY && !PUSH_TOKEN) return process.env.NODE_ENV !== "production";
+  const adminHdr = String(req.headers["x-admin-key"] ?? "");
+  const pushHdr = String(req.headers["x-push-token"] ?? "");
+  return (Boolean(ADMIN_KEY) && adminHdr === ADMIN_KEY) || (Boolean(PUSH_TOKEN) && pushHdr === PUSH_TOKEN);
+}
+app.use((req, res, next) => {
+  if (req.path.startsWith("/internal/") && !opsAuthorized(req)) {
+    res.status(401).json({ ok: false, error: "unauthorized (x-admin-key or x-push-token required)" });
     return;
   }
   next();

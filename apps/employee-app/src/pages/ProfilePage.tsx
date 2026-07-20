@@ -1,23 +1,46 @@
 import { type BootstrapResponse } from "@cpn-engage/shared";
 import { useEffect, useState } from "react";
 import { app as teamsApp, authentication } from "@microsoft/teams-js";
+import { guestId } from "../lib/identity";
 
-type TeamsState = {
-  host: string;
-  frame: string;
-  userObjectId?: string;
-} | null;
-
-type SsoUser = { id: string; name: string | null; email: string | null } | null;
 type SsoStatus = "checking" | "verified" | "unverified";
 
+/** Per-user state from /api/me — the personal truth, keyed to this user. */
+type MeResponse = {
+  ok: boolean;
+  verified: boolean;
+  me: {
+    profile: { oid: string; name: string | null; email: string | null; department: string | null };
+    score: { points: number; rank: number | null };
+    passport: {
+      modulesCompleted: number;
+      modulesTotal: number;
+      completion: number;
+      recentEntries: { id: string; date: string; title: string; points: number; status: string }[];
+    };
+    streak: { current: number; best: number };
+    beliefs: { name: string; points: number }[];
+    answeredDropToday: boolean;
+    completedModuleIds: string[];
+  };
+  org: {
+    modules: BootstrapResponse["modules"];
+    dailyDrop: BootstrapResponse["dailyDrop"];
+    feed: BootstrapResponse["feed"];
+    capstone: BootstrapResponse["capstone"];
+  };
+};
+
+function fmtDate(iso: string): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return iso;
+  return d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+}
+
 export function ProfilePage() {
-  const [bootstrap, setBootstrap] = useState<BootstrapResponse | null>(null);
-  const [teamsState, setTeamsState] = useState<TeamsState>(null);
-  const [teamsStatus, setTeamsStatus] = useState<"checking" | "teams" | "browser">("checking");
-  const [ssoUser, setSsoUser] = useState<SsoUser>(null);
+  const [bootstrap, setBootstrap] = useState<BootstrapResponse | null>(null); // shared org content only
+  const [me, setMe] = useState<MeResponse | null>(null);
   const [ssoStatus, setSsoStatus] = useState<SsoStatus>("checking");
-  const [ssoError, setSsoError] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const [activeNav, setActiveNav] = useState("overview");
   const apiBaseUrl = import.meta.env.VITE_API_BASE_URL ?? "http://127.0.0.1:4175";
@@ -34,83 +57,73 @@ export function ProfilePage() {
     document.getElementById(id)?.scrollIntoView({ behavior: "smooth", block: "start" });
   }
 
-  useEffect(() => {
-    let cancelled = false;
-    async function loadBootstrap() {
-      const response = await fetch(`${apiBaseUrl}/api/bootstrap`);
-      const data = (await response.json()) as BootstrapResponse;
-      if (!cancelled) setBootstrap(data);
+  /** Fetch per-user /api/me with the best identity we have (SSO token or guest). */
+  async function loadMe(token: string | null): Promise<void> {
+    const headers: Record<string, string> = {};
+    if (token) headers.Authorization = `Bearer ${token}`;
+    else headers["x-cpn-guest"] = guestId();
+    const res = await fetch(`${apiBaseUrl}/api/me`, { headers });
+    if (res.ok) {
+      setMe((await res.json()) as MeResponse);
+      setSsoStatus(token ? "verified" : "unverified");
     }
-    void loadBootstrap();
-    return () => {
-      cancelled = true;
-    };
-  }, [apiBaseUrl]);
+  }
 
   useEffect(() => {
     let cancelled = false;
-    async function initTeams() {
+    // Shared org content (behaviors list, day's scenario text) stays on bootstrap.
+    void fetch(`${apiBaseUrl}/api/bootstrap`)
+      .then((r) => r.json() as Promise<BootstrapResponse>)
+      .then((d) => !cancelled && setBootstrap(d));
+
+    async function init() {
+      let token: string | null = null;
       try {
         await teamsApp.initialize();
-        const context = await teamsApp.getContext();
-        if (!cancelled) {
-          setTeamsState({
-            host: context.app.host.name,
-            frame: context.page.frameContext,
-            userObjectId: context.user?.id
-          });
-          setTeamsStatus("teams");
-        }
-
-        // SSO (silent): exchange the Teams identity for an AAD token — no login
-        // screen — then have the backend VERIFY it before trusting who we are.
         try {
-          const token = await authentication.getAuthToken();
-          const res = await fetch(`${apiBaseUrl}/api/profile/me`, {
-            headers: { Authorization: `Bearer ${token}` }
-          });
-          if (res.ok) {
-            const data = (await res.json()) as { user: { id: string; name: string | null; email: string | null } };
-            if (!cancelled) {
-              setSsoUser(data.user);
-              setSsoStatus("verified");
-            }
-          } else if (!cancelled) {
-            const body = await res.text();
-            setSsoError(`backend ${res.status}: ${body.slice(0, 160)}`);
-            setSsoStatus("unverified");
-          }
-        } catch (err) {
-          if (!cancelled) {
-            setSsoError(`getAuthToken: ${err instanceof Error ? err.message : String(err)}`);
-            setSsoStatus("unverified");
-          }
+          token = await authentication.getAuthToken();
+        } catch {
+          /* SSO optional — fall through to guest */
         }
       } catch {
-        if (!cancelled) {
-          setTeamsStatus("browser");
-          setSsoStatus("unverified");
-        }
+        /* browser preview — guest */
       }
+      if (!cancelled) await loadMe(token);
     }
-    void initTeams();
+    void init();
     return () => {
       cancelled = true;
     };
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [apiBaseUrl]);
 
-  async function refreshBootstrap() {
+  async function refresh() {
     setRefreshing(true);
     try {
-      const response = await fetch(`${apiBaseUrl}/api/bootstrap`);
-      const data = (await response.json()) as BootstrapResponse;
-      setBootstrap(data);
+      let token: string | null = null;
+      try {
+        token = await authentication.getAuthToken();
+      } catch {
+        /* guest */
+      }
+      await loadMe(token);
+      const b = await fetch(`${apiBaseUrl}/api/bootstrap`).then((r) => r.json() as Promise<BootstrapResponse>);
+      setBootstrap(b);
     } finally {
       setRefreshing(false);
     }
   }
 
-  const nextModule = bootstrap?.modules.find((item) => item.status === "assigned") ?? bootstrap?.modules[0];
+  const p = me?.me;
+  const org = me?.org;
+  const completedIds = new Set(p?.completedModuleIds ?? []);
+  const nextModule =
+    (org?.modules ?? bootstrap?.modules ?? []).find((m) => !completedIds.has(m.id)) ??
+    org?.modules?.[0] ??
+    bootstrap?.modules?.[0];
+  const drop = org?.dailyDrop ?? bootstrap?.dailyDrop;
+  const answeredToday = p?.answeredDropToday ?? false;
+  const displayName = p?.profile.name ?? (me?.verified ? "You" : "Guest preview");
 
   return (
     <div className="app-shell">
@@ -136,45 +149,41 @@ export function ProfilePage() {
             <p className="eyebrow">Central Pattana Engage</p>
             <h1>Your culture journey, at a glance.</h1>
             <p className="subtle">
-              This is your personal progress dashboard. The daily drop, quizzes, and recognition all
-              happen in the <strong>Chat</strong> tab with the CPN Engage bot — this view shows how
-              far you've come.
+              Your personal progress. The daily drop, quizzes, and recognition happen in the{" "}
+              <strong>Chat</strong> tab with the CPN Engage bot — this view shows how far you've come.
             </p>
-            {ssoStatus === "verified" && ssoUser ? (
-              <p className="subtle">
-                Signed in as <strong>{ssoUser.name ?? ssoUser.email}</strong>
-                {ssoUser.email ? ` (${ssoUser.email})` : ""}.
-              </p>
-            ) : bootstrap ? (
-              <p className="subtle">
-                Signed in as {bootstrap.currentUser.name} from {bootstrap.currentUser.businessUnit}.
-              </p>
-            ) : null}
+            <p className="subtle">
+              {ssoStatus === "verified" ? (
+                <>Signed in as <strong>{displayName}</strong>.</>
+              ) : ssoStatus === "unverified" ? (
+                <><strong>{displayName}</strong> · sign-in not verified (browser preview).</>
+              ) : (
+                "Loading your profile…"
+              )}
+            </p>
             <div className="hero-actions">
-              <button onClick={() => void refreshBootstrap()}>
-                {refreshing ? "Refreshing…" : "Refresh"}
-              </button>
+              <button onClick={() => void refresh()}>{refreshing ? "Refreshing…" : "Refresh"}</button>
             </div>
           </div>
           <div className="hero-stat">
-            <span>{bootstrap?.passport.score ?? "--"}</span>
+            <span>{p ? p.score.points : "--"}</span>
             <small>Total points</small>
-            <strong>{bootstrap?.currentUser.businessUnit ?? ""}</strong>
+            <strong>{p?.streak.current ? `🔥 ${p.streak.current}-day streak` : ""}</strong>
           </div>
         </header>
 
         <section className="bot-pointer">
           <div className="bot-pointer-icon">💬</div>
           <div>
-            <strong>Today's drop is waiting in Chat</strong>
+            <strong>Today's drop {answeredToday ? "is done" : "is waiting in Chat"}</strong>
             <p>
-              {bootstrap?.dailyDrop.status === "completed"
+              {answeredToday
                 ? "Nice — you've completed today's daily drop. Come back tomorrow for the next one."
-                : `“${bootstrap?.dailyDrop.question ?? "Loading today's scenario…"}” — open the Chat tab and message the bot “daily drop” to play.`}
+                : `“${drop?.question ?? "Loading today's scenario…"}” — open the Chat tab and message the bot “daily drop” to play.`}
             </p>
           </div>
-          <span className={bootstrap?.dailyDrop.status === "completed" ? "pointer-state done" : "pointer-state"}>
-            {bootstrap?.dailyDrop.status ?? "pending"}
+          <span className={answeredToday ? "pointer-state done" : "pointer-state"}>
+            {answeredToday ? "completed" : "pending"}
           </span>
         </section>
 
@@ -182,62 +191,69 @@ export function ProfilePage() {
           <article className="panel passport-panel" id="progress">
             <div className="panel-title">
               <h2>My progress</h2>
-              <span>{bootstrap?.passport.score ?? 0} pts</span>
+              <span>{p?.score.points ?? 0} pts</span>
             </div>
             <div className="passport-score-row">
               <div>
-                <strong className="passport-score">{bootstrap?.stats.progress ?? "--"}%</strong>
+                <strong className="passport-score">{p?.passport.completion ?? 0}%</strong>
                 <small>Completion</small>
               </div>
               <div>
                 <strong className="passport-score">
-                  {bootstrap?.passport.modulesCompleted ?? "--"}/{bootstrap?.passport.modulesTotal ?? "--"}
+                  {p?.passport.modulesCompleted ?? 0}/{p?.passport.modulesTotal ?? 0}
                 </strong>
                 <small>Modules</small>
               </div>
+              <div>
+                <strong className="passport-score">{p?.streak.current ?? 0}</strong>
+                <small>Day streak</small>
+              </div>
             </div>
             <div className="passport-values">
-              {(bootstrap?.passport.valuesProgress ?? []).map((item) => (
-                <div key={item.name} className="passport-value">
-                  <div>
-                    <strong>{item.name}</strong>
-                    <small>{item.points} pts</small>
+              {(p?.beliefs ?? []).length > 0 ? (
+                p!.beliefs.map((item) => (
+                  <div key={item.name} className="passport-value">
+                    <div>
+                      <strong>{item.name}</strong>
+                      <small>{item.points} pts</small>
+                    </div>
                   </div>
-                  <span className={item.status === "completed" ? "state-tag done" : "state-tag"}>
-                    {item.status}
-                  </span>
-                </div>
-              ))}
+                ))
+              ) : (
+                <p className="subtle">Earn points in the Chat tab to build your Beliefs breakdown.</p>
+              )}
             </div>
           </article>
 
           <article className="panel module-panel" id="learning">
             <div className="panel-title">
-              <h2>Next module</h2>
-              <span>{nextModule?.duration ?? "Loading"}</span>
+              <h2>{completedIds.size >= (p?.passport.modulesTotal ?? 0) && (p?.passport.modulesTotal ?? 0) > 0 ? "All modules done 🎉" : "Next module"}</h2>
+              <span>{nextModule?.duration ?? ""}</span>
             </div>
             <strong>{nextModule?.title ?? "Loading module…"}</strong>
-            <p>{nextModule?.summary ?? "Fetching assigned learning journey."}</p>
+            <p>{nextModule?.summary ?? "Fetching your learning journey."}</p>
             <p className="chat-hint">▶ Start it from the Chat tab</p>
           </article>
 
           <article className="panel passport-entries-panel">
             <div className="panel-title">
               <h2>Recent activity</h2>
-              <span>Live record</span>
+              <span>Your record</span>
             </div>
             <div className="entry-list">
-              {(bootstrap?.passport.recentEntries ?? []).map((entry) => (
-                <div key={entry.id} className="entry-item">
-                  <div>
-                    <strong>{entry.title}</strong>
-                    <p>
-                      {entry.behavior} • {entry.date}
-                    </p>
+              {(p?.passport.recentEntries ?? []).length > 0 ? (
+                p!.passport.recentEntries.map((entry) => (
+                  <div key={entry.id} className="entry-item">
+                    <div>
+                      <strong>{entry.title}</strong>
+                      <p>{fmtDate(entry.date)}</p>
+                    </div>
+                    <span className="entry-points">+{entry.points}</span>
                   </div>
-                  <span className="entry-points">+{entry.points}</span>
-                </div>
-              ))}
+                ))
+              ) : (
+                <p className="subtle">Nothing yet — answer today's drop or finish a module in Chat.</p>
+              )}
             </div>
           </article>
 

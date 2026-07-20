@@ -27,6 +27,11 @@ services:
       PORT: 4175
       DATABASE_URL: postgres://${POSTGRES_USER:-cpn_engage}:${POSTGRES_PASSWORD:-cpn_engage_local}@postgres:5432/${POSTGRES_DB:-cpn_engage}
       NOTIFICATION_BOT_URL: http://bot:4177
+      # Admin authorization — the console must send this as x-admin-key. In prod
+      # the installer generates a random one; this is a fixed local-dev value.
+      ADMIN_KEY: ${ADMIN_KEY:-local-dev-admin-key}
+      # Allow browser guests (per-browser per-user state) in local dev.
+      ALLOW_GUEST: ${ALLOW_GUEST:-true}
       # Teams SSO token validation (Profile tab) — optional locally.
       TEAMS_APP_ID: ${TEAMS_APP_ID:-}
       TEAMS_APP_TENANT_ID: ${TEAMS_APP_TENANT_ID:-}
@@ -53,6 +58,9 @@ services:
       TEAMS_APP_PASSWORD: ${TEAMS_APP_PASSWORD:-}
       TEAMS_APP_TENANT_ID: ${TEAMS_APP_TENANT_ID:-}
       PUSH_TOKEN: ${PUSH_TOKEN:-}
+      # Same admin key as the API — gates the /internal/* ops endpoints the
+      # console calls (users roster, sync, broadcast).
+      ADMIN_KEY: ${ADMIN_KEY:-local-dev-admin-key}
       ADMIN_ORIGIN: ${ADMIN_ORIGIN:-*}
     ports:
       - "4177:4177"
@@ -79,6 +87,8 @@ services:
       args:
         VITE_API_BASE_URL: http://localhost:4175
         VITE_BOT_BASE_URL: http://localhost:4177
+        # Local dev only — auto-unlocks the console. Prod builds omit this.
+        VITE_ADMIN_KEY: ${ADMIN_KEY:-local-dev-admin-key}
     restart: unless-stopped
     ports:
       - "4174:80"

@@ -4,6 +4,15 @@ import { ssoConfigured, verifyTeamsToken } from "./sso.js";
 import { initScores, recordScore, computeLeaderboard, userScore, clearScores } from "./scores.js";
 import { initModules, listModules, upsertModule, deleteModule } from "./modules.js";
 import { initFeed, listFeed, addFeedPost, toggleReactionDb, clearFeed, feedPersistent } from "./feed.js";
+import { runMigrations, dbPing } from "./db.js";
+import { resolveIdentity } from "./identity.js";
+import { requireAdmin } from "./authz.js";
+import {
+  touchProfile,
+  completeModuleForUser,
+  recordChallengeRun,
+  getMyState
+} from "./users.js";
 import type { ModuleContent } from "@cpn-engage/shared";
 import {
   demoBootstrap,
@@ -19,8 +28,23 @@ import {
 const app = Fastify({ logger: true });
 let notificationSequence = 0;
 
+// CORS: exact-origin allowlist in production (ALLOWED_ORIGINS, comma-separated);
+// reflect any origin in dev so local tabs on various ports just work.
+const allowedOrigins = (process.env.ALLOWED_ORIGINS ?? "")
+  .split(",")
+  .map((o) => o.trim())
+  .filter(Boolean);
 await app.register(cors, {
-  origin: true
+  origin: allowedOrigins.length > 0 ? allowedOrigins : true,
+  methods: ["GET", "POST", "DELETE", "OPTIONS"],
+  allowedHeaders: ["Content-Type", "Authorization", "x-admin-key", "x-cpn-guest"]
+});
+
+// Gate every /api/admin/* route behind the admin key (fail-closed in prod).
+app.addHook("onRequest", async (request, reply) => {
+  if (request.url.startsWith("/api/admin/")) {
+    if (!requireAdmin(request, reply)) return reply; // reply already sent
+  }
 });
 
 let state: BootstrapResponse = structuredClone(demoBootstrap);
@@ -294,6 +318,17 @@ function runScenario(name: DemoScenarioName) {
 }
 
 app.get("/health", async () => ({ ok: true }));
+app.get("/version", async () => ({
+  service: "api",
+  version: process.env.APP_VERSION ?? "dev",
+  commit: process.env.GIT_SHA ?? null
+}));
+// Readiness = DB reachable (or intentionally DB-less demo mode).
+app.get("/readyz", async (_request, reply) => {
+  const db = await dbPing();
+  const ready = db || !process.env.DATABASE_URL;
+  return reply.code(ready ? 200 : 503).send({ ok: ready, db });
+});
 
 /**
  * Personalized profile — SSO-protected. The Profile tab sends the silent Teams
@@ -327,6 +362,36 @@ app.get("/api/profile/me", async (request, reply) => {
     progress: {
       modules: state.modules,
       leaderboard: state.leaderboard
+    }
+  };
+});
+
+/**
+ * The signed-in user's OWN state — the per-user replacement for the shared
+ * passport/streak/progress that used to live on the global demo object. Identity
+ * is a verified SSO oid (or a dev guest id); everything returned is assembled
+ * from that user's rows, so two people see two different passports.
+ *
+ * `org` carries the shared content (modules, daily drop, feed) both users share.
+ */
+app.get("/api/me", async (request, reply) => {
+  const id = await resolveIdentity(request);
+  if (!id) {
+    return reply.code(401).send({ ok: false, error: "no identity (SSO token or guest id required)" });
+  }
+  await touchProfile({ oid: id.oid, name: id.name, email: id.email });
+  const liveModules = await listModules({ liveOnly: true });
+  const me = await getMyState({ oid: id.oid, name: id.name, email: id.email }, liveModules.map((m) => m.id));
+  if (feedPersistent) state.feed = await listFeed();
+  return {
+    ok: true,
+    verified: id.verified,
+    me,
+    org: {
+      modules: liveModules,
+      dailyDrop: state.dailyDrop,
+      feed: state.feed,
+      capstone: state.capstone
     }
   };
 });
@@ -369,8 +434,11 @@ app.post<{
       userName: request.body.userName,
       points: 75,
       reason: `Completed ${target.title}`,
-      ref: `module:${id}:${request.body.userKey}`
+      ref: `module:${id}:${request.body.userKey}`,
+      belief: (target as { track?: string }).track ?? null
     });
+    // Per-user progress — the source of truth for THIS user's passport.
+    await completeModuleForUser(request.body.userKey, id);
   }
 
   state.modules = state.modules.map((item) =>
@@ -421,13 +489,17 @@ app.post<{
   }
 
   if (request.body?.userKey) {
+    const pts = request.body.best ? 50 : 20;
     await recordScore({
       userKey: request.body.userKey,
       userName: request.body.userName,
-      points: request.body.best ? 50 : 20,
+      points: pts,
       reason: `Challenge: ${target.title}`,
-      ref: `challenge:${id}:${request.body.userKey}`
+      ref: `challenge:${id}:${request.body.userKey}`,
+      belief: target.behavior ?? null
     });
+    // Per-user challenge run — drives THIS user's streak + "answered today".
+    await recordChallengeRun(request.body.userKey, id, Boolean(request.body.best), pts);
   }
 
   state.challenges = state.challenges.map((item) =>
@@ -661,6 +733,7 @@ app.delete<{ Params: { id: string } }>("/api/admin/modules/:id", async (request)
 
 const port = Number(process.env.PORT || 4175);
 
+await runMigrations(); // per-user tables + schema_migrations before anything reads them
 await initScores();
 await initModules();
 await initFeed();

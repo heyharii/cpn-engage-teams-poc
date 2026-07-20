@@ -4,9 +4,41 @@ import type { BootstrapResponse, ModuleContent } from "@cpn-engage/shared";
 const API = import.meta.env.VITE_API_BASE_URL ?? "http://127.0.0.1:4175";
 const BOT = import.meta.env.VITE_BOT_BASE_URL ?? "http://127.0.0.1:4177";
 
+const ADMIN_KEY_STORAGE = "cpn-admin-key";
+
+/** The admin key: from the login gate (localStorage), or a dev default. */
+export function getAdminKey(): string {
+  try {
+    return localStorage.getItem(ADMIN_KEY_STORAGE) ?? (import.meta.env.VITE_ADMIN_KEY as string) ?? "";
+  } catch {
+    return (import.meta.env.VITE_ADMIN_KEY as string) ?? "";
+  }
+}
+export function setAdminKey(key: string): void {
+  try {
+    localStorage.setItem(ADMIN_KEY_STORAGE, key);
+  } catch {
+    /* ignore */
+  }
+}
+
+/** Verify a candidate key against the API (used by the login gate). */
+export async function verifyAdminKey(key: string): Promise<boolean> {
+  try {
+    const r = await fetch(`${API}/api/admin/modules`, { headers: { "x-admin-key": key } });
+    return r.ok;
+  } catch {
+    return false;
+  }
+}
+
+function authHeaders(extra?: Record<string, string>): Record<string, string> {
+  return { "x-admin-key": getAdminKey(), ...extra };
+}
+
 async function get<T>(url: string): Promise<T | null> {
   try {
-    const r = await fetch(url);
+    const r = await fetch(url, { headers: authHeaders() });
     if (!r.ok) return null;
     return (await r.json()) as T;
   } catch {
@@ -18,7 +50,7 @@ async function post<T>(url: string, body?: unknown): Promise<T | null> {
   try {
     const r = await fetch(url, {
       method: "POST",
-      headers: body ? { "Content-Type": "application/json" } : {},
+      headers: authHeaders(body ? { "Content-Type": "application/json" } : {}),
       body: body ? JSON.stringify(body) : undefined
     });
     if (!r.ok) return null;
@@ -68,7 +100,10 @@ export const saveModule = (m: ModuleContent) =>
   post<{ ok: boolean; module: ModuleContent }>(`${API}/api/admin/modules`, m);
 export async function deleteModuleApi(id: string): Promise<boolean> {
   try {
-    const r = await fetch(`${API}/api/admin/modules/${encodeURIComponent(id)}`, { method: "DELETE" });
+    const r = await fetch(`${API}/api/admin/modules/${encodeURIComponent(id)}`, {
+      method: "DELETE",
+      headers: authHeaders()
+    });
     return r.ok;
   } catch {
     return false;

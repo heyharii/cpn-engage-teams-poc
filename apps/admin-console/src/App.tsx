@@ -38,6 +38,9 @@ import {
   enrichAudience,
   pushBroadcast,
   scheduleTest,
+  getAdminKey,
+  setAdminKey,
+  verifyAdminKey,
   type RosterUser,
   type LeaderRow
 } from "@/lib/api";
@@ -53,6 +56,79 @@ const NAV: { id: NavId; label: string; icon: typeof Users }[] = [
 ];
 
 export function App() {
+  // Auth gate — the console needs a valid admin key before it can load anything.
+  const [authed, setAuthed] = useState<boolean | null>(null);
+  useEffect(() => {
+    const key = getAdminKey();
+    if (!key) {
+      setAuthed(false);
+      return;
+    }
+    void verifyAdminKey(key).then(setAuthed);
+  }, []);
+
+  if (authed === null) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-background text-muted-foreground">
+        Checking access…
+      </div>
+    );
+  }
+  if (!authed) {
+    return <LoginGate onAuthed={() => setAuthed(true)} />;
+  }
+  return <Console />;
+}
+
+function LoginGate(props: { onAuthed: () => void }) {
+  const [key, setKey] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  async function submit() {
+    setBusy(true);
+    setError(null);
+    const ok = await verifyAdminKey(key.trim());
+    setBusy(false);
+    if (ok) {
+      setAdminKey(key.trim());
+      props.onAuthed();
+    } else {
+      setError("That key was rejected. Check the key from your installer.");
+    }
+  }
+
+  return (
+    <div className="flex min-h-screen items-center justify-center bg-background p-4">
+      <Card className="w-full max-w-sm">
+        <CardHeader>
+          <div className="mb-2 flex size-10 items-center justify-center rounded-lg bg-primary font-bold text-primary-foreground">
+            C
+          </div>
+          <CardTitle>CPN Engage Admin</CardTitle>
+          <p className="text-sm text-muted-foreground">Enter your admin key to continue.</p>
+        </CardHeader>
+        <CardContent className="flex flex-col gap-3">
+          <Input
+            type="password"
+            placeholder="Admin key"
+            value={key}
+            onChange={(e) => setKey(e.target.value)}
+            onKeyDown={(e) => e.key === "Enter" && void submit()}
+            autoFocus
+          />
+          {error ? <p className="text-sm text-destructive">{error}</p> : null}
+          <Button disabled={busy || !key.trim()} onClick={() => void submit()}>
+            {busy ? <Loader2 className="size-4 animate-spin" /> : null}
+            Unlock
+          </Button>
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
+function Console() {
   const [nav, setNav] = useState<NavId>("overview");
   const [boot, setBoot] = useState<BootstrapResponse | null>(null);
   const [roster, setRoster] = useState<RosterUser[]>([]);
