@@ -10,17 +10,18 @@ import {
   saveDrop,
   activateDrop,
   deleteDropApi,
+  getBeliefs,
   type AdminDrop,
   type DropOption
 } from "@/lib/api";
 
-const BELIEFS = ["Dynamism", "Customers", "Communities", "Collaboration"];
+const DEFAULT_BELIEFS = ["Dynamism", "Customers", "Communities", "Collaboration"];
 
 function blankDrop(): AdminDrop {
   return {
     id: "",
     title: "Daily Drop",
-    behavior: BELIEFS[1],
+    behavior: DEFAULT_BELIEFS[1],
     question: "",
     rewardLabel: "Up to 50 points",
     timeLimit: "30 sec",
@@ -34,13 +35,16 @@ function blankDrop(): AdminDrop {
 
 export function ChallengesView() {
   const [drops, setDrops] = useState<AdminDrop[]>([]);
+  const [beliefs, setBeliefs] = useState<string[]>(DEFAULT_BELIEFS);
   const [loading, setLoading] = useState(true);
   const [editing, setEditing] = useState<AdminDrop | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
 
   async function load() {
     setLoading(true);
-    setDrops((await getAdminDrops()) ?? []);
+    const [d, b] = await Promise.all([getAdminDrops(), getBeliefs()]);
+    setDrops(d ?? []);
+    if (b && b.length > 0) setBeliefs(b.map((x) => x.name));
     setLoading(false);
   }
   useEffect(() => {
@@ -63,6 +67,7 @@ export function ChallengesView() {
     return (
       <DropEditor
         initial={editing}
+        beliefs={beliefs}
         onClose={() => setEditing(null)}
         onSaved={async () => {
           setEditing(null);
@@ -129,7 +134,7 @@ export function ChallengesView() {
   );
 }
 
-function DropEditor(props: { initial: AdminDrop; onClose: () => void; onSaved: () => Promise<void> }) {
+function DropEditor(props: { initial: AdminDrop; beliefs: string[]; onClose: () => void; onSaved: () => Promise<void> }) {
   const [d, setD] = useState<AdminDrop>(props.initial);
   const [saving, setSaving] = useState(false);
   const set = (patch: Partial<AdminDrop>) => setD((prev) => ({ ...prev, ...patch }));
@@ -201,7 +206,7 @@ function DropEditor(props: { initial: AdminDrop; onClose: () => void; onSaved: (
                   value={d.behavior}
                   onChange={(e) => set({ behavior: e.target.value })}
                 >
-                  {BELIEFS.map((b) => (
+                  {props.beliefs.map((b) => (
                     <option key={b} value={b}>
                       {b}
                     </option>

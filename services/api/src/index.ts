@@ -30,6 +30,15 @@ import { resolveIdentity } from "./identity.js";
 import { requireAdmin } from "./authz.js";
 import { buildDebugBundle, recordClientError } from "./debug.js";
 import {
+  initBeliefs,
+  listBeliefs,
+  listBehaviors,
+  upsertBelief,
+  deleteBelief,
+  beliefsEnabled,
+  type Belief
+} from "./beliefs.js";
+import {
   touchProfile,
   completeModuleForUser,
   recordChallengeRun,
@@ -422,8 +431,13 @@ app.get("/api/me", async (request, reply) => {
 app.get("/api/bootstrap", async () => {
   if (feedPersistent) state.feed = await listFeed();
   if (dropsEnabled) state.dailyDrop = await getActiveDrop();
+  if (beliefsEnabled) state.behaviors = await listBehaviors();
   return state;
 });
+
+// Public list of Beliefs — the single source for the module/drop editors'
+// belief pickers and the employee "four behaviours" panel.
+app.get("/api/beliefs", async () => listBeliefs());
 app.get("/api/users/me", async () => state.currentUser);
 app.get("/api/modules", async () => state.modules);
 app.get("/api/challenges", async () => state.challenges);
@@ -878,6 +892,18 @@ app.post<{ Body: { surface?: string; message?: string; detail?: string; url?: st
   }
 );
 
+// Beliefs authoring — the CPN values, editable (no longer hardcoded).
+app.get("/api/admin/beliefs", async () => listBeliefs());
+app.post<{ Body: Belief }>("/api/admin/beliefs", async (request) => {
+  const b = { ...request.body, id: request.body.id || `belief-${Date.now()}` };
+  const saved = await upsertBelief(b);
+  return { ok: true, belief: saved };
+});
+app.delete<{ Params: { id: string } }>("/api/admin/beliefs/:id", async (request) => {
+  await deleteBelief(request.params.id);
+  return { ok: true };
+});
+
 // Announcements — admins post to the community feed (pinned announcement kind).
 app.post<{ Body: { title?: string; message?: string } }>("/api/admin/announce", async (request, reply) => {
   const title = (request.body?.title ?? "").trim();
@@ -920,9 +946,11 @@ await runMigrations(); // per-user tables + schema_migrations before anything re
 await initScores();
 await initModules();
 await initDrops();
+await initBeliefs();
 await initFeed();
 if (feedPersistent) state.feed = await listFeed();
 if (dropsEnabled) state.dailyDrop = await getActiveDrop(); // serve the authored active drop
+if (beliefsEnabled) state.behaviors = await listBehaviors(); // serve authored beliefs
 
 app
   .listen({ port, host: "0.0.0.0" })

@@ -94,6 +94,23 @@ export const pushBroadcast = (type: "challenge" | "module", moduleId?: string) =
 export const scheduleTest = (seconds: number) =>
   post<{ ok: boolean; scheduledInSeconds: number | null }>(`${BOT}/internal/schedule-test?seconds=${seconds}`);
 
+// --- Beliefs authoring (single source for belief pickers) ---
+export type Belief = { id: string; name: string; tagline: string; orderIdx: number };
+export const getBeliefs = () => get<Belief[]>(`${API}/api/beliefs`);
+export const getAdminBeliefs = () => get<Belief[]>(`${API}/api/admin/beliefs`);
+export const saveBelief = (b: Belief) => post<{ ok: boolean; belief: Belief }>(`${API}/api/admin/beliefs`, b);
+export async function deleteBeliefApi(id: string): Promise<boolean> {
+  try {
+    const r = await fetch(`${API}/api/admin/beliefs/${encodeURIComponent(id)}`, {
+      method: "DELETE",
+      headers: authHeaders()
+    });
+    return r.ok;
+  } catch {
+    return false;
+  }
+}
+
 // --- System / debug ---
 export const getDebugBundle = () => get<Record<string, unknown>>(`${API}/api/admin/debug-bundle`);
 export function debugBundleUrl(): string {

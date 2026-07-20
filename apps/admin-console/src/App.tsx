@@ -7,6 +7,7 @@ import {
   Trophy,
   BookOpen,
   Zap,
+  Target,
   Megaphone,
   EyeOff,
   Activity,
@@ -23,6 +24,7 @@ import {
 } from "lucide-react";
 import { ContentView } from "@/content-view";
 import { ChallengesView } from "@/challenges-view";
+import { BeliefsView } from "@/beliefs-view";
 import type { BootstrapResponse, FeedItem, ModuleContent } from "@cpn-engage/shared";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -65,11 +67,13 @@ type NavId =
   | "broadcast"
   | "recognitions"
   | "leaderboard"
+  | "beliefs"
   | "system";
 const NAV: { id: NavId; label: string; icon: typeof Users }[] = [
   { id: "overview", label: "Overview", icon: LayoutDashboard },
   { id: "content", label: "Content", icon: BookOpen },
   { id: "challenges", label: "Challenges", icon: Zap },
+  { id: "beliefs", label: "Beliefs", icon: Target },
   { id: "users", label: "Users", icon: Users },
   { id: "broadcast", label: "Broadcast", icon: Send },
   { id: "recognitions", label: "Recognitions", icon: Heart },
@@ -216,6 +220,7 @@ function Console() {
         )}
         {nav === "content" && <ContentView />}
         {nav === "challenges" && <ChallengesView />}
+        {nav === "beliefs" && <BeliefsView />}
         {nav === "users" && (
           <UsersView roster={roster} directoryCount={directoryCount} leaders={leaders} onReload={loadAll} />
         )}

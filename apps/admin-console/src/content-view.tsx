@@ -24,13 +24,14 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
-import { getAdminModules, saveModule, deleteModuleApi, reorderModules } from "@/lib/api";
+import { getAdminModules, saveModule, deleteModuleApi, reorderModules, getBeliefs } from "@/lib/api";
 
-const BELIEFS = ["Dynamism", "Customers", "Communities", "Collaboration"];
+// Fallback only — the real list comes from the authored Beliefs (getBeliefs).
+const DEFAULT_BELIEFS = ["Dynamism", "Customers", "Communities", "Collaboration"];
 const OPTION_KEYS = ["A", "B", "C", "D"];
 
 function slugId(title: string): string {
-  return `mod-${title.toLowerCase().replace(/[^a-z0-9]+/g, "-").slice(0, 32)}-${Math.abs(hash(title + BELIEFS.length))}`;
+  return `mod-${title.toLowerCase().replace(/[^a-z0-9]+/g, "-").slice(0, 32)}-${Math.abs(hash(title + "salt"))}`;
 }
 function hash(s: string): number {
   let h = 0;
@@ -52,7 +53,7 @@ function blankModule(): ModuleContent {
     id: "",
     title: "",
     summary: "",
-    track: BELIEFS[0],
+    track: DEFAULT_BELIEFS[0],
     durationMin: 10,
     videoUrl: "",
     outcome: "",
@@ -65,13 +66,15 @@ function blankModule(): ModuleContent {
 
 export function ContentView() {
   const [modules, setModules] = useState<ModuleContent[]>([]);
+  const [beliefs, setBeliefs] = useState<string[]>(DEFAULT_BELIEFS);
   const [loading, setLoading] = useState(true);
   const [editing, setEditing] = useState<ModuleContent | null>(null);
 
   async function load() {
     setLoading(true);
-    const m = await getAdminModules();
+    const [m, b] = await Promise.all([getAdminModules(), getBeliefs()]);
     setModules(m ?? []);
+    if (b && b.length > 0) setBeliefs(b.map((x) => x.name));
     setLoading(false);
   }
   useEffect(() => {
@@ -98,6 +101,7 @@ export function ContentView() {
     return (
       <ModuleEditor
         initial={editing}
+        beliefs={beliefs}
         onClose={() => setEditing(null)}
         onSaved={async () => {
           setEditing(null);
@@ -125,7 +129,7 @@ export function ContentView() {
         <p className="text-sm text-muted-foreground">Loading…</p>
       ) : (
         <div className="flex flex-col gap-6">
-          {BELIEFS.map((belief) => {
+          {beliefs.map((belief) => {
             const items = modules.filter((m) => m.track === belief);
             return (
               <div key={belief}>
@@ -225,7 +229,7 @@ function SortableModuleRow(props: { module: ModuleContent; onEdit: () => void; o
   );
 }
 
-function ModuleEditor(props: { initial: ModuleContent; onClose: () => void; onSaved: () => Promise<void> }) {
+function ModuleEditor(props: { initial: ModuleContent; beliefs: string[]; onClose: () => void; onSaved: () => Promise<void> }) {
   const [m, setM] = useState<ModuleContent>(props.initial);
   const [saving, setSaving] = useState(false);
   const set = (patch: Partial<ModuleContent>) => setM((prev) => ({ ...prev, ...patch }));
@@ -304,7 +308,7 @@ function ModuleEditor(props: { initial: ModuleContent; onClose: () => void; onSa
                     value={m.track}
                     onChange={(e) => set({ track: e.target.value })}
                   >
-                    {BELIEFS.map((b) => (
+                    {props.beliefs.map((b) => (
                       <option key={b} value={b}>
                         {b}
                       </option>
