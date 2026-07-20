@@ -41,6 +41,17 @@ export async function initFeed(): Promise<void> {
       primary key (feed_id, emoji, reactor)
     )
   `;
+  await sql`
+    create table if not exists feed_comments (
+      id bigserial primary key,
+      feed_id text not null,
+      author_key text not null,
+      author_name text,
+      body text not null,
+      created_at timestamptz not null default now()
+    )
+  `;
+  await sql`create index if not exists feed_comments_feed_idx on feed_comments (feed_id, created_at)`;
   const n = await sql`select count(*)::int as n from feed_posts`;
   if (n[0].n === 0) {
     for (const f of demoFeed.filter((f) => f.kind !== "leaderboard")) await insertPost(f);
@@ -117,9 +128,130 @@ export async function toggleReactionDb(
   return reactionsFor(feedId);
 }
 
-/** Clear all feed posts + reactions (used by the demo reset). */
+export type FeedComment = {
+  id: string;
+  feedId: string;
+  authorKey: string;
+  author: string | null;
+  body: string;
+  createdAt: string;
+};
+
+/** All comments for a post, oldest first. */
+export async function listComments(feedId: string): Promise<FeedComment[]> {
+  if (!sql) return [];
+  const rows = await sql<
+    { id: string; feed_id: string; author_key: string; author_name: string | null; body: string; created_at: Date }[]
+  >`
+    select id, feed_id, author_key, author_name, body, created_at
+    from feed_comments where feed_id = ${feedId} order by created_at asc
+  `;
+  return rows.map((r) => ({
+    id: String(r.id),
+    feedId: r.feed_id,
+    authorKey: r.author_key,
+    author: r.author_name,
+    body: r.body,
+    createdAt: r.created_at instanceof Date ? r.created_at.toISOString() : String(r.created_at)
+  }));
+}
+
+/** Append a comment; returns the created row. */
+export async function addComment(
+  feedId: string,
+  authorKey: string,
+  authorName: string | null,
+  body: string
+): Promise<FeedComment | null> {
+  if (!sql) return null;
+  const rows = await sql<{ id: string; created_at: Date }[]>`
+    insert into feed_comments (feed_id, author_key, author_name, body)
+    values (${feedId}, ${authorKey}, ${authorName}, ${body})
+    returning id, created_at
+  `;
+  const r = rows[0];
+  return {
+    id: String(r.id),
+    feedId,
+    authorKey,
+    author: authorName,
+    body,
+    createdAt: r.created_at instanceof Date ? r.created_at.toISOString() : String(r.created_at)
+  };
+}
+
+/** Comment counts for a set of posts (single query). */
+export async function commentCounts(feedIds: string[]): Promise<Map<string, number>> {
+  const map = new Map<string, number>();
+  if (!sql || feedIds.length === 0) return map;
+  const rows = await sql<{ feed_id: string; count: number }[]>`
+    select feed_id, count(*)::int as count from feed_comments
+    where feed_id in ${sql(feedIds)} group by feed_id
+  `;
+  for (const r of rows) map.set(r.feed_id, r.count);
+  return map;
+}
+
+/**
+ * Keyset-paginated feed: posts strictly older than `before` (an ISO createdAt),
+ * newest first, with reactions + comment counts attached. `limit` caps the page.
+ */
+export async function listFeedPage(
+  limit = 20,
+  before?: string
+): Promise<{ items: FeedItem[]; nextCursor: string | null }> {
+  if (!sql) {
+    const items = demoFeed.filter((f) => f.kind !== "leaderboard").slice(0, limit);
+    return { items, nextCursor: null };
+  }
+  const posts = before
+    ? await sql`select * from feed_posts where created_at < ${before} order by created_at desc limit ${limit + 1}`
+    : await sql`select * from feed_posts order by created_at desc limit ${limit + 1}`;
+
+  const hasMore = posts.length > limit;
+  const page = hasMore ? posts.slice(0, limit) : posts;
+  const ids = page.map((p) => (p as Record<string, unknown>).id as string);
+
+  const reacts = ids.length
+    ? await sql<{ feed_id: string; emoji: string; count: number }[]>`
+        select feed_id, emoji, count(*)::int as count from feed_reactions
+        where feed_id in ${sql(ids)} group by feed_id, emoji
+      `
+    : [];
+  const byFeed = new Map<string, { emoji: string; count: number }[]>();
+  for (const r of reacts) {
+    const list = byFeed.get(r.feed_id) ?? [];
+    list.push({ emoji: r.emoji, count: r.count });
+    byFeed.set(r.feed_id, list);
+  }
+  const counts = await commentCounts(ids);
+
+  const items: FeedItem[] = page.map((p) => {
+    const row = p as Record<string, unknown>;
+    const created = row.created_at as Date | string;
+    return {
+      id: row.id as string,
+      kind: row.kind as FeedItem["kind"],
+      title: (row.title as string) ?? "",
+      summary: (row.summary as string) ?? "",
+      author: (row.author as string) ?? undefined,
+      target: (row.target as string) ?? undefined,
+      belief: (row.belief as string) ?? undefined,
+      message: (row.message as string) ?? undefined,
+      createdAt: created instanceof Date ? created.toISOString() : String(created),
+      reactions: byFeed.get(row.id as string) ?? [],
+      commentCount: counts.get(row.id as string) ?? 0
+    } as FeedItem & { commentCount: number };
+  });
+
+  const nextCursor = hasMore ? items[items.length - 1]?.createdAt ?? null : null;
+  return { items, nextCursor };
+}
+
+/** Clear all feed posts + reactions + comments (used by the demo reset). */
 export async function clearFeed(): Promise<void> {
   if (!sql) return;
+  await sql`truncate table feed_comments`;
   await sql`truncate table feed_reactions`;
   await sql`truncate table feed_posts`;
 }

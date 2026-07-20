@@ -194,6 +194,8 @@ export type FeedItem = {
   message?: string;
   createdAt?: string;
   reactions?: FeedReaction[];
+  /** Number of comments on this post (attached by the paginated feed). */
+  commentCount?: number;
 };
 
 export type PassportValueProgress = {

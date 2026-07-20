@@ -3,7 +3,17 @@ import Fastify from "fastify";
 import { ssoConfigured, verifyTeamsToken } from "./sso.js";
 import { initScores, recordScore, computeLeaderboard, userScore, clearScores } from "./scores.js";
 import { initModules, listModules, upsertModule, deleteModule } from "./modules.js";
-import { initFeed, listFeed, addFeedPost, toggleReactionDb, clearFeed, feedPersistent } from "./feed.js";
+import {
+  initFeed,
+  listFeed,
+  listFeedPage,
+  addFeedPost,
+  toggleReactionDb,
+  listComments,
+  addComment,
+  clearFeed,
+  feedPersistent
+} from "./feed.js";
 import { runMigrations, dbPing } from "./db.js";
 import { resolveIdentity } from "./identity.js";
 import { requireAdmin } from "./authz.js";
@@ -628,6 +638,96 @@ app.post<{
   toggleReaction(request.params.id, emoji, reactor);
   return { ok: true, reactions: item.reactions ?? [] };
 });
+
+/**
+ * Keyset-paginated feed for infinite scroll. `?before=<ISO>` returns posts
+ * older than that cursor; response carries the next cursor (null when done).
+ */
+app.get<{ Querystring: { before?: string; limit?: string } }>("/api/feed/page", async (request) => {
+  if (!feedPersistent) {
+    return { ok: true, items: state.feed.filter((f) => f.kind !== "leaderboard"), nextCursor: null };
+  }
+  const limit = Math.min(Math.max(Number(request.query.limit) || 20, 1), 50);
+  const page = await listFeedPage(limit, request.query.before);
+  return { ok: true, ...page };
+});
+
+// Comments on a post — read is open, posting needs an identity (SSO or guest).
+app.get<{ Params: { id: string } }>("/api/feed/:id/comments", async (request) => {
+  const comments = feedPersistent ? await listComments(request.params.id) : [];
+  return { ok: true, comments };
+});
+
+app.post<{ Params: { id: string }; Body: { body?: string } }>(
+  "/api/feed/:id/comments",
+  async (request, reply) => {
+    const body = (request.body?.body ?? "").trim();
+    if (!body) return reply.code(400).send({ ok: false, error: "comment body required" });
+    if (body.length > 1000) return reply.code(400).send({ ok: false, error: "comment too long" });
+    const id = await resolveIdentity(request);
+    if (!id) return reply.code(401).send({ ok: false, error: "identity required to comment" });
+    if (!feedPersistent) return reply.code(503).send({ ok: false, error: "comments need a database" });
+    await touchProfile({ oid: id.oid, name: id.name, email: id.email });
+    const comment = await addComment(request.params.id, id.oid, id.name, body);
+    return { ok: true, comment };
+  }
+);
+
+/**
+ * Compose a recognition FROM the Feeds tab. The author is the signed-in user
+ * (derived from the verified identity, never the request body), so nobody can
+ * post as someone else. Posts to the public feed + awards the author — the same
+ * pipeline the bot uses, now available in the web tab.
+ */
+app.post<{ Body: { target?: string; belief?: string; message?: string } }>(
+  "/api/feed/compose",
+  async (request, reply) => {
+    const id = await resolveIdentity(request);
+    if (!id) return reply.code(401).send({ ok: false, error: "sign-in required to post" });
+    const target = (request.body?.target ?? "").trim();
+    const belief = (request.body?.belief ?? "").trim();
+    const message = (request.body?.message ?? "").trim();
+    if (!target || !message) {
+      return reply.code(400).send({ ok: false, error: "target and message are required" });
+    }
+    const author = id.name ?? "A colleague";
+    const recId = `rec-${Date.now()}`;
+
+    await touchProfile({ oid: id.oid, name: id.name, email: id.email });
+    await recordScore({
+      userKey: id.oid,
+      userName: author,
+      points: 75,
+      reason: `Recognised ${target}`,
+      ref: `recognition:${recId}`,
+      belief: belief || null
+    });
+
+    const feedItem = buildRecognitionFeedItem({
+      id: recId,
+      employee: author,
+      target,
+      behavior: belief || "Recognition",
+      message
+    } as RecognitionQueueItem);
+
+    if (feedPersistent) {
+      await addFeedPost(feedItem);
+      state.feed = await listFeed();
+    } else {
+      state.feed = [feedItem, ...state.feed];
+    }
+
+    queueNotification({
+      type: "recognition-approved",
+      title: "New recognition posted",
+      summary: `${author} recognised ${target}${belief ? ` for ${belief}` : ""}.`,
+      audience: target
+    });
+
+    return { ok: true, post: feedItem };
+  }
+);
 
 app.post<{
   Params: { id: string };
