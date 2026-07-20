@@ -591,51 +591,54 @@ function Broadcast(props: { audienceCount: number; boot: BootstrapResponse | nul
   const selectedModule = modules.find((m) => m.id === moduleId) ?? modules[0] ?? null;
   const drop = boot?.dailyDrop ?? null;
 
+  const canSend = busy === null && audienceCount > 0 && !(kind === "module" && !selectedModule);
+
   return (
     <div>
       <PageHeader
         title="Broadcast"
-        subtitle="Compose a proactive card, preview it, and send it to every reachable user's Teams chat."
+        subtitle="Send a card to everyone's Teams chat. Pick what to send on the left — the right shows exactly how it will look."
       />
 
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-        {/* Composer */}
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1fr_1.1fr]">
+        {/* LEFT — pick what to send */}
         <Card>
           <CardHeader>
-            <CardTitle>Compose</CardTitle>
+            <CardTitle>1 · What to send</CardTitle>
           </CardHeader>
-          <CardContent className="flex flex-col gap-4">
-            <div>
-              <p className="mb-2 text-xs font-medium text-muted-foreground">What to send</p>
-              <div className="grid grid-cols-2 gap-2">
-                <button
-                  type="button"
-                  onClick={() => setKind("challenge")}
-                  className={cn(
-                    "rounded-lg border p-3 text-left transition-colors",
-                    kind === "challenge" ? "border-primary bg-primary/5" : "border-border hover:bg-muted/50"
-                  )}
-                >
-                  <p className="text-sm font-semibold">Daily challenge</p>
-                  <p className="text-xs text-muted-foreground">Today's drop as a quiz card</p>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setKind("module")}
-                  className={cn(
-                    "rounded-lg border p-3 text-left transition-colors",
-                    kind === "module" ? "border-primary bg-primary/5" : "border-border hover:bg-muted/50"
-                  )}
-                >
-                  <p className="text-sm font-semibold">Learning module</p>
-                  <p className="text-xs text-muted-foreground">Assign a module to everyone</p>
-                </button>
+          <CardContent className="flex flex-col gap-3">
+            <button
+              type="button"
+              onClick={() => setKind("challenge")}
+              className={cn(
+                "flex items-start gap-3 rounded-lg border p-3 text-left transition-colors",
+                kind === "challenge" ? "border-primary bg-primary/5" : "border-border hover:bg-muted/50"
+              )}
+            >
+              <Zap className={cn("mt-0.5 size-5 shrink-0", kind === "challenge" ? "text-primary" : "text-muted-foreground")} />
+              <div>
+                <p className="text-sm font-semibold">Daily challenge</p>
+                <p className="text-xs text-muted-foreground">Send today's active drop as a quiz card.</p>
               </div>
-            </div>
+            </button>
+            <button
+              type="button"
+              onClick={() => setKind("module")}
+              className={cn(
+                "flex items-start gap-3 rounded-lg border p-3 text-left transition-colors",
+                kind === "module" ? "border-primary bg-primary/5" : "border-border hover:bg-muted/50"
+              )}
+            >
+              <BookOpen className={cn("mt-0.5 size-5 shrink-0", kind === "module" ? "text-primary" : "text-muted-foreground")} />
+              <div className="flex-1">
+                <p className="text-sm font-semibold">Learning module</p>
+                <p className="text-xs text-muted-foreground">Assign one module to everyone.</p>
+              </div>
+            </button>
 
             {kind === "module" ? (
-              <div>
-                <p className="mb-2 text-xs font-medium text-muted-foreground">Module</p>
+              <div className="pl-1">
+                <label className="mb-1.5 block text-xs font-medium text-muted-foreground">Which module</label>
                 <select
                   className="h-9 w-full rounded-md border border-input bg-transparent px-3 text-sm"
                   value={selectedModule?.id ?? ""}
@@ -652,86 +655,113 @@ function Broadcast(props: { audienceCount: number; boot: BootstrapResponse | nul
                 ) : null}
               </div>
             ) : null}
-
-            <div className="flex items-center justify-between rounded-lg bg-muted/50 px-3 py-2">
-              <p className="text-sm text-muted-foreground">Audience</p>
-              <p className="text-sm font-semibold">{audienceCount} reachable users</p>
-            </div>
-
-            <Button
-              className="self-start"
-              disabled={busy !== null || audienceCount === 0 || (kind === "module" && !selectedModule)}
-              onClick={() =>
-                void run("send", async () => {
-                  const r = await pushBroadcast(kind, kind === "module" ? selectedModule?.id : undefined);
-                  return r?.ok ? `Delivered to ${r.sent} of ${r.total} users.` : "Push failed — check the bot logs.";
-                })
-              }
-            >
-              {busy === "send" ? <Loader2 className="size-4 animate-spin" /> : <Send className="size-4" />}
-              Send to {audienceCount} users
-            </Button>
-            {msg ? <p className="text-sm font-medium text-emerald-600">{msg}</p> : null}
-            {audienceCount === 0 ? (
-              <p className="text-xs text-muted-foreground">
-                No reachable users yet — employees appear here after they open the bot chat once.
-              </p>
-            ) : null}
           </CardContent>
         </Card>
 
-        {/* Card preview — what lands in the employee's Teams chat */}
+        {/* RIGHT — a Teams-chat mockup so "preview" is unmistakable */}
         <Card className="self-start">
           <CardHeader>
-            <CardTitle>Teams card preview</CardTitle>
+            <CardTitle>2 · How it looks in Teams</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="rounded-xl border border-border bg-muted/30 p-4">
-              {kind === "challenge" ? (
-                drop ? (
-                  <div className="flex flex-col gap-2">
-                    <p className="text-xs font-semibold uppercase tracking-wide text-primary">Daily challenge</p>
-                    <p className="font-semibold">{drop.behavior}</p>
-                    <p className="text-sm text-muted-foreground">{drop.question}</p>
-                    <div className="mt-1 flex items-center gap-3 text-xs text-muted-foreground">
-                      <span className="inline-flex items-center gap-1">
-                        <Trophy className="size-3.5" /> {drop.rewardLabel}
-                      </span>
-                      <span className="inline-flex items-center gap-1">
-                        <Clock className="size-3.5" /> {drop.timeLimit}
-                      </span>
-                    </div>
-                    <div className="mt-2 rounded-md bg-primary px-3 py-1.5 text-center text-sm font-medium text-primary-foreground">
-                      Play now
-                    </div>
-                  </div>
-                ) : (
-                  <p className="text-sm text-muted-foreground">Loading today's drop…</p>
-                )
-              ) : selectedModule ? (
-                <div className="flex flex-col gap-2">
-                  <p className="text-xs font-semibold uppercase tracking-wide text-primary">New module assigned</p>
-                  <p className="font-semibold">{selectedModule.title}</p>
-                  <p className="text-sm text-muted-foreground">{selectedModule.summary}</p>
-                  <div className="mt-1 flex items-center gap-2">
-                    <Badge variant="secondary">{selectedModule.track}</Badge>
-                    <span className="text-xs text-muted-foreground">{selectedModule.durationMin} min</span>
-                    <span className="text-xs text-muted-foreground">· {selectedModule.questions.length} questions</span>
-                  </div>
-                  <div className="mt-2 rounded-md bg-primary px-3 py-1.5 text-center text-sm font-medium text-primary-foreground">
-                    Start module
+            <div className="rounded-xl border border-border bg-muted/40 p-4">
+              {/* Chat message row: bot avatar + name + bubble */}
+              <div className="flex gap-2.5">
+                <div className="flex size-8 shrink-0 items-center justify-center rounded-full bg-primary text-xs font-bold text-primary-foreground">
+                  CP
+                </div>
+                <div className="min-w-0 flex-1">
+                  <p className="mb-1 text-xs">
+                    <span className="font-semibold">CPN Engage</span>
+                    <span className="text-muted-foreground"> · bot · now</span>
+                  </p>
+                  {/* The adaptive card bubble */}
+                  <div className="rounded-lg border border-border bg-card p-3 shadow-none">
+                    {kind === "challenge" ? (
+                      drop ? (
+                        <div className="flex flex-col gap-2">
+                          <p className="text-[11px] font-semibold uppercase tracking-wide text-primary">Daily challenge</p>
+                          <p className="font-semibold">{drop.behavior}</p>
+                          <p className="text-sm text-muted-foreground">{drop.question}</p>
+                          <div className="mt-1 flex items-center gap-3 text-xs text-muted-foreground">
+                            <span className="inline-flex items-center gap-1">
+                              <Trophy className="size-3.5" /> {drop.rewardLabel}
+                            </span>
+                            <span className="inline-flex items-center gap-1">
+                              <Clock className="size-3.5" /> {drop.timeLimit}
+                            </span>
+                          </div>
+                          <div className="mt-1 rounded-md bg-primary px-3 py-1.5 text-center text-sm font-medium text-primary-foreground">
+                            Play now
+                          </div>
+                        </div>
+                      ) : (
+                        <p className="text-sm text-muted-foreground">Loading today's drop…</p>
+                      )
+                    ) : selectedModule ? (
+                      <div className="flex flex-col gap-2">
+                        <p className="text-[11px] font-semibold uppercase tracking-wide text-primary">New module assigned</p>
+                        <p className="font-semibold">{selectedModule.title}</p>
+                        <p className="text-sm text-muted-foreground">{selectedModule.summary}</p>
+                        <div className="mt-1 flex flex-wrap items-center gap-2">
+                          <Badge variant="secondary">{selectedModule.track}</Badge>
+                          <span className="text-xs text-muted-foreground">{selectedModule.durationMin} min</span>
+                          <span className="text-xs text-muted-foreground">· {selectedModule.questions.length} questions</span>
+                        </div>
+                        <div className="mt-1 rounded-md bg-primary px-3 py-1.5 text-center text-sm font-medium text-primary-foreground">
+                          Start module
+                        </div>
+                      </div>
+                    ) : (
+                      <p className="text-sm text-muted-foreground">No module selected.</p>
+                    )}
                   </div>
                 </div>
-              ) : (
-                <p className="text-sm text-muted-foreground">No module selected.</p>
-              )}
+              </div>
             </div>
-            <p className="mt-3 text-xs text-muted-foreground">
-              Employees receive this as an Adaptive Card in their 1:1 chat with the CPN Engage bot.
+            <p className="mt-2 text-xs text-muted-foreground">
+              Each employee gets this as an Adaptive Card in their private 1:1 chat with the bot.
             </p>
           </CardContent>
         </Card>
       </div>
+
+      {/* SEND BAR — audience + the actual send action, full width */}
+      <Card className="mt-6">
+        <CardContent className="flex flex-wrap items-center gap-4">
+          <div className="flex items-center gap-3">
+            <div className="flex size-10 items-center justify-center rounded-lg bg-accent">
+              <Users className="size-5 text-primary" />
+            </div>
+            <div>
+              <p className="text-sm font-semibold">
+                {audienceCount} {audienceCount === 1 ? "person" : "people"} will receive this
+              </p>
+              <p className="text-xs text-muted-foreground">
+                {audienceCount === 0
+                  ? "No one is reachable yet — employees appear after they open the bot chat once."
+                  : "Everyone who has opened the CPN Engage bot at least once."}
+              </p>
+            </div>
+          </div>
+          <div className="ml-auto flex items-center gap-3">
+            {msg ? <span className="text-sm font-medium text-emerald-600">{msg}</span> : null}
+            <Button
+              size="lg"
+              disabled={!canSend}
+              onClick={() =>
+                void run("send", async () => {
+                  const r = await pushBroadcast(kind, kind === "module" ? selectedModule?.id : undefined);
+                  return r?.ok ? `Delivered to ${r.sent} of ${r.total} people.` : "Push failed — check the bot logs.";
+                })
+              }
+            >
+              {busy === "send" ? <Loader2 className="size-4 animate-spin" /> : <Send className="size-4" />}
+              Send now
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
 
       {/* Schedule for later */}
       <Card className="mt-6">
