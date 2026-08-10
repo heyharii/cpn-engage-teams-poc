@@ -13,10 +13,13 @@ export type SsoInfo = {
   error: string | null;
 };
 
+/** What the Teams host said when it did not hand over a token. */
+export type HostToken = { token: string | null; host: string; inTeams: boolean; error: string | null };
+
 export type SsoState =
   | { state: "checking" }
   | { state: "unreachable"; detail: string }
-  | { state: "ok"; verified: boolean; name: string | null; sso?: SsoInfo };
+  | { state: "ok"; verified: boolean; name: string | null; sso?: SsoInfo; host?: HostToken };
 
 const TONE = {
   ok: "border-emerald-300 bg-emerald-50 text-emerald-900",
@@ -45,12 +48,19 @@ function describe(s: SsoState): { tone: keyof typeof TONE; label: string; hint?:
     };
   }
   if (sso?.tokenPresent && sso.error) {
-    return { tone: "warn", label: "Teams SSO token rejected", hint: sso.error };
+    return { tone: "warn", label: "Teams SSO token rejected by the API", hint: sso.error };
+  }
+  // No token at all. The tab's own host is the deciding fact: Teams only issues
+  // one when this domain is the domain in the Entra Application ID URI, so show
+  // it next to whatever the host reported.
+  const h = s.host;
+  if (h && !h.inTeams) {
+    return { tone: "warn", label: "Guest mode — not running inside Teams", hint: `Served from ${h.host}.` };
   }
   return {
     tone: "warn",
-    label: "Guest mode — no Teams SSO token",
-    hint: "Browser preview, or the Teams app has no SSO consent yet."
+    label: "Guest mode — Teams issued no SSO token",
+    hint: `Tab domain: ${h?.host ?? "unknown"}${h?.error ? ` · Teams said: ${h.error}` : ""} — this domain must match the Application ID URI, and admin consent must be granted.`
   };
 }
 

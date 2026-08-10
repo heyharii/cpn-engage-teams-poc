@@ -3,7 +3,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { RefreshCw, Send, MessageCircle, Loader2 } from "lucide-react";
 import { guestId } from "@/lib/identity";
-import { teamsAuthToken, teamsDisplayName } from "@/lib/teams";
+import { teamsAuthTokenResult, teamsDisplayName, type TokenResult } from "@/lib/teams";
 import { SsoBadge, type SsoInfo, type SsoState } from "@/components/sso-badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -53,6 +53,9 @@ export function FeedsPage() {
 
   const [hostName, setHostName] = useState<string | null>(null);
   const [sso, setSso] = useState<SsoState>({ state: "checking" });
+  const [host, setHost] = useState<TokenResult | null>(null);
+  const hostRef = useRef<TokenResult | null>(null);
+  hostRef.current = host;
 
   /** Identity headers: SSO token if we have one, else the stable guest id. */
   const authHeaders = useCallback(
@@ -117,9 +120,10 @@ export function FeedsPage() {
     async function init() {
       // Both resolve to null outside Teams (guarded + timed out) instead of
       // leaving the tab waiting on a host that will never answer.
-      const [t, name] = await Promise.all([teamsAuthToken(), teamsDisplayName()]);
+      const [tokenResult, name] = await Promise.all([teamsAuthTokenResult(), teamsDisplayName()]);
       if (cancelled) return;
-      if (t) setToken(t);
+      setHost(tokenResult);
+      if (tokenResult.token) setToken(tokenResult.token);
       if (name) setHostName(name);
     }
     void init();
@@ -139,15 +143,15 @@ export function FeedsPage() {
           | null;
         if (r.ok && body) {
           setMe({ name: body.me?.profile?.name ?? null });
-          setSso({ state: "ok", verified: Boolean(body.verified), name: body.me?.profile?.name ?? null, sso: body.sso });
+          setSso({ state: "ok", verified: Boolean(body.verified), name: body.me?.profile?.name ?? null, sso: body.sso, host: hostRef.current ?? undefined });
         } else {
-          setSso({ state: "ok", verified: false, name: null, sso: body?.sso });
+          setSso({ state: "ok", verified: false, name: null, sso: body?.sso, host: hostRef.current ?? undefined });
         }
       })
       .catch((err: unknown) => {
         setSso({ state: "unreachable", detail: err instanceof Error ? err.message : "request failed" });
       });
-  }, [authHeaders]);
+  }, [authHeaders, host]);
 
   // Infinite scroll: load more when the sentinel enters view.
   useEffect(() => {

@@ -2,7 +2,7 @@ import { type BootstrapResponse } from "@cpn-engage/shared";
 import { useEffect, useState } from "react";
 import { RefreshCw, Flame, MessageSquare, BookOpen, Target, LayoutGrid, ScrollText } from "lucide-react";
 import { guestId } from "@/lib/identity";
-import { teamsAuthToken, teamsDisplayName } from "@/lib/teams";
+import { teamsAuthTokenResult, teamsDisplayName, type TokenResult } from "@/lib/teams";
 import { SsoBadge, type SsoInfo, type SsoState } from "@/components/sso-badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -55,6 +55,7 @@ export function ProfilePage() {
   const [me, setMe] = useState<MeResponse | null>(null);
   const [ssoStatus, setSsoStatus] = useState<SsoStatus>("checking");
   const [sso, setSso] = useState<SsoState>({ state: "checking" });
+  const [host, setHost] = useState<TokenResult | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const [activeNav, setActiveNav] = useState("overview");
   const apiBaseUrl = import.meta.env.VITE_API_BASE_URL ?? "http://127.0.0.1:4175";
@@ -64,7 +65,8 @@ export function ProfilePage() {
     document.getElementById(id)?.scrollIntoView({ behavior: "smooth", block: "start" });
   }
 
-  async function loadMe(token: string | null): Promise<void> {
+  async function loadMe(token: string | null, hostResult?: TokenResult | null): Promise<void> {
+    const hostInfo = hostResult ?? host;
     const headers: Record<string, string> = {};
     if (token) headers.Authorization = `Bearer ${token}`;
     else {
@@ -78,14 +80,14 @@ export function ProfilePage() {
       const res = await fetch(`${apiBaseUrl}/api/me`, { headers });
       if (!res.ok) {
         const body = (await res.json().catch(() => null)) as { sso?: SsoInfo } | null;
-        setSso({ state: "ok", verified: false, name: null, sso: body?.sso });
+        setSso({ state: "ok", verified: false, name: null, sso: body?.sso, host: hostInfo ?? undefined });
         setSsoStatus("unverified");
         return;
       }
       const data = (await res.json()) as MeResponse;
       setMe(data);
       setSsoStatus(data.verified ? "verified" : "unverified");
-      setSso({ state: "ok", verified: data.verified, name: data.me?.profile?.name ?? null, sso: data.sso });
+      setSso({ state: "ok", verified: data.verified, name: data.me?.profile?.name ?? null, sso: data.sso, host: hostInfo ?? undefined });
     } catch (err) {
       // A blocked CORS preflight or a down API lands here — say so instead of
       // leaving the tab looking empty.
@@ -101,8 +103,10 @@ export function ProfilePage() {
       .then((d) => !cancelled && setBootstrap(d));
 
     async function init() {
-      const token = await teamsAuthToken();
-      if (!cancelled) await loadMe(token);
+      const result = await teamsAuthTokenResult();
+      if (cancelled) return;
+      setHost(result);
+      await loadMe(result.token, result);
     }
     void init();
     return () => {
@@ -114,10 +118,11 @@ export function ProfilePage() {
   async function refresh() {
     setRefreshing(true);
     try {
-      // teamsAuthToken() resolves to null outside Teams instead of hanging, so
-      // the button always finishes and the guest path still refetches.
-      const token = await teamsAuthToken();
-      await loadMe(token);
+      // Resolves to a null token outside Teams instead of hanging, so the
+      // button always finishes and the guest path still refetches.
+      const result = await teamsAuthTokenResult();
+      setHost(result);
+      await loadMe(result.token, result);
       const b = await fetch(`${apiBaseUrl}/api/bootstrap`).then((r) => r.json() as Promise<BootstrapResponse>);
       setBootstrap(b);
     } finally {
