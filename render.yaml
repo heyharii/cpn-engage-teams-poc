@@ -16,7 +16,8 @@ services:
       - key: PUSH_TOKEN
         sync: false
       - key: ALLOW_GUEST
-        value: "false"
+        # Demo fallback for browser previews; a verified Teams SSO token still wins.
+        value: "true"
       - key: ALLOWED_ORIGINS
         value: https://cpn-engage-home-teams-poc.onrender.com,https://cpn-engage-community-teams-poc.onrender.com,https://cpn-engage-feed-teams-poc.onrender.com,https://cpn-engage-admin-teams-poc.onrender.com
       - key: NOTIFICATION_BOT_URL

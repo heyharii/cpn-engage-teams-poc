@@ -1,9 +1,9 @@
 import { type BootstrapResponse, type FeedItem } from "@cpn-engage/shared";
-import { app as teamsApp, authentication } from "@microsoft/teams-js";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { RefreshCw, Send, MessageCircle, Loader2 } from "lucide-react";
 import { guestId } from "@/lib/identity";
+import { teamsAuthToken, teamsDisplayName } from "@/lib/teams";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -50,15 +50,21 @@ export function FeedsPage() {
   const [loadError, setLoadError] = useState<string | null>(null);
   const sentinel = useRef<HTMLDivElement>(null);
 
+  const [hostName, setHostName] = useState<string | null>(null);
+
   /** Identity headers: SSO token if we have one, else the stable guest id. */
   const authHeaders = useCallback(
     (extra?: Record<string, string>): Record<string, string> => {
       const h: Record<string, string> = { ...extra };
       if (token) h.Authorization = `Bearer ${token}`;
-      else h["x-cpn-guest"] = guestId();
+      else {
+        h["x-cpn-guest"] = guestId();
+        // Display label only — the API keys everything on the guest id.
+        if (hostName) h["x-cpn-guest-name"] = hostName;
+      }
       return h;
     },
-    [token]
+    [token, hostName]
   );
 
   const [lbPeriod, setLbPeriod] = useState<"week" | "month" | "all">("all");
@@ -107,17 +113,12 @@ export function FeedsPage() {
   useEffect(() => {
     let cancelled = false;
     async function init() {
-      try {
-        await teamsApp.initialize();
-        try {
-          const t = await authentication.getAuthToken();
-          if (!cancelled) setToken(t);
-        } catch {
-          /* guest */
-        }
-      } catch {
-        /* browser */
-      }
+      // Both resolve to null outside Teams (guarded + timed out) instead of
+      // leaving the tab waiting on a host that will never answer.
+      const [t, name] = await Promise.all([teamsAuthToken(), teamsDisplayName()]);
+      if (cancelled) return;
+      if (t) setToken(t);
+      if (name) setHostName(name);
     }
     void init();
     void loadFirst();

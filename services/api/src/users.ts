@@ -71,6 +71,47 @@ export async function touchProfile(u: UserIdentity): Promise<void> {
   }
 }
 
+/**
+ * Best display name for a user key. Lets a request that carries no name (a
+ * returning guest, or a bot write) still be attributed to the person we already
+ * know, instead of falling back to "A colleague".
+ */
+export async function profileName(oid: string): Promise<string | null> {
+  if (!sql || !oid) return null;
+  try {
+    const rows = await sql<{ name: string | null }[]>`
+      select coalesce(d.display_name, p.name) as name
+      from user_profiles p
+      left join directory_users d on d.oid = p.oid
+      where p.oid = ${oid} limit 1
+    `;
+    return rows[0]?.name ?? null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Wipe every user's own progress — module completions, challenge runs, and the
+ * aggregates derived from them. Used by the demo reset so a rehearsed demo
+ * starts from zero instead of showing the previous run's modules and streak.
+ */
+export async function clearUserProgress(): Promise<void> {
+  if (!sql) return;
+  try {
+    await sql.begin(async (tx) => {
+      await tx`truncate table user_module_progress`;
+      await tx`truncate table user_challenge_runs`;
+      // Aggregate tables are trigger-maintained, so they must be cleared too.
+      await tx`truncate table user_module_totals`;
+      await tx`truncate table daily_challenge_participants`;
+      await tx`truncate table daily_challenge_totals`;
+    });
+  } catch (err) {
+    console.warn("[users] clearUserProgress failed:", err instanceof Error ? err.message : err);
+  }
+}
+
 /** Record that THIS user finished a module (idempotent per oid+module). */
 export async function completeModuleForUser(oid: string, moduleId: string): Promise<boolean> {
   if (!sql || !oid) return false;
@@ -148,7 +189,7 @@ export async function getMyState(
   if (!sql || !identity.oid) return empty;
 
   try {
-    const [score, progress, runs, beliefRows] = await Promise.all([
+    const [score, progress, runs, beliefRows, recognitions] = await Promise.all([
       userScore(identity.oid),
       sql<{ moduleId: string; completedAt: Date }[]>`
         select module_id as "moduleId", completed_at as "completedAt"
@@ -162,6 +203,14 @@ export async function getMyState(
         select coalesce(belief, 'General') as belief, sum(points)::int as points
         from score_events where user_key = ${identity.oid} and belief is not null
         group by belief order by points desc
+      `,
+      // Recognitions this user SENT — they earn points, so they belong in the
+      // passport timeline next to modules and challenges.
+      sql<{ ref: string; reason: string | null; points: number; createdAt: Date }[]>`
+        select ref, reason, points, created_at as "createdAt"
+        from score_events
+        where user_key = ${identity.oid} and ref like 'recognition:%'
+        order by created_at desc limit 8
       `
     ]);
 
@@ -179,8 +228,16 @@ export async function getMyState(
         && (!opts?.activeDropId || r.dropId === opts.activeDropId)
     );
 
-    // Recent passport entries — merge module completions + challenge runs.
+    // Recent passport entries — module completions + challenge runs + recognitions sent.
     const entries = [
+      ...recognitions.map((r) => ({
+        id: r.ref,
+        date: new Date(r.createdAt).toISOString(),
+        title: r.reason ?? "Recognition sent",
+        points: r.points,
+        status: "recorded" as const,
+        ts: new Date(r.createdAt).getTime()
+      })),
       ...completedLive.map((p) => ({
         id: `mod-${p.moduleId}`,
         date: new Date(p.completedAt).toISOString(),

@@ -214,252 +214,283 @@ const MIGRATIONS: Migration[] = [
   {
     id: "0010",
     name: "scalable score aggregates and read-path indexes",
-    up: async (db) => {
-      // Migrations run before the feature initializers on a fresh install, so
-      // establish the append-only event table here before backfilling totals.
-      await db`
-        create table if not exists score_events (
-          id bigserial primary key,
-          user_key text not null,
-          user_name text,
-          points integer not null,
-          reason text,
-          ref text,
-          belief text,
-          created_at timestamptz not null default now()
-        )
-      `;
-      await db`
-        delete from score_events a using score_events b
-        where a.id > b.id and a.ref is not null and a.user_key = b.user_key and a.ref = b.ref
-      `;
-      await db`create unique index if not exists score_events_user_ref_uq on score_events (user_key, ref) where ref is not null`;
-      await db`create index if not exists score_events_created_idx on score_events (created_at desc)`;
-
-      await db`
-        create table if not exists user_score_totals (
-          user_key text primary key,
-          user_name text,
-          points bigint not null default 0,
-          updated_at timestamptz not null default now()
-        )
-      `;
-      await db`
-        create table if not exists daily_score_totals (
-          business_day date not null,
-          user_key text not null,
-          user_name text,
-          points bigint not null default 0,
-          updated_at timestamptz not null default now(),
-          primary key (business_day, user_key)
-        )
-      `;
-      // Rebuild makes the migration correct even if a prior deployment was
-      // interrupted between table creation and its initial backfill.
-      await db`truncate table user_score_totals`;
-      await db`truncate table daily_score_totals`;
-      await db`
-        insert into user_score_totals (user_key, user_name, points, updated_at)
-        select user_key, (array_agg(user_name order by created_at desc) filter (where user_name is not null))[1],
-               sum(points), max(created_at)
-        from score_events group by user_key
-      `;
-      await db`
-        insert into daily_score_totals (business_day, user_key, user_name, points, updated_at)
-        select (created_at at time zone 'UTC')::date, user_key,
-               (array_agg(user_name order by created_at desc) filter (where user_name is not null))[1],
-               sum(points), max(created_at)
-        from score_events group by 1, user_key
-      `;
-      await db`
-        create index if not exists user_score_totals_leaderboard_idx
-        on user_score_totals (points desc, user_key asc)
-      `;
-      await db`create index if not exists daily_score_totals_day_points_idx on daily_score_totals (business_day, points desc)`;
-      await db`
-        create or replace function cpn_update_score_totals() returns trigger as $$
-        begin
-          insert into user_score_totals (user_key, user_name, points, updated_at)
-          values (new.user_key, new.user_name, new.points, new.created_at)
-          on conflict (user_key) do update set
-            points = user_score_totals.points + excluded.points,
-            user_name = coalesce(excluded.user_name, user_score_totals.user_name),
-            updated_at = greatest(user_score_totals.updated_at, excluded.updated_at);
-
-          insert into daily_score_totals (business_day, user_key, user_name, points, updated_at)
-          values ((new.created_at at time zone 'UTC')::date, new.user_key, new.user_name, new.points, new.created_at)
-          on conflict (business_day, user_key) do update set
-            points = daily_score_totals.points + excluded.points,
-            user_name = coalesce(excluded.user_name, daily_score_totals.user_name),
-            updated_at = greatest(daily_score_totals.updated_at, excluded.updated_at);
-          return new;
-        end
-        $$ language plpgsql
-      `;
-      await db`drop trigger if exists score_events_aggregate_insert on score_events`;
-      await db`
-        create trigger score_events_aggregate_insert
-        after insert on score_events for each row execute function cpn_update_score_totals()
-      `;
-
-      await db`create extension if not exists pg_trgm`;
-      await db`
-        create index if not exists directory_users_search_trgm_idx on directory_users
-        using gin ((lower(coalesce(display_name, '') || ' ' || coalesce(email, ''))) gin_trgm_ops)
-      `;
-      await db`create index if not exists user_challenge_runs_answered_idx on user_challenge_runs (answered_at desc)`;
-      await db`create index if not exists user_module_progress_completed_idx on user_module_progress (completed_at desc)`;
-
-      await db`
-        create table if not exists daily_challenge_participants (
-          business_day date not null,
-          user_key text not null,
-          primary key (business_day, user_key)
-        )
-      `;
-      await db`
-        create table if not exists daily_challenge_totals (
-          business_day date primary key,
-          users integer not null default 0
-        )
-      `;
-      await db`
-        insert into daily_challenge_participants (business_day, user_key)
-        select coalesce(business_day, (answered_at at time zone 'UTC')::date), oid
-        from user_challenge_runs group by 1, oid on conflict do nothing
-      `;
-      await db`truncate table daily_challenge_totals`;
-      await db`
-        insert into daily_challenge_totals (business_day, users)
-        select business_day, count(*)::int from daily_challenge_participants group by business_day
-      `;
-      await db`
-        create or replace function cpn_update_daily_challenge_totals() returns trigger as $$
-        declare inserted_rows integer;
-        begin
-          insert into daily_challenge_participants (business_day, user_key)
-          values (coalesce(new.business_day, (new.answered_at at time zone 'UTC')::date), new.oid)
-          on conflict do nothing;
-          get diagnostics inserted_rows = row_count;
-          if inserted_rows = 1 then
-            insert into daily_challenge_totals (business_day, users)
-            values (coalesce(new.business_day, (new.answered_at at time zone 'UTC')::date), 1)
-            on conflict (business_day) do update set users = daily_challenge_totals.users + 1;
-          end if;
-          return new;
-        end
-        $$ language plpgsql
-      `;
-      await db`drop trigger if exists user_challenge_runs_daily_insert on user_challenge_runs`;
-      await db`
-        create trigger user_challenge_runs_daily_insert
-        after insert on user_challenge_runs for each row execute function cpn_update_daily_challenge_totals()
-      `;
-
-      await db`
-        create table if not exists user_module_totals (
-          user_key text primary key,
-          completed integer not null default 0,
-          updated_at timestamptz not null default now()
-        )
-      `;
-      await db`truncate table user_module_totals`;
-      await db`
-        insert into user_module_totals (user_key, completed, updated_at)
-        select oid, count(*)::int, max(completed_at) from user_module_progress group by oid
-      `;
-      await db`
-        create or replace function cpn_update_user_module_totals() returns trigger as $$
-        begin
-          insert into user_module_totals (user_key, completed, updated_at)
-          values (new.oid, 1, new.completed_at)
-          on conflict (user_key) do update set
-            completed = user_module_totals.completed + 1,
-            updated_at = greatest(user_module_totals.updated_at, excluded.updated_at);
-          return new;
-        end
-        $$ language plpgsql
-      `;
-      await db`drop trigger if exists user_module_progress_aggregate_insert on user_module_progress`;
-      await db`
-        create trigger user_module_progress_aggregate_insert
-        after insert on user_module_progress for each row execute function cpn_update_user_module_totals()
-      `;
-
-      await db`
-        create table if not exists feed_posts (
-          id text primary key,
-          kind text not null,
-          title text,
-          summary text,
-          author text,
-          target text,
-          target_key text,
-          belief text,
-          message text,
-          created_at timestamptz not null default now(),
-          author_key text,
-          pending boolean not null default false,
-          hidden boolean not null default false
-        )
-      `;
-      await db`
-        create index if not exists feed_posts_visible_created_idx
-        on feed_posts (created_at desc) where hidden = false and pending = false
-      `;
-      await db`
-        create index if not exists feed_posts_pending_created_idx
-        on feed_posts (created_at desc) where pending = true
-      `;
-      await db`
-        create table if not exists daily_recognition_totals (
-          business_day date primary key,
-          recognitions integer not null default 0
-        )
-      `;
-      await db`truncate table daily_recognition_totals`;
-      await db`
-        insert into daily_recognition_totals (business_day, recognitions)
-        select (created_at at time zone 'UTC')::date, count(*)::int
-        from feed_posts where kind = 'recognition' and hidden = false and pending = false group by 1
-      `;
-      await db`
-        create or replace function cpn_update_daily_recognition_totals() returns trigger as $$
-        declare old_visible boolean := false;
-        declare new_visible boolean := false;
-        declare old_day date;
-        declare new_day date;
-        begin
-          if tg_op <> 'INSERT' then
-            old_visible := old.kind = 'recognition' and old.hidden = false and old.pending = false;
-            old_day := (old.created_at at time zone 'UTC')::date;
-          end if;
-          if tg_op <> 'DELETE' then
-            new_visible := new.kind = 'recognition' and new.hidden = false and new.pending = false;
-            new_day := (new.created_at at time zone 'UTC')::date;
-          end if;
-          if old_visible and (not new_visible or old_day <> new_day) then
-            update daily_recognition_totals set recognitions = greatest(recognitions - 1, 0)
-            where business_day = old_day;
-          end if;
-          if new_visible and (not old_visible or old_day <> new_day) then
-            insert into daily_recognition_totals (business_day, recognitions) values (new_day, 1)
-            on conflict (business_day) do update set recognitions = daily_recognition_totals.recognitions + 1;
-          end if;
-          if tg_op = 'DELETE' then return old; end if;
-          return new;
-        end
-        $$ language plpgsql
-      `;
-      await db`drop trigger if exists feed_posts_recognition_aggregate on feed_posts`;
-      await db`
-        create trigger feed_posts_recognition_aggregate
-        after insert or update or delete on feed_posts
-        for each row execute function cpn_update_daily_recognition_totals()
-      `;
-    }
+    up: applyScoreAggregates
+  },
+  {
+    // 0010 gained the recognition/module aggregates AFTER it had already been
+    // applied on running databases, so those never got the new tables and every
+    // read of them 500s. Re-running the same body converges them; it is fully
+    // idempotent (create-if-not-exists + rebuild-from-source), so a fresh
+    // install that just ran 0010 is unaffected.
+    id: "0011",
+    name: "converge databases that applied an earlier 0010",
+    up: convergeScoreAggregates
   }
 ];
+
+/**
+ * Score/module/recognition aggregates, their maintenance triggers, and the
+ * read-path indexes. Idempotent by construction: tables are created only when
+ * absent, functions are replaced, and every total is rebuilt from its source
+ * table — so this can safely run again on a database that already has it.
+ */
+async function applyScoreAggregates(db: NonNullable<typeof sql>): Promise<void> {
+  // Migrations run before the feature initializers on a fresh install, so
+  // establish the append-only event table here before backfilling totals.
+  await db`
+    create table if not exists score_events (
+      id bigserial primary key,
+      user_key text not null,
+      user_name text,
+      points integer not null,
+      reason text,
+      ref text,
+      belief text,
+      created_at timestamptz not null default now()
+    )
+  `;
+  await db`
+    delete from score_events a using score_events b
+    where a.id > b.id and a.ref is not null and a.user_key = b.user_key and a.ref = b.ref
+  `;
+  await db`create unique index if not exists score_events_user_ref_uq on score_events (user_key, ref) where ref is not null`;
+  await db`create index if not exists score_events_created_idx on score_events (created_at desc)`;
+
+  await db`
+    create table if not exists user_score_totals (
+      user_key text primary key,
+      user_name text,
+      points bigint not null default 0,
+      updated_at timestamptz not null default now()
+    )
+  `;
+  await db`
+    create table if not exists daily_score_totals (
+      business_day date not null,
+      user_key text not null,
+      user_name text,
+      points bigint not null default 0,
+      updated_at timestamptz not null default now(),
+      primary key (business_day, user_key)
+    )
+  `;
+  // Rebuild makes the migration correct even if a prior deployment was
+  // interrupted between table creation and its initial backfill.
+  await db`truncate table user_score_totals`;
+  await db`truncate table daily_score_totals`;
+  await db`
+    insert into user_score_totals (user_key, user_name, points, updated_at)
+    select user_key, (array_agg(user_name order by created_at desc) filter (where user_name is not null))[1],
+           sum(points), max(created_at)
+    from score_events group by user_key
+  `;
+  await db`
+    insert into daily_score_totals (business_day, user_key, user_name, points, updated_at)
+    select (created_at at time zone 'UTC')::date, user_key,
+           (array_agg(user_name order by created_at desc) filter (where user_name is not null))[1],
+           sum(points), max(created_at)
+    from score_events group by 1, user_key
+  `;
+  await db`
+    create index if not exists user_score_totals_leaderboard_idx
+    on user_score_totals (points desc, user_key asc)
+  `;
+  await db`create index if not exists daily_score_totals_day_points_idx on daily_score_totals (business_day, points desc)`;
+  await db`
+    create or replace function cpn_update_score_totals() returns trigger as $$
+    begin
+      insert into user_score_totals (user_key, user_name, points, updated_at)
+      values (new.user_key, new.user_name, new.points, new.created_at)
+      on conflict (user_key) do update set
+        points = user_score_totals.points + excluded.points,
+        user_name = coalesce(excluded.user_name, user_score_totals.user_name),
+        updated_at = greatest(user_score_totals.updated_at, excluded.updated_at);
+
+      insert into daily_score_totals (business_day, user_key, user_name, points, updated_at)
+      values ((new.created_at at time zone 'UTC')::date, new.user_key, new.user_name, new.points, new.created_at)
+      on conflict (business_day, user_key) do update set
+        points = daily_score_totals.points + excluded.points,
+        user_name = coalesce(excluded.user_name, daily_score_totals.user_name),
+        updated_at = greatest(daily_score_totals.updated_at, excluded.updated_at);
+      return new;
+    end
+    $$ language plpgsql
+  `;
+  await db`drop trigger if exists score_events_aggregate_insert on score_events`;
+  await db`
+    create trigger score_events_aggregate_insert
+    after insert on score_events for each row execute function cpn_update_score_totals()
+  `;
+
+  await db`create extension if not exists pg_trgm`;
+  await db`
+    create index if not exists directory_users_search_trgm_idx on directory_users
+    using gin ((lower(coalesce(display_name, '') || ' ' || coalesce(email, ''))) gin_trgm_ops)
+  `;
+  await db`create index if not exists user_challenge_runs_answered_idx on user_challenge_runs (answered_at desc)`;
+  await db`create index if not exists user_module_progress_completed_idx on user_module_progress (completed_at desc)`;
+
+  await db`
+    create table if not exists daily_challenge_participants (
+      business_day date not null,
+      user_key text not null,
+      primary key (business_day, user_key)
+    )
+  `;
+  await db`
+    create table if not exists daily_challenge_totals (
+      business_day date primary key,
+      users integer not null default 0
+    )
+  `;
+  await db`
+    insert into daily_challenge_participants (business_day, user_key)
+    select coalesce(business_day, (answered_at at time zone 'UTC')::date), oid
+    from user_challenge_runs group by 1, oid on conflict do nothing
+  `;
+  await db`truncate table daily_challenge_totals`;
+  await db`
+    insert into daily_challenge_totals (business_day, users)
+    select business_day, count(*)::int from daily_challenge_participants group by business_day
+  `;
+  await db`
+    create or replace function cpn_update_daily_challenge_totals() returns trigger as $$
+    declare inserted_rows integer;
+    begin
+      insert into daily_challenge_participants (business_day, user_key)
+      values (coalesce(new.business_day, (new.answered_at at time zone 'UTC')::date), new.oid)
+      on conflict do nothing;
+      get diagnostics inserted_rows = row_count;
+      if inserted_rows = 1 then
+        insert into daily_challenge_totals (business_day, users)
+        values (coalesce(new.business_day, (new.answered_at at time zone 'UTC')::date), 1)
+        on conflict (business_day) do update set users = daily_challenge_totals.users + 1;
+      end if;
+      return new;
+    end
+    $$ language plpgsql
+  `;
+  await db`drop trigger if exists user_challenge_runs_daily_insert on user_challenge_runs`;
+  await db`
+    create trigger user_challenge_runs_daily_insert
+    after insert on user_challenge_runs for each row execute function cpn_update_daily_challenge_totals()
+  `;
+
+  await db`
+    create table if not exists user_module_totals (
+      user_key text primary key,
+      completed integer not null default 0,
+      updated_at timestamptz not null default now()
+    )
+  `;
+  await db`truncate table user_module_totals`;
+  await db`
+    insert into user_module_totals (user_key, completed, updated_at)
+    select oid, count(*)::int, max(completed_at) from user_module_progress group by oid
+  `;
+  await db`
+    create or replace function cpn_update_user_module_totals() returns trigger as $$
+    begin
+      insert into user_module_totals (user_key, completed, updated_at)
+      values (new.oid, 1, new.completed_at)
+      on conflict (user_key) do update set
+        completed = user_module_totals.completed + 1,
+        updated_at = greatest(user_module_totals.updated_at, excluded.updated_at);
+      return new;
+    end
+    $$ language plpgsql
+  `;
+  await db`drop trigger if exists user_module_progress_aggregate_insert on user_module_progress`;
+  await db`
+    create trigger user_module_progress_aggregate_insert
+    after insert on user_module_progress for each row execute function cpn_update_user_module_totals()
+  `;
+
+  await db`
+    create table if not exists feed_posts (
+      id text primary key,
+      kind text not null,
+      title text,
+      summary text,
+      author text,
+      target text,
+      target_key text,
+      belief text,
+      message text,
+      created_at timestamptz not null default now(),
+      author_key text,
+      pending boolean not null default false,
+      hidden boolean not null default false
+    )
+  `;
+  await db`
+    create index if not exists feed_posts_visible_created_idx
+    on feed_posts (created_at desc) where hidden = false and pending = false
+  `;
+  await db`
+    create index if not exists feed_posts_pending_created_idx
+    on feed_posts (created_at desc) where pending = true
+  `;
+  await db`
+    create table if not exists daily_recognition_totals (
+      business_day date primary key,
+      recognitions integer not null default 0
+    )
+  `;
+  await db`truncate table daily_recognition_totals`;
+  await db`
+    insert into daily_recognition_totals (business_day, recognitions)
+    select (created_at at time zone 'UTC')::date, count(*)::int
+    from feed_posts where kind = 'recognition' and hidden = false and pending = false group by 1
+  `;
+  await db`
+    create or replace function cpn_update_daily_recognition_totals() returns trigger as $$
+    declare old_visible boolean := false;
+    declare new_visible boolean := false;
+    declare old_day date;
+    declare new_day date;
+    begin
+      if tg_op <> 'INSERT' then
+        old_visible := old.kind = 'recognition' and old.hidden = false and old.pending = false;
+        old_day := (old.created_at at time zone 'UTC')::date;
+      end if;
+      if tg_op <> 'DELETE' then
+        new_visible := new.kind = 'recognition' and new.hidden = false and new.pending = false;
+        new_day := (new.created_at at time zone 'UTC')::date;
+      end if;
+      if old_visible and (not new_visible or old_day <> new_day) then
+        update daily_recognition_totals set recognitions = greatest(recognitions - 1, 0)
+        where business_day = old_day;
+      end if;
+      if new_visible and (not old_visible or old_day <> new_day) then
+        insert into daily_recognition_totals (business_day, recognitions) values (new_day, 1)
+        on conflict (business_day) do update set recognitions = daily_recognition_totals.recognitions + 1;
+      end if;
+      if tg_op = 'DELETE' then return old; end if;
+      return new;
+    end
+    $$ language plpgsql
+  `;
+  await db`drop trigger if exists feed_posts_recognition_aggregate on feed_posts`;
+  await db`
+    create trigger feed_posts_recognition_aggregate
+    after insert or update or delete on feed_posts
+    for each row execute function cpn_update_daily_recognition_totals()
+  `;
+}
+
+/** Avoid a second expensive score-event backfill on fresh installs where 0010
+ * just created the complete aggregate schema. Older 0010 databases lack these
+ * tables and run the convergence body once. */
+async function convergeScoreAggregates(db: NonNullable<typeof sql>): Promise<void> {
+  const rows = await db<{ complete: boolean }[]>`
+    select to_regclass('public.daily_challenge_totals') is not null
+       and to_regclass('public.user_module_totals') is not null
+       and to_regclass('public.daily_recognition_totals') is not null as complete
+  `;
+  if (rows[0]?.complete) return;
+  await applyScoreAggregates(db);
+}
 
 /**
  * Apply any migrations not yet recorded in schema_migrations. Idempotent and

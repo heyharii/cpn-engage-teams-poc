@@ -1,8 +1,17 @@
 const apiBaseUrl = process.env.API_BASE_URL || "http://127.0.0.1:4175";
 const botBaseUrl = process.env.BOT_BASE_URL || "http://127.0.0.1:4177";
 
+// The admin/ops endpoints on both services (/api/notifications, the bot's
+// /internal/*) are key-gated, so every call carries the operator credentials
+// when they are configured. Without them the smoke test 401s on any real
+// deployment (docker-compose and the installer both set ADMIN_KEY).
+const authHeaders = {
+  ...(process.env.ADMIN_KEY ? { "x-admin-key": process.env.ADMIN_KEY } : {}),
+  ...(process.env.PUSH_TOKEN ? { "x-push-token": process.env.PUSH_TOKEN } : {})
+};
+
 async function requestJson(url, options = {}) {
-  const response = await fetch(url, options);
+  const response = await fetch(url, { ...options, headers: { ...authHeaders, ...(options.headers ?? {}) } });
 
   if (!response.ok) {
     throw new Error(`Request failed: ${response.status} ${response.statusText} for ${url}`);
@@ -52,7 +61,7 @@ async function main() {
 
   const relayResponse = await fetch(`${botBaseUrl}/internal/notify`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", ...authHeaders },
     body: JSON.stringify({ type: "smoke-test", title: "Smoke test", summary: "relay check", audience: "local" })
   });
   checks.push(["Bot notification relay accepts messages", relayResponse.status === 202]);

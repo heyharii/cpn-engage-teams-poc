@@ -24,6 +24,13 @@ export type ResolvedIdentity = {
   verified: boolean;
 };
 
+/** Optional display label sent alongside a guest id (never an identity claim). */
+function headerName(request: FastifyRequest): string | null {
+  const raw = request.headers["x-cpn-guest-name"];
+  const name = (Array.isArray(raw) ? raw[0] : raw)?.trim();
+  return name ? name.slice(0, 60) : null;
+}
+
 export async function resolveIdentity(request: FastifyRequest): Promise<ResolvedIdentity | null> {
   // 1) Verified Teams SSO token wins.
   if (ssoConfigured()) {
@@ -41,7 +48,10 @@ export async function resolveIdentity(request: FastifyRequest): Promise<Resolved
     const guest = (Array.isArray(raw) ? raw[0] : raw)?.trim();
     if (guest) {
       const oid = `guest:${guest.slice(0, 64)}`;
-      return { oid, name: null, email: null, verified: false };
+      // A display name may accompany the guest id (the Teams host knows who the
+      // user is even before SSO consent). It labels posts/comments only —
+      // identity stays the guest id and the request stays `verified: false`.
+      return { oid, name: headerName(request), email: null, verified: false };
     }
   }
 

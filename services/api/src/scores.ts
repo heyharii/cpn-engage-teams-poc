@@ -87,11 +87,14 @@ export async function computeLeaderboard(limit = 20, period: "week" | "month" | 
   try {
     const rows = period === "all"
       ? await sql<LeaderRow[]>`
+          with top_scores as materialized (
+            select user_key, user_name, points from user_score_totals
+            where points > 0 order by points desc, user_key asc limit ${safeLimit}
+          )
           select s.user_key as "userKey", coalesce(d.display_name, s.user_name, s.user_key) as name,
                  d.department as department, s.points::int as points
-          from user_score_totals s
-          left join directory_users d on d.oid = s.user_key
-          where s.points > 0 order by s.points desc, s.user_key asc limit ${safeLimit}
+          from top_scores s left join directory_users d on d.oid = s.user_key
+          order by s.points desc, s.user_key asc
         `
       : await sql<LeaderRow[]>`
           with totals as (
@@ -99,12 +102,14 @@ export async function computeLeaderboard(limit = 20, period: "week" | "month" | 
             from daily_score_totals
             where business_day >= current_date - ${period === "week" ? 6 : 29}
             group by user_key
+          ), top_scores as materialized (
+            select user_key, user_name, points from totals
+            where points > 0 order by points desc, user_key asc limit ${safeLimit}
           )
           select s.user_key as "userKey", coalesce(d.display_name, s.user_name, s.user_key) as name,
                  d.department as department, s.points::int as points
-          from totals s
-          left join directory_users d on d.oid = s.user_key
-          where s.points > 0 order by s.points desc, s.user_key asc limit ${safeLimit}
+          from top_scores s left join directory_users d on d.oid = s.user_key
+          order by s.points desc, s.user_key asc
         `;
     const result = [...rows];
     leaderboardCache.set(cacheKey, { expiresAt: Date.now() + LEADERBOARD_CACHE_MS, rows: result });

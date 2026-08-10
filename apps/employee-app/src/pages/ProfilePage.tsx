@@ -1,8 +1,8 @@
 import { type BootstrapResponse } from "@cpn-engage/shared";
 import { useEffect, useState } from "react";
-import { app as teamsApp, authentication } from "@microsoft/teams-js";
 import { RefreshCw, Flame, MessageSquare, BookOpen, Target, LayoutGrid, ScrollText } from "lucide-react";
 import { guestId } from "@/lib/identity";
+import { teamsAuthToken, teamsDisplayName } from "@/lib/teams";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -64,7 +64,13 @@ export function ProfilePage() {
   async function loadMe(token: string | null): Promise<void> {
     const headers: Record<string, string> = {};
     if (token) headers.Authorization = `Bearer ${token}`;
-    else headers["x-cpn-guest"] = guestId();
+    else {
+      headers["x-cpn-guest"] = guestId();
+      // Unverified but inside Teams: pass the host's display name so the
+      // profile and anything posted from the tab shows a person, not "A colleague".
+      const name = await teamsDisplayName();
+      if (name) headers["x-cpn-guest-name"] = name;
+    }
     const res = await fetch(`${apiBaseUrl}/api/me`, { headers });
     if (res.ok) {
       setMe((await res.json()) as MeResponse);
@@ -79,17 +85,7 @@ export function ProfilePage() {
       .then((d) => !cancelled && setBootstrap(d));
 
     async function init() {
-      let token: string | null = null;
-      try {
-        await teamsApp.initialize();
-        try {
-          token = await authentication.getAuthToken();
-        } catch {
-          /* SSO optional */
-        }
-      } catch {
-        /* browser preview */
-      }
+      const token = await teamsAuthToken();
       if (!cancelled) await loadMe(token);
     }
     void init();
@@ -102,12 +98,9 @@ export function ProfilePage() {
   async function refresh() {
     setRefreshing(true);
     try {
-      let token: string | null = null;
-      try {
-        token = await authentication.getAuthToken();
-      } catch {
-        /* guest */
-      }
+      // teamsAuthToken() resolves to null outside Teams instead of hanging, so
+      // the button always finishes and the guest path still refetches.
+      const token = await teamsAuthToken();
       await loadMe(token);
       const b = await fetch(`${apiBaseUrl}/api/bootstrap`).then((r) => r.json() as Promise<BootstrapResponse>);
       setBootstrap(b);

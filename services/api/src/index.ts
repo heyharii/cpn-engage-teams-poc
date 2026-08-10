@@ -57,7 +57,9 @@ import {
   recordChallengeRun,
   getMyState,
   searchPeople,
-  getPerson
+  getPerson,
+  profileName,
+  clearUserProgress
 } from "./users.js";
 import type { ModuleContent, DailyDrop } from "@cpn-engage/shared";
 import {
@@ -76,14 +78,25 @@ let notificationSequence = 0;
 
 // CORS: exact-origin allowlist in production (ALLOWED_ORIGINS, comma-separated);
 // reflect any origin in dev so local tabs on various ports just work.
-const allowedOrigins = (process.env.ALLOWED_ORIGINS ?? "")
+const configuredOrigins = (process.env.ALLOWED_ORIGINS ?? "")
   .split(",")
   .map((o) => o.trim())
   .filter(Boolean);
+const productionOrigins = [
+  "https://cpn-engage-home-teams-poc.onrender.com",
+  "https://cpn-engage-community-teams-poc.onrender.com",
+  "https://cpn-engage-feed-teams-poc.onrender.com",
+  "https://cpn-engage-admin-teams-poc.onrender.com"
+];
+const allowedOrigins = configuredOrigins.length > 0
+  ? configuredOrigins
+  : process.env.NODE_ENV === "production"
+    ? productionOrigins
+    : [];
 await app.register(cors, {
-  origin: allowedOrigins.length > 0 ? allowedOrigins : process.env.NODE_ENV === "production" ? false : true,
+  origin: allowedOrigins.length > 0 ? allowedOrigins : true,
   methods: ["GET", "POST", "DELETE", "OPTIONS"],
-  allowedHeaders: ["Content-Type", "Authorization", "x-admin-key", "x-cpn-guest"]
+  allowedHeaders: ["Content-Type", "Authorization", "x-admin-key", "x-cpn-guest", "x-cpn-guest-name"]
 });
 
 // Gate every /api/admin/* route behind the admin key (fail-closed in prod).
@@ -815,7 +828,10 @@ app.post<{ Params: { id: string }; Body: { body?: string } }>(
     if (!id) return reply.code(401).send({ ok: false, error: "identity required to comment" });
     if (!feedPersistent) return reply.code(503).send({ ok: false, error: "comments need a database" });
     await touchProfile({ oid: id.oid, name: id.name, email: id.email });
-    const comment = await addComment(request.params.id, id.oid, id.name, body);
+    // A request without a name still gets the name we already know for this
+    // user, so comments read as a person instead of "Someone".
+    const author = id.name ?? (await profileName(id.oid));
+    const comment = await addComment(request.params.id, id.oid, author, body);
     if (!comment) return reply.code(404).send({ ok: false, error: "feed item not found" });
     return { ok: true, comment };
   }
@@ -835,7 +851,7 @@ app.post<{ Body: { target?: string; targetKey?: string | null; belief?: string; 
     await touchProfile({ oid: id.oid, name: id.name, email: id.email });
     try {
       const result = await submitRecognitionForActor(
-        { userKey: id.oid, userName: id.name },
+        { userKey: id.oid, userName: id.name ?? (await profileName(id.oid)) },
         {
           target: request.body?.target ?? "",
           targetKey: request.body?.targetKey ?? undefined,
@@ -870,6 +886,9 @@ app.post("/api/admin/demo/reset", async () => {
   demoChallengeAnswers.clear();
   reactionUsers.clear();
   await clearScores();
+  // Per-user progress too — otherwise a re-run of the demo still shows the
+  // previous run's completed modules and streak for returning users.
+  await clearUserProgress();
   await clearFeed();
   await initFeed(); // re-seeds the starter feed posts
   if (feedPersistent) state.feed = await listFeed();
