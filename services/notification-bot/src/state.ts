@@ -30,6 +30,8 @@ export type ThreadState =
       colleagueOid?: string; // resolved directory identity (for notify)
       behavior?: string;
       description?: string;
+      /** The single message this wizard lives in — every step edits it. */
+      cardId?: string;
     };
 
 export const state = createMemoryState();

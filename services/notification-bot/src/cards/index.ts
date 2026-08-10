@@ -6,7 +6,7 @@ export { StalePromptCard } from "./StalePromptCard.tsx";
 // Feature 1 — Learning Journey
 export { ModuleIntroCard } from "./ModuleIntroCard.tsx";
 export { VideoLessonCard } from "./VideoLessonCard.tsx";
-export { TextLessonCard, ClosedCard } from "./LearningExtraCards.tsx";
+export { TextLessonCard, ClosedCard, StepDoneCard } from "./LearningExtraCards.tsx";
 export { QuizQuestionCard } from "./QuizQuestionCard.tsx";
 export { ModuleCompleteCard } from "./ModuleCompleteCard.tsx";
 

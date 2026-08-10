@@ -9,6 +9,7 @@ import type { Thread } from "chat";
 import { normalizeDrop } from "@cpn-engage/shared";
 import { getBootstrap, submitChallenge, scoreIdentity } from "../api.ts";
 import { getState, setState } from "../state.ts";
+import { editCard } from "../edit.ts";
 import { DailyDropCard, AnswerResultCard, StalePromptCard } from "../cards/index.ts";
 
 type AnyThread = Thread<unknown, unknown>;
@@ -26,7 +27,9 @@ export async function showChallenge(thread: AnyThread) {
 export async function onSubmitAnswer(
   thread: AnyThread,
   payload: { dropId: string; questionId: string; optionId: string },
-  author?: Author
+  author?: Author,
+  /** Message that was tapped — replaced with the result, so it stops asking. */
+  messageId?: string
 ) {
   const st = await getState(thread.id);
   const boot = await getBootstrap();
@@ -73,10 +76,9 @@ export async function onSubmitAnswer(
     answeredQ: [...st.answeredQ, payload.questionId]
   });
 
-  // Show this question's result…
-  await thread.post(
-    AnswerResultCard({ drop, chosen, best, pointsEarned, newScore: isLast ? newScore : null })
-  );
+  // The question card BECOMES the result: same message, no answer buttons left.
+  const result = AnswerResultCard({ drop, chosen, best, pointsEarned, newScore: isLast ? newScore : null });
+  if (!(await editCard(thread, messageId, result))) await thread.post(result);
   // …then the next question, or finish.
   if (!isLast) {
     const next = drop.questions[st.qIndex + 1];

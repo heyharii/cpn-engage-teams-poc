@@ -10,13 +10,15 @@ import type { Thread } from "chat";
 import { getModule, firstAssignedModule, nextModuleAfter } from "../content.ts";
 import { getState, setState, clearState, type ThreadState } from "../state.ts";
 import { submitModuleComplete, scoreIdentity } from "../api.ts";
+import { editCard } from "../edit.ts";
 import {
   ModuleIntroCard,
   VideoLessonCard,
   TextLessonCard,
   QuizQuestionCard,
   ModuleCompleteCard,
-  StalePromptCard
+  StalePromptCard,
+  StepDoneCard
 } from "../cards/index.ts";
 
 type AnyThread = Thread<unknown, unknown>;
@@ -27,8 +29,11 @@ export async function showModuleIntro(thread: AnyThread) {
 }
 
 /** Action "begin_module" — actually start it. */
-export async function beginModule(thread: AnyThread, moduleId: string) {
+export async function beginModule(thread: AnyThread, moduleId: string, messageId?: string) {
   const m = getModule(moduleId) ?? firstAssignedModule();
+  // The intro card has done its job — leaving its button live would let a
+  // scroll-back restart the module and wipe quiz progress.
+  await editCard(thread, messageId, StepDoneCard({ title: "▶️ Module started", subtitle: m.title, lines: [m.summary] }));
   await setState(thread.id, {
     kind: "module",
     moduleId: m.id,
@@ -41,20 +46,26 @@ export async function beginModule(thread: AnyThread, moduleId: string) {
 }
 
 /** Action "watched_video" — video → text. */
-export async function onWatchedVideo(thread: AnyThread, moduleId: string) {
+export async function onWatchedVideo(thread: AnyThread, moduleId: string, messageId?: string) {
   const st = await getState(thread.id);
   const m = getModule(moduleId);
   if (st.kind !== "module" || st.moduleId !== moduleId || !m) return stale(thread, st);
   await setState(thread.id, { ...st, step: "text" });
+  await editCard(thread, messageId, StepDoneCard({ title: "✅ Video watched", subtitle: m.title, lines: ["On to the lesson."] }));
   await thread.post(TextLessonCard({ module: m, heading: m.lesson.heading, body: m.lesson.body }));
 }
 
 /** Action "lesson_done" — text → first quiz question. */
-export async function onLessonDone(thread: AnyThread, moduleId: string) {
+export async function onLessonDone(thread: AnyThread, moduleId: string, messageId?: string) {
   const st = await getState(thread.id);
   const m = getModule(moduleId);
   if (st.kind !== "module" || st.moduleId !== moduleId || !m) return stale(thread, st);
   await setState(thread.id, { ...st, step: "quiz", quizIdx: 0 });
+  await editCard(
+    thread,
+    messageId,
+    StepDoneCard({ title: "✅ Lesson read", subtitle: m.lesson.heading, lines: [`${m.questions.length} question(s) to go.`] })
+  );
   await thread.post(QuizQuestionCard({ module: m, quiz: m.questions[0]!, total: m.questions.length }));
 }
 
@@ -62,7 +73,8 @@ export async function onLessonDone(thread: AnyThread, moduleId: string) {
 export async function onQuizAnswer(
   thread: AnyThread,
   payload: { moduleId: string; quizId: string; optionKey: string },
-  author?: { userId?: string; fullName?: string }
+  author?: { userId?: string; fullName?: string },
+  messageId?: string
 ) {
   const st = await getState(thread.id);
   const m = getModule(payload.moduleId);
@@ -76,6 +88,21 @@ export async function onQuizAnswer(
 
   const chosen = expected.options.find((o) => o.key === payload.optionKey);
   const correct = chosen?.correct === true;
+  // The answered question keeps its answer visible — and loses its buttons.
+  await editCard(
+    thread,
+    messageId,
+    StepDoneCard({
+      title: correct ? "✅ Correct" : "❌ Not quite",
+      subtitle: `${m.title} · question ${st.quizIdx + 1} of ${m.questions.length}`,
+      lines: [
+        expected.question,
+        `Your answer: ${chosen?.text ?? payload.optionKey}`,
+        ...(correct ? [] : [`Correct: ${expected.options.find((o) => o.correct)?.text ?? ""}`]),
+        ...(chosen?.explanation ? [chosen.explanation] : [])
+      ]
+    })
+  );
   const newCorrect = st.correct + (correct ? 1 : 0);
   const answered = [...st.answered, payload.quizId];
   const nextIdx = st.quizIdx + 1;

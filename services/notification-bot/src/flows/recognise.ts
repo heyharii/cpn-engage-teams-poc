@@ -9,6 +9,7 @@
 import type { Thread } from "chat";
 import { getBootstrap, submitRecognition, scoreIdentity } from "../api.ts";
 import { getState, setState, clearState, type ThreadState } from "../state.ts";
+import { replaceOrPost, postCard } from "../edit.ts";
 import { searchDirectory, getDirectoryUser } from "../db.ts";
 import {
   RecognisePromptCard,
@@ -29,25 +30,27 @@ type AnyThread = Thread<unknown, unknown>;
  *   several  → show a pick card to disambiguate
  *   none     → proceed with the typed name (no oid); directory may be un-synced
  */
-async function resolveColleague(thread: AnyThread, name: string): Promise<void> {
+async function resolveColleague(thread: AnyThread, name: string, cardId?: string): Promise<void> {
   const matches = await searchDirectory(name, 6);
   const boot = await getBootstrap();
 
   if (matches.length === 1) {
     const m = matches[0];
+    const id = await replaceOrPost(thread, cardId, BeliefSelectCard({ colleague: m.displayName ?? name, behaviors: boot.behaviors }));
     await setState(thread.id, {
       kind: "recognise",
       step: "belief",
       colleague: m.displayName ?? name,
-      colleagueOid: m.oid
+      colleagueOid: m.oid,
+      cardId: id
     });
-    await thread.post(BeliefSelectCard({ colleague: m.displayName ?? name, behaviors: boot.behaviors }));
     return;
   }
 
   if (matches.length > 1) {
-    await setState(thread.id, { kind: "recognise", step: "colleague" });
-    await thread.post(
+    const id = await replaceOrPost(
+      thread,
+      cardId,
       ColleaguePickCard({
         candidates: matches.map((m) => ({
           oid: m.oid,
@@ -55,12 +58,13 @@ async function resolveColleague(thread: AnyThread, name: string): Promise<void> 
         }))
       })
     );
+    await setState(thread.id, { kind: "recognise", step: "colleague", cardId: id });
     return;
   }
 
   // No directory match — don't block; proceed with the typed name.
-  await setState(thread.id, { kind: "recognise", step: "belief", colleague: name });
-  await thread.post(BeliefSelectCard({ colleague: name, behaviors: boot.behaviors }));
+  const id = await replaceOrPost(thread, cardId, BeliefSelectCard({ colleague: name, behaviors: boot.behaviors }));
+  await setState(thread.id, { kind: "recognise", step: "belief", colleague: name, cardId: id });
 }
 
 /**
@@ -93,8 +97,9 @@ export async function startRecognise(thread: AnyThread, fromText?: string) {
     return;
   }
   const boot = await getBootstrap();
-  await setState(thread.id, { kind: "recognise", step: "colleague" });
-  await thread.post(RecognisePromptCard({ behaviors: boot.behaviors }));
+  // The whole wizard lives in this one message from here on.
+  const id = await replaceOrPost(thread, undefined, RecognisePromptCard({ behaviors: boot.behaviors }));
+  await setState(thread.id, { kind: "recognise", step: "colleague", cardId: id });
 }
 
 /**
@@ -107,52 +112,62 @@ export async function onRecogniseText(thread: AnyThread, text: string): Promise<
 
   if (st.step === "colleague") {
     const name = cleanColleagueName(text) ?? text.trim();
-    await resolveColleague(thread, name);
+    await resolveColleague(thread, name, st.cardId);
     return true;
   }
   if (st.step === "description") {
-    await setState(thread.id, { ...st, step: "media", description: text.trim() });
-    await thread.post(MediaPromptCard({ colleague: st.colleague ?? "your colleague" }));
+    const id = await replaceOrPost(thread, st.cardId, MediaPromptCard({ colleague: st.colleague ?? "your colleague" }));
+    await setState(thread.id, { ...st, step: "media", description: text.trim(), cardId: id });
     return true;
   }
   return false;
 }
 
 /** Action "recognise_pick" — value is the chosen colleague's oid. */
-export async function onColleaguePick(thread: AnyThread, oid: string) {
+export async function onColleaguePick(thread: AnyThread, oid: string, messageId?: string) {
   const st = await getState(thread.id);
   if (st.kind !== "recognise" || st.step !== "colleague") return stale(thread, st);
   const user = await getDirectoryUser(oid);
   const colleague = user?.displayName ?? "your colleague";
-  await setState(thread.id, { kind: "recognise", step: "belief", colleague, colleagueOid: oid });
   const boot = await getBootstrap();
-  await thread.post(BeliefSelectCard({ colleague, behaviors: boot.behaviors }));
+  const id = await replaceOrPost(thread, messageId ?? st.cardId, BeliefSelectCard({ colleague, behaviors: boot.behaviors }));
+  await setState(thread.id, { kind: "recognise", step: "belief", colleague, colleagueOid: oid, cardId: id });
 }
 
 /** Action "recognise_belief" — value is the Belief name. */
-export async function onBeliefSelect(thread: AnyThread, behavior: string) {
+export async function onBeliefSelect(thread: AnyThread, behavior: string, messageId?: string) {
   const st = await getState(thread.id);
   if (st.kind !== "recognise" || st.step !== "belief") return stale(thread, st);
-  await setState(thread.id, { ...st, step: "description", behavior });
-  await thread.post(DescriptionPromptCard({ colleague: st.colleague ?? "your colleague", behavior }));
+  const id = await replaceOrPost(
+    thread,
+    messageId ?? st.cardId,
+    DescriptionPromptCard({ colleague: st.colleague ?? "your colleague", behavior })
+  );
+  await setState(thread.id, { ...st, step: "description", behavior, cardId: id });
 }
 
 /** Action "recognise_skip_media" — skip the optional attachment. */
-export async function onSkipMedia(thread: AnyThread) {
+export async function onSkipMedia(thread: AnyThread, messageId?: string) {
   const st = await getState(thread.id);
   if (st.kind !== "recognise" || st.step !== "media") return stale(thread, st);
-  await setState(thread.id, { ...st, step: "confirm" });
-  await thread.post(
+  const id = await replaceOrPost(
+    thread,
+    messageId ?? st.cardId,
     RecognitionConfirmCard({
       colleague: st.colleague ?? "",
       behavior: st.behavior ?? "",
       description: st.description ?? ""
     })
   );
+  await setState(thread.id, { ...st, step: "confirm", cardId: id });
 }
 
 /** Action "recognise_send" — post the recognition to the public feed. */
-export async function onRecogniseSend(thread: AnyThread, author?: { userId?: string; fullName?: string }) {
+export async function onRecogniseSend(
+  thread: AnyThread,
+  author?: { userId?: string; fullName?: string },
+  messageId?: string
+) {
   const st = await getState(thread.id);
   if (st.kind !== "recognise" || st.step !== "confirm") return stale(thread, st);
   const boot = await getBootstrap();
@@ -170,7 +185,9 @@ export async function onRecogniseSend(thread: AnyThread, author?: { userId?: str
   if (!submitted?.ok) throw new Error("Recognition could not be submitted");
 
   await clearState(thread.id);
-  await thread.post(
+  await replaceOrPost(
+    thread,
+    messageId ?? st.cardId,
     RecognitionSentCard({ colleague: st.colleague ?? "", behavior: st.behavior ?? "", pending: submitted.pending })
   );
 }
@@ -179,20 +196,24 @@ export async function onRecogniseSend(thread: AnyThread, author?: { userId?: str
 export async function resumeRecognise(thread: AnyThread, st: ThreadState) {
   if (st.kind !== "recognise") return;
   const boot = await getBootstrap();
-  switch (st.step) {
-    case "colleague":
-      return void thread.post(RecognisePromptCard({ behaviors: boot.behaviors }));
-    case "belief":
-      return void thread.post(BeliefSelectCard({ colleague: st.colleague ?? "", behaviors: boot.behaviors }));
-    case "description":
-      return void thread.post(DescriptionPromptCard({ colleague: st.colleague ?? "", behavior: st.behavior ?? "" }));
-    case "media":
-      return void thread.post(MediaPromptCard({ colleague: st.colleague ?? "" }));
-    case "confirm":
-      return void thread.post(
-        RecognitionConfirmCard({ colleague: st.colleague ?? "", behavior: st.behavior ?? "", description: st.description ?? "" })
-      );
-  }
+  const card =
+    st.step === "colleague"
+      ? RecognisePromptCard({ behaviors: boot.behaviors })
+      : st.step === "belief"
+        ? BeliefSelectCard({ colleague: st.colleague ?? "", behaviors: boot.behaviors })
+        : st.step === "description"
+          ? DescriptionPromptCard({ colleague: st.colleague ?? "", behavior: st.behavior ?? "" })
+          : st.step === "media"
+            ? MediaPromptCard({ colleague: st.colleague ?? "" })
+            : RecognitionConfirmCard({
+                colleague: st.colleague ?? "",
+                behavior: st.behavior ?? "",
+                description: st.description ?? ""
+              });
+  // Resume always posts a fresh card (the old one may be unreachable), and the
+  // wizard follows it from here.
+  const id = await postCard(thread, card);
+  await setState(thread.id, { ...st, cardId: id });
 }
 
 async function stale(thread: AnyThread, st: ThreadState) {

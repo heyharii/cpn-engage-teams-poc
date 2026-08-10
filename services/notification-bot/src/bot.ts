@@ -113,19 +113,19 @@ bot.onAction(
 
 // Learning Journey
 bot.onAction("begin_module", guardAction("begin_module", async (e) => {
-  if (e.thread) await beginModule(e.thread, (e.value ?? "") as string);
+  if (e.thread) await beginModule(e.thread, (e.value ?? "") as string, e.messageId);
 }));
 bot.onAction("watched_video", guardAction("watched_video", async (e) => {
-  if (e.thread) await onWatchedVideo(e.thread, (e.value ?? "") as string);
+  if (e.thread) await onWatchedVideo(e.thread, (e.value ?? "") as string, e.messageId);
 }));
 bot.onAction("lesson_done", guardAction("lesson_done", async (e) => {
-  if (e.thread) await onLessonDone(e.thread, (e.value ?? "") as string);
+  if (e.thread) await onLessonDone(e.thread, (e.value ?? "") as string, e.messageId);
 }));
 bot.onAction("quiz_answer", guardAction("quiz_answer", async (e) => {
   if (!e.thread) return;
   const [moduleId, quizId, optionKey] = ((e.value ?? "") as string).split("|");
   if (!moduleId || !quizId || !optionKey) throw new Error(`bad quiz_answer: "${e.value}"`);
-  await onQuizAnswer(e.thread, { moduleId, quizId, optionKey }, { userId: e.user?.userId, fullName: e.user?.fullName });
+  await onQuizAnswer(e.thread, { moduleId, quizId, optionKey }, { userId: e.user?.userId, fullName: e.user?.fullName }, e.messageId);
 }));
 
 // Challenge
@@ -135,21 +135,21 @@ bot.onAction("submit_answer", guardAction("submit_answer", async (e) => {
   const parts = ((e.value ?? "") as string).split("|");
   const [dropId, questionId, optionId] = parts.length === 3 ? parts : [parts[0], "q1", parts[1]];
   if (!dropId || !optionId) throw new Error(`bad submit_answer: "${e.value}"`);
-  await onSubmitAnswer(e.thread, { dropId, questionId, optionId }, { userId: e.user?.userId, fullName: e.user?.fullName });
+  await onSubmitAnswer(e.thread, { dropId, questionId, optionId }, { userId: e.user?.userId, fullName: e.user?.fullName }, e.messageId);
 }));
 
 // Recognition
 bot.onAction("recognise_pick", guardAction("recognise_pick", async (e) => {
-  if (e.thread) await onColleaguePick(e.thread, (e.value ?? "") as string);
+  if (e.thread) await onColleaguePick(e.thread, (e.value ?? "") as string, e.messageId);
 }));
 bot.onAction("recognise_belief", guardAction("recognise_belief", async (e) => {
-  if (e.thread) await onBeliefSelect(e.thread, (e.value ?? "") as string);
+  if (e.thread) await onBeliefSelect(e.thread, (e.value ?? "") as string, e.messageId);
 }));
 bot.onAction("recognise_skip_media", guardAction("recognise_skip_media", async (e) => {
-  if (e.thread) await onSkipMedia(e.thread);
+  if (e.thread) await onSkipMedia(e.thread, e.messageId);
 }));
 bot.onAction("recognise_send", guardAction("recognise_send", async (e) => {
-  if (e.thread) await onRecogniseSend(e.thread, { userId: e.user?.userId, fullName: e.user?.fullName });
+  if (e.thread) await onRecogniseSend(e.thread, { userId: e.user?.userId, fullName: e.user?.fullName }, e.messageId);
 }));
 
 // "Remind me later" — just acknowledge with the menu.

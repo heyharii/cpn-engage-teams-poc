@@ -45,3 +45,24 @@ export function ClosedCard(opts: { kind: "module" | "challenge"; title: string }
     </Card>
   );
 }
+
+/**
+ * A finished step, shown in place of the card that had the buttons. Keeps the
+ * outcome readable in the chat history without leaving a tappable control that
+ * would rewind the flow.
+ */
+export function StepDoneCard(opts: { title: string; subtitle?: string; lines: string[] }) {
+  return (
+    <Card title={opts.title} subtitle={opts.subtitle}>
+      <Section>
+        {opts.lines.map((line, i) => (
+          <CardText key={String(i)}>{line}</CardText>
+        ))}
+      </Section>
+      <Divider />
+      <Actions>
+        <Button id="intent" value="help">Menu</Button>
+      </Actions>
+    </Card>
+  );
+}
