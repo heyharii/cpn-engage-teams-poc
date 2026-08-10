@@ -1,1 +1,5 @@
 @import "../../employee-app/src/styles.css";
+
+/* The Feed page reuses components outside this app's Vite root. */
+@source "../../employee-app/src";
+@source "./";
