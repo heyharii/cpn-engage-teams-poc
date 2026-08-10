@@ -156,14 +156,27 @@ export function FeedsPage() {
   }
 
   async function react(feedId: string, emoji: string) {
-    const res = await fetch(`${API}/api/feed/${encodeURIComponent(feedId)}/react`, {
-      method: "POST",
-      headers: authHeaders({ "Content-Type": "application/json" }),
-      body: JSON.stringify({ emoji, reactor: guestId() })
-    });
-    if (!res.ok) return;
-    const data = (await res.json()) as { reactions: { emoji: string; count: number }[] };
-    setPosts((prev) => prev.map((f) => (f.id === feedId ? { ...f, reactions: data.reactions } : f)));
+    // A silently swallowed failure here is indistinguishable from a dead
+    // button, so a rejected reaction says so instead of doing nothing.
+    try {
+      const res = await fetch(`${API}/api/feed/${encodeURIComponent(feedId)}/react`, {
+        method: "POST",
+        headers: authHeaders({ "Content-Type": "application/json" }),
+        body: JSON.stringify({ emoji, reactor: guestId() })
+      });
+      if (!res.ok) {
+        const detail = await res.text().catch(() => "");
+        console.warn("[feed] reaction rejected", res.status, detail);
+        setLoadError("Reaction did not save — pull to refresh and try again.");
+        return;
+      }
+      const data = (await res.json()) as { reactions: { emoji: string; count: number }[] };
+      setLoadError(null);
+      setPosts((prev) => prev.map((f) => (f.id === feedId ? { ...f, reactions: data.reactions } : f)));
+    } catch (err) {
+      console.warn("[feed] reaction failed", err);
+      setLoadError("Reaction did not save — check your connection.");
+    }
   }
 
   async function searchPeople(query: string): Promise<Person[]> {

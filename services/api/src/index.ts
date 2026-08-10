@@ -776,9 +776,15 @@ app.post<{
   if (!allowedReactions.has(emoji)) {
     return reply.code(400).send({ ok: false, error: "unsupported reaction" });
   }
+  // A reaction earns no points and reveals nothing, so it must never be blocked
+  // by an identity problem: inside Teams a tab whose SSO token fails to verify
+  // (consent not granted, audience mismatch) would otherwise get a silent 401 on
+  // every tap. Fall back to the tab's own stable per-user id, which is only ever
+  // used as the reaction owner key for toggling.
   const identity = await resolveIdentity(request);
-  if (!identity) return reply.code(401).send({ ok: false, error: "identity required to react" });
-  const reactor = identity.oid;
+  const claimed = String(request.headers["x-cpn-guest"] ?? request.body?.reactor ?? "").trim();
+  const reactor = identity?.oid ?? (claimed ? `anon:${claimed.slice(0, 64)}` : "");
+  if (!reactor) return reply.code(401).send({ ok: false, error: "identity required to react" });
 
   if (feedPersistent) {
     try {
