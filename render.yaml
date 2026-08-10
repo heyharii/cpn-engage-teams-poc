@@ -24,11 +24,11 @@ services:
         value: https://cpn-engage-bot-teams-poc.onrender.com
       # Teams SSO token validation for the personal Profile tab.
       - key: TEAMS_APP_ID
-        sync: false
+        value: 4cf4e885-f429-406d-84a0-3e0af5aad1ad
       - key: TEAMS_APP_TENANT_ID
-        sync: false
+        value: 699dfad7-3096-44ab-86ae-d98e637f1f94
       - key: APPLICATION_ID_URI
-        sync: false
+        value: api://cpn-engage-home-teams-poc.onrender.com/4cf4e885-f429-406d-84a0-3e0af5aad1ad
       # Shared Postgres — per-user scoring + leaderboard (same DB as the bot).
       - key: DATABASE_URL
         fromDatabase:
