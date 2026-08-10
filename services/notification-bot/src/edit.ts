@@ -10,15 +10,27 @@
  * guards correctness — the per-thread state checks and the idempotent score refs
  * do that. This is only about what the user sees.
  */
-import type { Thread } from "chat";
+import { isJSX, toCardElement, type Thread } from "chat";
 
 type AnyThread = Thread<unknown, unknown>;
+
+/**
+ * `thread.post()` converts a JSX card before handing it to the adapter; the
+ * adapter's own editMessage does not. Passing the raw element there produces an
+ * attachment-less activity that Teams rejects with a 400, so convert first.
+ */
+function toPayload(card: unknown): unknown {
+  if (!isJSX(card as never)) return card;
+  const el = toCardElement(card as never);
+  if (!el) throw new Error("not a Card element");
+  return el;
+}
 
 /** Replaces one message's card. Returns false when the host refused the edit. */
 export async function editCard(thread: AnyThread, messageId: string | undefined, card: unknown): Promise<boolean> {
   if (!messageId) return false;
   try {
-    await thread.adapter.editMessage(thread.id, messageId, card as never);
+    await thread.adapter.editMessage(thread.id, messageId, toPayload(card) as never);
     return true;
   } catch (err) {
     console.warn("[edit] card update failed:", err instanceof Error ? err.message : err);
