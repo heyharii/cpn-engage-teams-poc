@@ -117,6 +117,12 @@ services:
     envVars:
       - key: VITE_API_BASE_URL
         value: https://cpn-engage-api-teams-poc.onrender.com
+      # Teams issues an SSO token only for the origin named in the Entra
+      # Application ID URI. When an installed app package still points its Feeds
+      # tab at this standalone host, hand the frame over to that origin — it
+      # serves the same feed. Unset or empty disables the handover.
+      - key: VITE_SSO_FEED_URL
+        value: https://cpn-engage-home-teams-poc.onrender.com/feeds
     routes:
       - type: rewrite
         source: /*
