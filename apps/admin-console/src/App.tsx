@@ -175,12 +175,16 @@ function Console() {
   const [boot, setBoot] = useState<BootstrapResponse | null>(null);
   const [roster, setRoster] = useState<RosterUser[]>([]);
   const [directoryCount, setDirectoryCount] = useState(0);
+  // A failed roster call and a genuinely empty roster both render as "0
+  // people", so keep them apart — one needs a retry, the other needs users.
+  const [rosterError, setRosterError] = useState(false);
   const [leaders, setLeaders] = useState<LeaderRow[]>([]);
   const [modules, setModules] = useState<ModuleContent[]>([]);
 
   async function loadAll() {
     const [b, u, l, m] = await Promise.all([getBootstrap(), getUsers(), getLeaderboard(), getAdminModules()]);
     if (b) setBoot(b);
+    setRosterError(!u);
     if (u) {
       setRoster(u.users);
       setDirectoryCount(u.directoryCount);
@@ -261,6 +265,8 @@ function Console() {
         {nav === "broadcast" && (
           <Broadcast
             audienceCount={roster.filter((u) => u.reachable).length}
+            rosterError={rosterError}
+            onRetry={() => void loadAll()}
             boot={boot}
             modules={modules.filter((m) => m.isLive !== false)}
           />
@@ -597,8 +603,14 @@ function UsersView(props: {
   );
 }
 
-function Broadcast(props: { audienceCount: number; boot: BootstrapResponse | null; modules: ModuleContent[] }) {
-  const { audienceCount, boot, modules } = props;
+function Broadcast(props: {
+  audienceCount: number;
+  boot: BootstrapResponse | null;
+  modules: ModuleContent[];
+  rosterError?: boolean;
+  onRetry?: () => void;
+}) {
+  const { audienceCount, boot, modules, rosterError, onRetry } = props;
   const { busy, msg, run } = useAction();
   const [kind, setKind] = useState<"challenge" | "module">("challenge");
   const [moduleId, setModuleId] = useState<string>("");
@@ -808,12 +820,21 @@ function Broadcast(props: { audienceCount: number; boot: BootstrapResponse | nul
             <Users className="size-5 text-primary" />
             <div>
               <p className="text-sm font-semibold">
-                {audienceCount} {audienceCount === 1 ? "person" : "people"} will receive this
+                {rosterError ? "Recipient list unavailable" : `${audienceCount} ${audienceCount === 1 ? "person" : "people"} will receive this`}
               </p>
               <p className="text-xs text-muted-foreground">
-                {audienceCount === 0
-                  ? "No one reachable yet — employees appear after opening the bot chat once."
-                  : "Everyone who has opened the CPN Engage bot."}
+                {rosterError ? (
+                  <>
+                    Could not reach the bot service — the count is unknown, not zero.{" "}
+                    <button className="underline" onClick={() => onRetry?.()} type="button">
+                      Retry
+                    </button>
+                  </>
+                ) : audienceCount === 0 ? (
+                  "No one reachable yet — employees appear after opening the bot chat once."
+                ) : (
+                  "Everyone who has opened the CPN Engage bot."
+                )}
               </p>
             </div>
             <div className="ml-auto flex items-center gap-3">
