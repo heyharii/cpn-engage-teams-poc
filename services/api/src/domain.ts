@@ -106,7 +106,9 @@ export function scoreChallengeAnswer(
   const option = question?.options.find((o) => o.id === optionId);
   if (!question || !option) return null;
   const best = option.isBest === true;
-  return { best, points: best ? drop.bestPoints ?? 50 : drop.basePoints ?? 20 };
+  // Only the ⭐ answer earns. A wrong answer still RECORDS (so the drop counts as
+  // played and the streak holds) but is worth nothing.
+  return { best, points: best ? drop.bestPoints ?? 50 : 0 };
 }
 
 /** YYYY-MM-DD in the tenant's business timezone, independent of server locale. */

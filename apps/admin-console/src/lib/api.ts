@@ -169,8 +169,32 @@ export const rejectRecognition = (id: string) =>
 // --- Announcements + moderation ---
 export const postAnnouncement = (title: string, message: string) =>
   post<{ ok: boolean }>(`${API}/api/admin/announce`, { title, message });
-export const hideFeedPost = (id: string, hidden = true) =>
-  post<{ ok: boolean }>(`${API}/api/admin/feed/${encodeURIComponent(id)}/hide`, { hidden });
+export const hideFeedPost = (id: string, hidden = true, note?: string) =>
+  post<{ ok: boolean }>(`${API}/api/admin/feed/${encodeURIComponent(id)}/hide`, { hidden, note });
+
+export const flagFeedPost = (id: string, note?: string) =>
+  post<{ ok: boolean }>(`${API}/api/admin/feed/${encodeURIComponent(id)}/flag`, { note });
+
+export type ModerationEntry = {
+  id: string;
+  feedId: string;
+  action: "hide" | "unhide" | "flag" | "reject" | "approve";
+  actor: string | null;
+  note: string | null;
+  createdAt: string;
+  post: {
+    author: string | null;
+    target: string | null;
+    belief: string | null;
+    title: string | null;
+    summary: string | null;
+    message: string | null;
+    hidden: boolean;
+  } | null;
+};
+
+export const getModerationLog = () =>
+  get<{ ok: boolean; entries: ModerationEntry[] }>(`${API}/api/admin/feed/moderation`);
 
 // --- Daily-drop (challenge) authoring ---
 export type DropOption = { id: string; label: string; isBest?: boolean };

@@ -18,9 +18,11 @@ test("challenge points are computed from stored options, not caller claims", () 
     best: true,
     points: demoDailyDrop.bestPoints ?? 50
   });
+  // A wrong answer earns nothing — it is still recorded so the drop counts as
+  // played, but it must never add points.
   assert.deepEqual(scoreChallengeAnswer(demoDailyDrop, question.id, other.id), {
     best: false,
-    points: demoDailyDrop.basePoints ?? 20
+    points: 0
   });
   assert.equal(scoreChallengeAnswer(demoDailyDrop, question.id, "invented"), null);
 });

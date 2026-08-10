@@ -20,11 +20,11 @@ export function ModuleAssignedCard(opts: { moduleId: string; title: string; trac
 }
 
 /** Proactive: a scheduled challenge is ready (Challenges feature). */
-export function ChallengeReminderCard(opts: { behavior: string; reward: string; timeLimit: string }) {
+export function ChallengeReminderCard(opts: { behavior: string; reward: string }) {
   return (
     <Card title="⚡ Today's challenge is ready" subtitle={`${opts.behavior} · ${opts.reward}`}>
       <Section>
-        <CardText>{`A quick ${opts.timeLimit} scenario — answer correctly to earn points and climb the leaderboard.`}</CardText>
+        <CardText>{`A quick scenario — answer correctly to earn points and climb the leaderboard.`}</CardText>
       </Section>
       <Actions>
         <Button id="intent" value="daily_challenge" style="primary">

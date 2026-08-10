@@ -4,6 +4,8 @@ import {
   Users,
   Send,
   Heart,
+  Flag,
+  Eye,
   Trophy,
   BookOpen,
   Zap,
@@ -50,7 +52,6 @@ import {
   getUsers,
   getAdminModules,
   syncDirectory,
-  enrichAudience,
   pushBroadcast,
   scheduleTest,
   getAdminKey,
@@ -58,6 +59,9 @@ import {
   verifyAdminKey,
   postAnnouncement,
   hideFeedPost,
+  flagFeedPost,
+  getModerationLog,
+  type ModerationEntry,
   getDebugBundle,
   getAnalytics,
   getBroadcasts,
@@ -92,8 +96,7 @@ const NAV: { id: NavId; label: string; icon: typeof Users }[] = [
   { id: "broadcast", label: "Broadcast", icon: Send },
   { id: "recognitions", label: "Recognitions", icon: Heart },
   { id: "leaderboard", label: "Leaderboard", icon: Trophy },
-  { id: "settings", label: "Settings", icon: SlidersHorizontal },
-  { id: "system", label: "System", icon: Activity }
+  { id: "settings", label: "Settings", icon: SlidersHorizontal }
 ];
 
 export function App() {
@@ -522,20 +525,6 @@ function UsersView(props: {
             {busy === "sync" ? <Loader2 className="size-4 animate-spin" /> : <RefreshCw className="size-4" />}
             Sync directory
           </Button>
-          <Button
-            variant="outline"
-            disabled={busy !== null}
-            onClick={() =>
-              void run("enrich", async () => {
-                const r = await enrichAudience();
-                await onReload();
-                return r?.ok ? `Enriched ${r.named} names, ${r.titled} titles.` : "Enrich failed.";
-              })
-            }
-          >
-            {busy === "enrich" ? <Loader2 className="size-4 animate-spin" /> : <Sparkles className="size-4" />}
-            Enrich
-          </Button>
         </div>
       </div>
       {msg ? <p className="mb-3 text-sm text-muted-foreground">{msg}</p> : null}
@@ -763,10 +752,7 @@ function Broadcast(props: {
                             </div>
                             <div className="mt-1 flex items-center gap-3 text-xs text-muted-foreground">
                               <span className="inline-flex items-center gap-1">
-                                <Trophy className="size-3.5" /> {drop.bestPoints ?? 50} / {drop.basePoints ?? 20} pts
-                              </span>
-                              <span className="inline-flex items-center gap-1">
-                                <Clock className="size-3.5" /> {drop.timeLimit}
+                                <Trophy className="size-3.5" /> {drop.bestPoints ?? 50} pts
                               </span>
                             </div>
                             <div className="mt-1 rounded-md bg-primary px-3 py-1.5 text-center text-sm font-medium text-primary-foreground">
@@ -965,10 +951,32 @@ function Recognitions(props: { feed: FeedItem[]; onReload: () => Promise<void> }
   const [title, setTitle] = useState("");
   const [message, setMessage] = useState("");
 
+  const [log, setLog] = useState<ModerationEntry[]>([]);
+  async function loadLog() {
+    const r = await getModerationLog();
+    if (r?.entries) setLog(r.entries);
+  }
+  useEffect(() => {
+    void loadLog();
+  }, []);
+
   async function hide(id: string) {
-    if (!confirm("Hide this post from the community feed?")) return;
-    await hideFeedPost(id, true);
+    const note = prompt("Reason for taking this post down (kept in the moderation record):", "");
+    if (note === null) return;
+    await hideFeedPost(id, true, note.trim() || undefined);
     await onReload();
+    await loadLog();
+  }
+  async function unhide(id: string) {
+    await hideFeedPost(id, false);
+    await onReload();
+    await loadLog();
+  }
+  async function flag(id: string) {
+    const note = prompt("What should a reviewer look at?", "");
+    if (note === null) return;
+    await flagFeedPost(id, note.trim() || undefined);
+    await loadLog();
   }
 
   return (
@@ -1050,9 +1058,14 @@ function Recognitions(props: { feed: FeedItem[]; onReload: () => Promise<void> }
                 </div>
                 <p className="text-sm">{r.message ?? r.summary}</p>
               </div>
-              <Button size="sm" variant="ghost" className="shrink-0" onClick={() => void hide(r.id)}>
-                <EyeOff className="size-3.5" /> Hide
-              </Button>
+              <div className="flex shrink-0 gap-1">
+                <Button size="sm" variant="ghost" onClick={() => void flag(r.id)}>
+                  <Flag className="size-3.5" /> Flag
+                </Button>
+                <Button size="sm" variant="ghost" onClick={() => void hide(r.id)}>
+                  <EyeOff className="size-3.5" /> Hide
+                </Button>
+              </div>
             </CardContent>
           </Card>
         ))}
@@ -1060,6 +1073,63 @@ function Recognitions(props: { feed: FeedItem[]; onReload: () => Promise<void> }
           <p className="text-sm text-muted-foreground">No recognitions yet.</p>
         ) : null}
       </div>
+
+      <p className="mb-2 mt-6 text-sm font-semibold">Moderation record</p>
+      <Card>
+        <CardContent className="p-0">
+          {log.length === 0 ? (
+            <p className="p-4 text-sm text-muted-foreground">
+              Nothing moderated yet. Hidden, flagged, and rejected posts are listed here with who acted and why.
+            </p>
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>When</TableHead>
+                  <TableHead>Action</TableHead>
+                  <TableHead>Post</TableHead>
+                  <TableHead>Reason</TableHead>
+                  <TableHead />
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {log.map((e) => (
+                  <TableRow key={e.id}>
+                    <TableCell className="whitespace-nowrap text-xs text-muted-foreground">
+                      {new Date(e.createdAt).toLocaleString()}
+                    </TableCell>
+                    <TableCell>
+                      <Badge variant={e.action === "hide" || e.action === "reject" ? "destructive" : "secondary"}>
+                        {e.action}
+                      </Badge>
+                    </TableCell>
+                    <TableCell className="max-w-md">
+                      {e.post ? (
+                        <>
+                          <span className="text-xs text-muted-foreground">
+                            {e.post.author ? `${e.post.author} → ${e.post.target}` : e.post.title}
+                          </span>
+                          <p className="truncate text-sm">{e.post.message ?? e.post.summary}</p>
+                        </>
+                      ) : (
+                        <span className="text-sm text-muted-foreground">post no longer exists</span>
+                      )}
+                    </TableCell>
+                    <TableCell className="text-sm text-muted-foreground">{e.note ?? "—"}</TableCell>
+                    <TableCell>
+                      {e.post?.hidden ? (
+                        <Button size="sm" variant="ghost" onClick={() => void unhide(e.feedId)}>
+                          <Eye className="size-3.5" /> Restore
+                        </Button>
+                      ) : null}
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          )}
+        </CardContent>
+      </Card>
     </div>
   );
 }

@@ -35,8 +35,7 @@ async function runPushJob(payload: PushJob, jobId?: string) {
     label = boot.dailyDrop.behavior;
     card = ChallengeReminderCard({
       behavior: boot.dailyDrop.behavior,
-      reward: boot.dailyDrop.rewardLabel,
-      timeLimit: boot.dailyDrop.timeLimit
+      reward: boot.dailyDrop.rewardLabel
     });
   }
   const r = await pushCardToAll(card);

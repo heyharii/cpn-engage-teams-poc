@@ -58,7 +58,7 @@ export async function recordScore(e: {
   ref?: string | null;
   belief?: string | null;
 }): Promise<boolean> {
-  if (!sql || !e.userKey || e.points === 0) return false;
+  if (!sql || !e.userKey || e.points < 0) return false;
   try {
     const rows = await sql`
       insert into score_events (user_key, user_name, points, reason, ref, belief)

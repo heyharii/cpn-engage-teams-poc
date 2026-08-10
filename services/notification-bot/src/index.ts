@@ -224,8 +224,7 @@ app.post("/internal/push", async (req, res) => {
         })()
       : ChallengeReminderCard({
           behavior: boot.dailyDrop.behavior,
-          reward: boot.dailyDrop.rewardLabel,
-          timeLimit: boot.dailyDrop.timeLimit
+          reward: boot.dailyDrop.rewardLabel
         });
   const result = await pushCardToAll(card);
   const label =

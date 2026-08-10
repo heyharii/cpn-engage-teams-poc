@@ -12,7 +12,7 @@ export function DailyDropCard(opts: { drop: DailyDrop; question: DropQuestion; q
   const progress = total > 1 ? ` · Question ${qNum} of ${total}` : "";
   return (
     <Card
-      title={`⚡ ${drop.title} · ⏱️ ${drop.timeLimit}`}
+      title={`⚡ ${drop.title}`}
       subtitle={`${drop.behavior} · ${drop.rewardLabel}${progress}`}
     >
       <Section>

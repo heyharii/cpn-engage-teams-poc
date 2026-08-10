@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Plus, Pencil, Trash2, CheckCircle2, Loader2, ArrowLeft, Star } from "lucide-react";
+import { Plus, Pencil, Trash2, CheckCircle2, Loader2, ArrowLeft, Star, Clock, Check } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -11,12 +11,85 @@ import {
   activateDrop,
   deleteDropApi,
   getBeliefs,
+  getSettings,
+  saveSettings,
   type AdminDrop,
+  type AppSettings,
   type DropOption,
   type DropQuestion
 } from "@/lib/api";
 
 const DEFAULT_BELIEFS = ["Dynamism", "Customers", "Communities", "Collaboration"];
+const TZ_OPTIONS = ["Asia/Bangkok", "Asia/Jakarta", "Asia/Singapore", "UTC", "America/New_York", "Europe/London"];
+
+/**
+ * When the bot sends the active drop. It lives here rather than in Settings so
+ * the schedule sits with the content it sends.
+ */
+function DailyScheduleCard() {
+  const [s, setS] = useState<AppSettings | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
+
+  useEffect(() => {
+    void getSettings().then((r) => r && setS(r));
+  }, []);
+
+  async function save() {
+    if (!s) return;
+    setSaving(true);
+    const r = await saveSettings({ dailyDropTime: s.dailyDropTime, dailyDropTz: s.dailyDropTz });
+    setSaving(false);
+    if (r) {
+      setS(r);
+      setSaved(true);
+      setTimeout(() => setSaved(false), 1800);
+    }
+  }
+
+  if (!s) return null;
+  return (
+    <Card className="mb-5">
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2">
+          <Clock className="size-4" /> Daily challenge schedule
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="flex flex-col gap-3">
+        <p className="text-sm text-muted-foreground">When the bot automatically sends the active daily drop.</p>
+        <div className="flex gap-3">
+          <div className="flex flex-col gap-1.5">
+            <label className="text-xs font-medium text-muted-foreground">Time</label>
+            <Input
+              type="time"
+              className="w-32"
+              value={s.dailyDropTime}
+              onChange={(e) => setS({ ...s, dailyDropTime: e.target.value })}
+            />
+          </div>
+          <div className="flex flex-1 flex-col gap-1.5">
+            <label className="text-xs font-medium text-muted-foreground">Timezone</label>
+            <select
+              className="h-9 rounded-md border border-input bg-transparent px-3 text-sm"
+              value={s.dailyDropTz}
+              onChange={(e) => setS({ ...s, dailyDropTz: e.target.value })}
+            >
+              {TZ_OPTIONS.map((tz) => (
+                <option key={tz} value={tz}>
+                  {tz}
+                </option>
+              ))}
+            </select>
+          </div>
+        </div>
+        <Button className="self-start" size="sm" disabled={saving} onClick={() => void save()}>
+          {saving ? <Loader2 className="size-4 animate-spin" /> : saved ? <Check className="size-4" /> : null}
+          {saved ? "Saved" : "Save schedule"}
+        </Button>
+      </CardContent>
+    </Card>
+  );
+}
 
 function blankQuestion(n: number): DropQuestion {
   return {
@@ -115,6 +188,8 @@ export function ChallengesView() {
       </div>
 
       {error ? <p className="mb-4 rounded-md border border-destructive/30 p-3 text-sm text-destructive">{error}</p> : null}
+
+      <DailyScheduleCard />
 
       {loading ? (
         <p className="text-sm text-muted-foreground">Loading…</p>
@@ -261,26 +336,14 @@ function DropEditor(props: { initial: AdminDrop; beliefs: string[]; onClose: () 
                   ))}
                 </select>
               </Field>
-              <Field label="Time limit">
-                <Input value={d.timeLimit ?? ""} onChange={(e) => set({ timeLimit: e.target.value })} placeholder="30 sec" />
-              </Field>
             </div>
-            <div className="grid grid-cols-2 gap-3">
-              <Field label="Points — ⭐ best (per question)">
-                <Input
-                  type="number"
-                  value={d.bestPoints ?? 50}
-                  onChange={(e) => set({ bestPoints: Number(e.target.value) || 0 })}
-                />
-              </Field>
-              <Field label="Points — other (per question)">
-                <Input
-                  type="number"
-                  value={d.basePoints ?? 20}
-                  onChange={(e) => set({ basePoints: Number(e.target.value) || 0 })}
-                />
-              </Field>
-            </div>
+            <Field label="Points — ⭐ best answer (per question)">
+              <Input
+                type="number"
+                value={d.bestPoints ?? 50}
+                onChange={(e) => set({ bestPoints: Number(e.target.value) || 0 })}
+              />
+            </Field>
             <Field label="Reward label (shown on the card)">
               <Input
                 value={d.rewardLabel ?? ""}
@@ -290,7 +353,7 @@ function DropEditor(props: { initial: AdminDrop; beliefs: string[]; onClose: () 
             </Field>
             <p className="text-xs text-muted-foreground">
               {questions.length} question{questions.length === 1 ? "" : "s"} · max{" "}
-              {(d.bestPoints ?? 50) * questions.length} points if all best answers.
+              {(d.bestPoints ?? 50) * questions.length} points. A wrong answer scores nothing.
             </p>
           </CardContent>
         </Card>

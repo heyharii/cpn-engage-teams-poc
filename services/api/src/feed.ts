@@ -337,6 +337,103 @@ export async function setPostHidden(feedId: string, hidden: boolean): Promise<vo
   await sql`update feed_posts set hidden = ${hidden} where id = ${feedId}`;
 }
 
+export type ModerationAction = "hide" | "unhide" | "flag" | "reject" | "approve";
+
+export type ModerationEntry = {
+  id: string;
+  feedId: string;
+  action: ModerationAction;
+  actor: string | null;
+  note: string | null;
+  createdAt: string;
+  /** The post itself, when it still exists. */
+  post: {
+    author: string | null;
+    target: string | null;
+    belief: string | null;
+    /** Recognitions carry `message`; announcements only carry title/summary. */
+    title: string | null;
+    summary: string | null;
+    message: string | null;
+    hidden: boolean;
+  } | null;
+};
+
+/**
+ * Record a moderation decision. Posts are hidden rather than deleted, and every
+ * decision leaves a row here — so "who took this down, when, and what did it
+ * say" is answerable after the fact.
+ */
+export async function recordModeration(
+  feedId: string,
+  action: ModerationAction,
+  actor?: string | null,
+  note?: string | null
+): Promise<void> {
+  if (!sql) return;
+  try {
+    await sql`
+      insert into feed_moderation_log (feed_id, action, actor, note)
+      values (${feedId}, ${action}, ${actor ?? null}, ${note ?? null})
+    `;
+  } catch (err) {
+    console.warn("[feed] recordModeration failed:", err instanceof Error ? err.message : err);
+  }
+}
+
+/** Moderation history, newest first, with the post content still attached. */
+export async function listModeration(limit = 100): Promise<ModerationEntry[]> {
+  if (!sql) return [];
+  try {
+    const rows = await sql<
+      {
+        id: string;
+        feed_id: string;
+        action: ModerationAction;
+        actor: string | null;
+        note: string | null;
+        created_at: Date;
+        author: string | null;
+        target: string | null;
+        belief: string | null;
+        title: string | null;
+        summary: string | null;
+        message: string | null;
+        hidden: boolean | null;
+      }[]
+    >`
+      select l.id, l.feed_id, l.action, l.actor, l.note, l.created_at,
+             p.author, p.target, p.belief, p.title, p.summary, p.message, p.hidden
+      from feed_moderation_log l
+      left join feed_posts p on p.id = l.feed_id
+      order by l.created_at desc limit ${Math.min(Math.max(limit, 1), 500)}
+    `;
+    return rows.map((r) => ({
+      id: String(r.id),
+      feedId: r.feed_id,
+      action: r.action,
+      actor: r.actor,
+      note: r.note,
+      createdAt: r.created_at instanceof Date ? r.created_at.toISOString() : String(r.created_at),
+      post:
+        r.hidden === null
+          ? null
+          : {
+              author: r.author,
+              target: r.target,
+              belief: r.belief,
+              title: r.title,
+              summary: r.summary,
+              message: r.message,
+              hidden: Boolean(r.hidden)
+            }
+    }));
+  } catch (err) {
+    console.warn("[feed] listModeration failed:", err instanceof Error ? err.message : err);
+    return [];
+  }
+}
+
 /** Clear all feed posts + reactions + comments (used by the demo reset). */
 export async function clearFeed(): Promise<void> {
   if (!sql) return;

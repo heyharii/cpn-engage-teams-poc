@@ -225,6 +225,24 @@ const MIGRATIONS: Migration[] = [
     id: "0011",
     name: "converge databases that applied an earlier 0010",
     up: convergeScoreAggregates
+  },
+  {
+    id: "0012",
+    name: "feed moderation log (audit trail for hidden/flagged posts)",
+    up: async (db) => {
+      await db`
+        create table if not exists feed_moderation_log (
+          id bigserial primary key,
+          feed_id text not null,
+          action text not null,
+          actor text,
+          note text,
+          created_at timestamptz not null default now()
+        )
+      `;
+      await db`create index if not exists feed_moderation_time_idx on feed_moderation_log (created_at desc)`;
+      await db`create index if not exists feed_moderation_post_idx on feed_moderation_log (feed_id)`;
+    }
   }
 ];
 

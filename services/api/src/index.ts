@@ -16,7 +16,9 @@ import {
   setPostHidden,
   listPending,
   approvePost,
-  rejectPost
+  rejectPost,
+  recordModeration,
+  listModeration
 } from "./feed.js";
 import { runMigrations, dbPing, dbEnabled, sql } from "./db.js";
 import {
@@ -458,6 +460,16 @@ function runScenario(name: DemoScenarioName) {
   }
 
   recalcStats();
+}
+
+/**
+ * Who performed an admin action. Admin auth is a shared key, so the console may
+ * name the operator with `x-admin-actor`; unnamed actions are still logged.
+ */
+function adminActor(request: { headers: Record<string, unknown> }): string | null {
+  const raw = request.headers["x-admin-actor"];
+  const v = String(Array.isArray(raw) ? raw[0] ?? "" : raw ?? "").trim();
+  return v ? v.slice(0, 80) : null;
 }
 
 app.get("/health", async () => ({ ok: true }));
@@ -1089,20 +1101,44 @@ app.post<{ Body: { title?: string; message?: string } }>("/api/admin/announce", 
 });
 
 // Moderation — hide/unhide a feed post so it drops out of the community feed.
-app.post<{ Params: { id: string }; Body: { hidden?: boolean } }>(
+app.post<{ Params: { id: string }; Body: { hidden?: boolean; note?: string } }>(
   "/api/admin/feed/:id/hide",
   async (request) => {
     const hidden = request.body?.hidden ?? true;
     await setPostHidden(request.params.id, hidden);
+    // Taking a post down is never silent: the decision, who made it, and the
+    // post's own content stay queryable afterwards.
+    await recordModeration(
+      request.params.id,
+      hidden ? "hide" : "unhide",
+      adminActor(request),
+      request.body?.note ?? null
+    );
     if (feedPersistent) state.feed = await listFeed();
     return { ok: true, hidden };
   }
 );
 
+/** Flag a post for review without taking it down. */
+app.post<{ Params: { id: string }; Body: { note?: string } }>(
+  "/api/admin/feed/:id/flag",
+  async (request) => {
+    await recordModeration(request.params.id, "flag", adminActor(request), request.body?.note ?? null);
+    return { ok: true, flagged: true };
+  }
+);
+
+/** Moderation history — every hide, unhide, flag, approval and rejection. */
+app.get<{ Querystring: { limit?: string } }>("/api/admin/feed/moderation", async (request) => ({
+  ok: true,
+  entries: await listModeration(Number(request.query.limit) || 100)
+}));
+
 // Recognition approval queue (only used when recognitionRequiresApproval is on).
 app.get("/api/admin/recognitions/pending", async () => ({ pending: await listPending() }));
 app.post<{ Params: { id: string } }>("/api/admin/recognitions/:id/approve", async (request) => {
   const r = await approvePost(request.params.id);
+  if (r) await recordModeration(request.params.id, "approve", adminActor(request), null);
   if (!r) return { ok: false, error: "not found or already approved" };
   // Award the held points to the sender now that it's approved.
   if (r.authorKey) {
@@ -1132,6 +1168,7 @@ app.post<{ Params: { id: string } }>("/api/admin/recognitions/:id/approve", asyn
 app.post<{ Params: { id: string } }>("/api/admin/recognitions/:id/reject", async (request, reply) => {
   const rejected = await rejectPost(request.params.id);
   if (!rejected) return reply.code(404).send({ ok: false, error: "not found or already moderated" });
+  await recordModeration(request.params.id, "reject", adminActor(request), null);
   return { ok: true };
 });
 

@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Loader2, Palette, Clock, Trophy, ShieldCheck, Check, X } from "lucide-react";
+import { Loader2, Palette, Trophy, ShieldCheck, Check, X } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -104,39 +104,6 @@ export function SettingsView() {
               <SaveBtn section="branding" body={{ appName: s.appName, accentColor: s.accentColor }} />
               <span className="text-xs text-muted-foreground">Applies to the employee tabs after reload.</span>
             </div>
-          </CardContent>
-        </Card>
-
-        {/* Daily schedule */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Clock className="size-4" /> Daily challenge schedule
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="flex flex-col gap-3">
-            <p className="text-sm text-muted-foreground">When the bot automatically sends the active daily drop.</p>
-            <div className="flex gap-3">
-              <div className="flex flex-col gap-1.5">
-                <label className="text-xs font-medium text-muted-foreground">Time</label>
-                <Input type="time" className="w-32" value={s.dailyDropTime} onChange={(e) => patch({ dailyDropTime: e.target.value })} />
-              </div>
-              <div className="flex flex-1 flex-col gap-1.5">
-                <label className="text-xs font-medium text-muted-foreground">Timezone</label>
-                <select
-                  className="h-9 rounded-md border border-input bg-transparent px-3 text-sm"
-                  value={s.dailyDropTz}
-                  onChange={(e) => patch({ dailyDropTz: e.target.value })}
-                >
-                  {TZ_OPTIONS.map((tz) => (
-                    <option key={tz} value={tz}>
-                      {tz}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            </div>
-            <SaveBtn section="schedule" body={{ dailyDropTime: s.dailyDropTime, dailyDropTz: s.dailyDropTz }} />
           </CardContent>
         </Card>
 
