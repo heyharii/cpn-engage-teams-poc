@@ -47,7 +47,7 @@ Entra app registration must be **Multitenant** (App registrations → Authentica
 ## Run locally
 
 ```bash
-API_BASE_URL=https://cpn-engage-api-teams-poc.onrender.com \
+API_BASE_URL=http://127.0.0.1:4175 \
 TEAMS_APP_ID=... TEAMS_APP_PASSWORD=... \
 pnpm --filter @cpn-engage/notification-bot start
 ```

@@ -20,6 +20,8 @@ const EMPTY: Analytics = {
   departmentLeague: [],
   topLearners: []
 };
+const CACHE_MS = 30_000;
+const analyticsCache = new Map<number, { expiresAt: number; value: Analytics }>();
 
 /** Zero-fill a daily series for the last `days` so charts don't have gaps. */
 function fillDays(rows: { day: string; n: number }[], days: number): { day: string; value: number }[] {
@@ -35,52 +37,55 @@ function fillDays(rows: { day: string; n: number }[], days: number): { day: stri
 
 export async function getAnalytics(days = 14): Promise<Analytics> {
   if (!sql) return EMPTY;
+  const safeDays = Math.min(Math.max(Math.trunc(days), 1), 90);
+  const cached = analyticsCache.get(safeDays);
+  if (cached && cached.expiresAt > Date.now()) return structuredClone(cached.value);
   try {
     const [users, points, recognitions, modsDone, partRows, recRows, dept, learners] = await Promise.all([
       sql`select count(*)::int as n from user_profiles`,
-      sql`select coalesce(sum(points),0)::int as n from score_events`,
-      sql`select count(*)::int as n from feed_posts where kind = 'recognition' and hidden = false`,
-      sql`select count(*)::int as n from user_module_progress`,
+      sql`select coalesce(sum(points),0)::int as n from user_score_totals`,
+      sql`select coalesce(sum(recognitions),0)::int as n from daily_recognition_totals`,
+      sql`select coalesce(sum(completed),0)::int as n from user_module_totals`,
       sql`
-        select to_char(answered_at::date, 'YYYY-MM-DD') as day, count(distinct oid)::int as n
-        from user_challenge_runs
-        where answered_at > now() - (${days} || ' days')::interval
-        group by 1 order by 1
+        select to_char(business_day, 'YYYY-MM-DD') as day, users::int as n
+        from daily_challenge_totals
+        where business_day >= current_date - (${safeDays} - 1)
+        order by business_day
       `,
       sql`
-        select to_char(created_at::date, 'YYYY-MM-DD') as day, count(*)::int as n
-        from feed_posts
-        where kind = 'recognition' and created_at > now() - (${days} || ' days')::interval
-        group by 1 order by 1
+        select to_char(business_day, 'YYYY-MM-DD') as day, recognitions::int as n
+        from daily_recognition_totals
+        where business_day >= current_date - (${safeDays} - 1)
+        order by business_day
       `,
       sql`
         select coalesce(d.department, 'Unassigned') as department,
                sum(s.points)::int as points, count(distinct s.user_key)::int as people
-        from score_events s
+        from user_score_totals s
         left join directory_users d on d.oid = s.user_key
         group by 1 order by points desc limit 8
       `,
       sql`
-        select coalesce(d.display_name, p.name, p.oid) as name, count(*)::int as completed
-        from user_module_progress ump
-        left join user_profiles p on p.oid = ump.oid
-        left join directory_users d on d.oid = ump.oid
-        group by 1 order by completed desc limit 5
+        select coalesce(d.display_name, p.name, p.oid) as name, ump.completed::int as completed
+        from user_module_totals ump
+        left join user_profiles p on p.oid = ump.user_key
+        left join directory_users d on d.oid = ump.user_key
+        order by ump.completed desc, ump.user_key asc limit 5
       `
     ]);
 
-    return {
+    const value: Analytics = {
       totals: {
         users: (users[0] as { n: number }).n,
         points: (points[0] as { n: number }).n,
         recognitions: (recognitions[0] as { n: number }).n,
         modulesCompleted: (modsDone[0] as { n: number }).n
       },
-      participationByDay: fillDays(partRows as unknown as { day: string; n: number }[], days).map((r) => ({
+      participationByDay: fillDays(partRows as unknown as { day: string; n: number }[], safeDays).map((r) => ({
         day: r.day,
         users: r.value
       })),
-      recognitionsByDay: fillDays(recRows as unknown as { day: string; n: number }[], days).map((r) => ({
+      recognitionsByDay: fillDays(recRows as unknown as { day: string; n: number }[], safeDays).map((r) => ({
         day: r.day,
         count: r.value
       })),
@@ -94,6 +99,8 @@ export async function getAnalytics(days = 14): Promise<Analytics> {
         completed: r.completed
       }))
     };
+    analyticsCache.set(safeDays, { expiresAt: Date.now() + CACHE_MS, value });
+    return structuredClone(value);
   } catch (err) {
     console.warn("[analytics] failed:", err instanceof Error ? err.message : err);
     return EMPTY;

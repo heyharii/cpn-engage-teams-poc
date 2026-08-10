@@ -23,6 +23,35 @@ export type UserIdentity = {
   jobTitle?: string | null;
 };
 
+export type PersonSearchResult = { oid: string; name: string; department: string | null };
+
+export async function searchPeople(query: string, limit = 8): Promise<PersonSearchResult[]> {
+  if (!sql || query.trim().length < 2) return [];
+  const pattern = `%${query.trim().toLowerCase()}%`;
+  const safeLimit = Math.min(Math.max(limit, 1), 20);
+  try {
+    const rows = await sql<{ oid: string; name: string; department: string | null }[]>`
+      select oid, coalesce(display_name, email, oid) as name, department
+      from directory_users
+      where account_enabled is not false and user_type is distinct from 'Guest'
+        and lower(coalesce(display_name, '') || ' ' || coalesce(email, '')) like ${pattern}
+      order by display_name asc nulls last limit ${safeLimit}
+    `;
+    return [...rows];
+  } catch {
+    return [];
+  }
+}
+
+export async function getPerson(oid: string): Promise<PersonSearchResult | null> {
+  if (!sql || !oid) return null;
+  const rows = await sql<{ oid: string; name: string; department: string | null }[]>`
+    select oid, coalesce(display_name, email, oid) as name, department
+    from directory_users where oid = ${oid} and account_enabled is not false limit 1
+  `;
+  return rows[0] ?? null;
+}
+
 /** Upsert the profile + bump last_seen. Called on every verified request. */
 export async function touchProfile(u: UserIdentity): Promise<void> {
   if (!sql || !u.oid) return;
@@ -43,16 +72,19 @@ export async function touchProfile(u: UserIdentity): Promise<void> {
 }
 
 /** Record that THIS user finished a module (idempotent per oid+module). */
-export async function completeModuleForUser(oid: string, moduleId: string): Promise<void> {
-  if (!sql || !oid) return;
+export async function completeModuleForUser(oid: string, moduleId: string): Promise<boolean> {
+  if (!sql || !oid) return false;
   try {
-    await sql`
+    const rows = await sql`
       insert into user_module_progress (oid, module_id, status, completed_at)
       values (${oid}, ${moduleId}, 'completed', now())
       on conflict (oid, module_id) do nothing
+      returning module_id
     `;
+    return rows.length > 0;
   } catch (err) {
     console.warn("[users] completeModuleForUser failed:", err instanceof Error ? err.message : err);
+    return false;
   }
 }
 
@@ -61,16 +93,21 @@ export async function recordChallengeRun(
   oid: string,
   dropId: string,
   correct: boolean,
-  points: number
-): Promise<void> {
-  if (!sql || !oid) return;
+  points: number,
+  businessDay: string
+): Promise<boolean> {
+  if (!sql || !oid) return false;
   try {
-    await sql`
-      insert into user_challenge_runs (oid, drop_id, correct, points)
-      values (${oid}, ${dropId}, ${correct}, ${points})
+    const rows = await sql`
+      insert into user_challenge_runs (oid, drop_id, correct, points, business_day)
+      values (${oid}, ${dropId}, ${correct}, ${points}, ${businessDay})
+      on conflict (oid, drop_id, business_day) do nothing
+      returning id
     `;
+    return rows.length > 0;
   } catch (err) {
     console.warn("[users] recordChallengeRun failed:", err instanceof Error ? err.message : err);
+    return false;
   }
 }
 
@@ -96,7 +133,8 @@ export type MyState = {
  */
 export async function getMyState(
   identity: UserIdentity,
-  liveModuleIds: string[]
+  liveModuleIds: string[],
+  opts?: { activeDropId?: string | null; businessDay?: string | null; modulePoints?: Map<string, number> }
 ): Promise<MyState> {
   const empty: MyState = {
     profile: { oid: identity.oid, name: identity.name ?? null, email: identity.email ?? null, department: identity.department ?? null },
@@ -116,8 +154,8 @@ export async function getMyState(
         select module_id as "moduleId", completed_at as "completedAt"
         from user_module_progress where oid = ${identity.oid} order by completed_at desc
       `,
-      sql<{ dropId: string; correct: boolean; points: number; answeredAt: Date }[]>`
-        select drop_id as "dropId", correct, points, answered_at as "answeredAt"
+      sql<{ dropId: string; correct: boolean; points: number; answeredAt: Date; businessDay: string | null }[]>`
+        select drop_id as "dropId", correct, points, answered_at as "answeredAt", business_day::text as "businessDay"
         from user_challenge_runs where oid = ${identity.oid} order by answered_at desc
       `,
       sql<{ belief: string; points: number }[]>`
@@ -133,10 +171,13 @@ export async function getMyState(
     const modulesCompleted = completedLive.length;
 
     // Streak: trailing consecutive calendar days (local UTC) with a challenge run.
-    const dayKeys = [...new Set(runs.map((r) => new Date(r.answeredAt).toISOString().slice(0, 10)))].sort().reverse();
-    const { current, best } = computeStreak(dayKeys);
-    const todayKey = new Date().toISOString().slice(0, 10);
-    const answeredDropToday = dayKeys[0] === todayKey;
+    const dayKeys = [...new Set(runs.map((r) => r.businessDay ?? new Date(r.answeredAt).toISOString().slice(0, 10)))].sort().reverse();
+    const todayKey = opts?.businessDay ?? new Date().toISOString().slice(0, 10);
+    const { current, best } = computeStreak(dayKeys, todayKey);
+    const answeredDropToday = runs.some(
+      (r) => (r.businessDay ?? new Date(r.answeredAt).toISOString().slice(0, 10)) === todayKey
+        && (!opts?.activeDropId || r.dropId === opts.activeDropId)
+    );
 
     // Recent passport entries — merge module completions + challenge runs.
     const entries = [
@@ -144,7 +185,7 @@ export async function getMyState(
         id: `mod-${p.moduleId}`,
         date: new Date(p.completedAt).toISOString(),
         title: "Module completed",
-        points: 75,
+        points: opts?.modulePoints?.get(p.moduleId) ?? 75,
         status: "completed" as const,
         ts: new Date(p.completedAt).getTime()
       })),
@@ -187,13 +228,13 @@ export async function getMyState(
 }
 
 /** Trailing consecutive-day streak from a descending-sorted list of YYYY-MM-DD. */
-function computeStreak(descDays: string[]): { current: number; best: number } {
+function computeStreak(descDays: string[], todayKey = new Date().toISOString().slice(0, 10)): { current: number; best: number } {
   if (descDays.length === 0) return { current: 0, best: 0 };
   const toNum = (d: string) => Math.floor(new Date(d + "T00:00:00Z").getTime() / 86400000);
   const days = descDays.map(toNum);
 
   // Current: starts today or yesterday, counts back while contiguous.
-  const today = Math.floor(Date.now() / 86400000);
+  const today = toNum(todayKey);
   let current = 0;
   if (days[0] === today || days[0] === today - 1) {
     current = 1;

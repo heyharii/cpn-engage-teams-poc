@@ -3,14 +3,8 @@
  * Postgres so they survive API restarts (previously in-memory only). Same shared
  * DATABASE_URL as scores/directory/modules. Falls back to in-memory when unset.
  */
-import postgres from "postgres";
 import { demoFeed, type FeedItem } from "@cpn-engage/shared";
-
-const url = process.env.DATABASE_URL?.trim();
-const isLocalDb = (u: string) => ["localhost", "127.0.0.1", "postgres"].includes(new URL(u).hostname);
-const sql = url
-  ? postgres(url, { ssl: isLocalDb(url) ? false : "require", max: 5 })
-  : null;
+import { sql } from "./db.js";
 
 export const feedPersistent = Boolean(sql);
 
@@ -27,6 +21,7 @@ export async function initFeed(): Promise<void> {
       summary text,
       author text,
       target text,
+      target_key text,
       belief text,
       message text,
       created_at timestamptz not null default now()
@@ -58,6 +53,22 @@ export async function initFeed(): Promise<void> {
   await sql`alter table feed_posts add column if not exists pending boolean not null default false`;
   // Moderation: soft-hide a post instead of hard-deleting (keeps an audit trail).
   await sql`alter table feed_posts add column if not exists hidden boolean not null default false`;
+  await sql`alter table feed_posts add column if not exists target_key text`;
+  await sql`
+    create index if not exists feed_posts_visible_created_idx
+    on feed_posts (created_at desc) where hidden = false and pending = false
+  `;
+  await sql`
+    create index if not exists feed_posts_pending_created_idx
+    on feed_posts (created_at desc) where pending = true
+  `;
+  await sql`delete from feed_reactions r where not exists (select 1 from feed_posts p where p.id = r.feed_id)`;
+  await sql`delete from feed_comments c where not exists (select 1 from feed_posts p where p.id = c.feed_id)`;
+  // Cascade removes interaction rows when demo/reset maintenance removes posts.
+  await sql`alter table feed_reactions drop constraint if exists feed_reactions_feed_id_fkey`;
+  await sql`alter table feed_reactions add constraint feed_reactions_feed_id_fkey foreign key (feed_id) references feed_posts(id) on delete cascade`;
+  await sql`alter table feed_comments drop constraint if exists feed_comments_feed_id_fkey`;
+  await sql`alter table feed_comments add constraint feed_comments_feed_id_fkey foreign key (feed_id) references feed_posts(id) on delete cascade`;
   const n = await sql`select count(*)::int as n from feed_posts`;
   if (n[0].n === 0) {
     for (const f of demoFeed.filter((f) => f.kind !== "leaderboard")) await insertPost(f);
@@ -69,9 +80,9 @@ export async function initFeed(): Promise<void> {
 async function insertPost(f: FeedItem, opts?: { authorKey?: string | null; pending?: boolean }): Promise<void> {
   if (!sql) return;
   await sql`
-    insert into feed_posts (id, kind, title, summary, author, target, belief, message, created_at, author_key, pending)
+    insert into feed_posts (id, kind, title, summary, author, target, target_key, belief, message, created_at, author_key, pending)
     values (${f.id}, ${f.kind}, ${f.title ?? null}, ${f.summary ?? null}, ${f.author ?? null},
-            ${f.target ?? null}, ${f.belief ?? null}, ${f.message ?? null}, coalesce(${f.createdAt ?? null}, now()),
+            ${f.target ?? null}, ${f.targetKey ?? null}, ${f.belief ?? null}, ${f.message ?? null}, coalesce(${f.createdAt ?? null}, now()),
             ${opts?.authorKey ?? null}, ${opts?.pending ?? false})
     on conflict (id) do nothing
   `;
@@ -94,6 +105,7 @@ export async function listPending(): Promise<(FeedItem & { authorKey: string | n
       summary: (r.summary as string) ?? "",
       author: (r.author as string) ?? undefined,
       target: (r.target as string) ?? undefined,
+      targetKey: (r.target_key as string) ?? undefined,
       belief: (r.belief as string) ?? undefined,
       message: (r.message as string) ?? undefined,
       authorKey: (r.author_key as string) ?? null
@@ -102,13 +114,41 @@ export async function listPending(): Promise<(FeedItem & { authorKey: string | n
 }
 
 /** Approve a pending post → it becomes visible. Returns its author_key (to award). */
-export async function approvePost(id: string): Promise<{ authorKey: string | null; belief: string | null; target: string | null } | null> {
+export async function approvePost(id: string): Promise<{
+  authorKey: string | null;
+  author: string | null;
+  belief: string | null;
+  target: string | null;
+  targetKey: string | null;
+  message: string | null;
+} | null> {
   if (!sql) return null;
-  const rows = await sql`select author_key, belief, target from feed_posts where id = ${id} and pending = true limit 1`;
+  const rows = await sql`
+    update feed_posts set pending = false
+    where id = ${id} and pending = true
+    returning author_key, author, belief, target, target_key, message
+  `;
   if (rows.length === 0) return null;
-  await sql`update feed_posts set pending = false where id = ${id}`;
   const r = rows[0] as Record<string, unknown>;
-  return { authorKey: (r.author_key as string) ?? null, belief: (r.belief as string) ?? null, target: (r.target as string) ?? null };
+  return {
+    authorKey: (r.author_key as string) ?? null,
+    author: (r.author as string) ?? null,
+    belief: (r.belief as string) ?? null,
+    target: (r.target as string) ?? null,
+    targetKey: (r.target_key as string) ?? null,
+    message: (r.message as string) ?? null
+  };
+}
+
+/** Reject a pending recognition without awarding points or publishing it. */
+export async function rejectPost(id: string): Promise<boolean> {
+  if (!sql) return false;
+  const rows = await sql`
+    update feed_posts set pending = false, hidden = true
+    where id = ${id} and pending = true
+    returning id
+  `;
+  return rows.length > 0;
 }
 
 async function reactionsFor(feedId: string): Promise<{ emoji: string; count: number }[]> {
@@ -141,6 +181,7 @@ export async function listFeed(): Promise<FeedItem[]> {
       summary: (row.summary as string) ?? "",
       author: (row.author as string) ?? undefined,
       target: (row.target as string) ?? undefined,
+      targetKey: (row.target_key as string) ?? undefined,
       belief: (row.belief as string) ?? undefined,
       message: (row.message as string) ?? undefined,
       createdAt: created instanceof Date ? created.toISOString() : String(created),
@@ -156,6 +197,8 @@ export async function toggleReactionDb(
   reactor: string
 ): Promise<{ emoji: string; count: number }[]> {
   if (!sql) return [];
+  const post = await sql`select 1 from feed_posts where id = ${feedId} and hidden = false and pending = false`;
+  if (post.length === 0) throw new Error("feed item not found");
   const existing = await sql`select 1 from feed_reactions where feed_id = ${feedId} and emoji = ${emoji} and reactor = ${reactor} limit 1`;
   if (existing.length > 0) {
     await sql`delete from feed_reactions where feed_id = ${feedId} and emoji = ${emoji} and reactor = ${reactor}`;
@@ -201,6 +244,8 @@ export async function addComment(
   body: string
 ): Promise<FeedComment | null> {
   if (!sql) return null;
+  const post = await sql`select 1 from feed_posts where id = ${feedId} and hidden = false and pending = false`;
+  if (post.length === 0) return null;
   const rows = await sql<{ id: string; created_at: Date }[]>`
     insert into feed_comments (feed_id, author_key, author_name, body)
     values (${feedId}, ${authorKey}, ${authorName}, ${body})
@@ -273,6 +318,7 @@ export async function listFeedPage(
       summary: (row.summary as string) ?? "",
       author: (row.author as string) ?? undefined,
       target: (row.target as string) ?? undefined,
+      targetKey: (row.target_key as string) ?? undefined,
       belief: (row.belief as string) ?? undefined,
       message: (row.message as string) ?? undefined,
       createdAt: created instanceof Date ? created.toISOString() : String(created),
@@ -294,7 +340,7 @@ export async function setPostHidden(feedId: string, hidden: boolean): Promise<vo
 /** Clear all feed posts + reactions + comments (used by the demo reset). */
 export async function clearFeed(): Promise<void> {
   if (!sql) return;
-  await sql`truncate table feed_comments`;
-  await sql`truncate table feed_reactions`;
-  await sql`truncate table feed_posts`;
+  // One statement: feed_posts is referenced by the reaction/comment foreign
+  // keys, so truncating it on its own is rejected by Postgres.
+  await sql`truncate table feed_posts, feed_reactions, feed_comments, daily_recognition_totals`;
 }

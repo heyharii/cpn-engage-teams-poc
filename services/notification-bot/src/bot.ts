@@ -14,7 +14,7 @@ import { Chat, type Author, type Message, type Thread } from "chat";
 import { createTeamsAdapter, decodeThreadId } from "@chat-adapter/teams";
 import { config } from "./config.ts";
 import { state, getState } from "./state.ts";
-import { rememberConversation } from "./db.ts";
+import { getConversationByThreadId, rememberConversation } from "./db.ts";
 import { classifyIntent } from "./handlers/intent-router.ts";
 import { dispatchIntent, type DispatchCtx } from "./handlers/dispatch.ts";
 import { guardAction, guardMessage } from "./handlers/safe.ts";
@@ -44,11 +44,15 @@ function ctx(author?: Author, rawText?: string): DispatchCtx {
 async function capture(thread: Thread<unknown, unknown>, author?: Author) {
   try {
     const d = decodeThreadId(thread.id);
+    const existing = await getConversationByThreadId(thread.id);
     await rememberConversation({
       threadId: thread.id,
       serviceUrl: d.serviceUrl,
       conversationId: d.conversationId,
-      userId: author?.userId ?? null,
+      // Raw Bot Framework activities carry aadObjectId and are captured before
+      // this handler. Preserve that stable directory oid instead of replacing it
+      // with Teams' transient 29:... participant id.
+      userId: existing?.userId ?? author?.userId ?? null,
       userName: author?.fullName ?? null,
       tenantId: config.teams.tenantId || null
     });

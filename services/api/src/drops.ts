@@ -4,12 +4,8 @@
  * options array lives in jsonb so the whole DailyDrop round-trips to the bot.
  * Shares the app Postgres. Seeds the demo drop on first run.
  */
-import postgres from "postgres";
 import { demoDailyDrop, normalizeDrop, type DailyDrop, type DropQuestion } from "@cpn-engage/shared";
-
-const url = process.env.DATABASE_URL?.trim();
-const isLocalDb = (u: string) => ["localhost", "127.0.0.1", "postgres"].includes(new URL(u).hostname);
-const sql = url ? postgres(url, { ssl: isLocalDb(url) ? false : "require", max: 4 }) : null;
+import { sql } from "./db.js";
 
 export const dropsEnabled = Boolean(sql);
 
@@ -128,6 +124,8 @@ export async function upsertDrop(input: DailyDrop & { scheduledDate?: string | n
 export async function activateDrop(id: string): Promise<void> {
   if (!sql) return;
   await sql.begin(async (tx) => {
+    const exists = await tx`select 1 from daily_drops where id = ${id} for update`;
+    if (exists.length === 0) throw new Error("drop not found");
     await tx`update daily_drops set is_active = false where is_active = true`;
     await tx`update daily_drops set is_active = true, updated_at = now() where id = ${id}`;
   });
@@ -135,5 +133,8 @@ export async function activateDrop(id: string): Promise<void> {
 
 export async function deleteDrop(id: string): Promise<void> {
   if (!sql) return;
+  const rows = await sql<{ is_active: boolean }[]>`select is_active from daily_drops where id = ${id}`;
+  if (rows.length === 0) throw new Error("drop not found");
+  if (rows[0]!.is_active) throw new Error("activate another drop before deleting the active drop");
   await sql`delete from daily_drops where id = ${id}`;
 }

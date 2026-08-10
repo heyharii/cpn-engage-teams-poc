@@ -16,11 +16,11 @@ import express from "express";
 import { bot } from "./bot.ts";
 import { config } from "./config.ts";
 import { state } from "./state.ts";
-import { initDb, listConversations, listDirectory, recordBroadcast } from "./db.ts";
-import { pushCardToAll } from "./proactive.ts";
+import { initDb, listConversations, listDirectory, recordBroadcast, getConversationByUserId } from "./db.ts";
+import { pushCardTo, pushCardToAll } from "./proactive.ts";
 import { getBootstrap } from "./api.ts";
 import { firstAssignedModule, getModule } from "./content.ts";
-import { ChallengeReminderCard, ModuleAssignedCard } from "./cards/index.ts";
+import { ChallengeReminderCard, ModuleAssignedCard, RecognitionReceivedCard } from "./cards/index.ts";
 import { captureFromRawActivity } from "./install-capture.ts";
 import { installAppForUsers } from "./graph.ts";
 import { enrichAll } from "./enrich.ts";
@@ -57,6 +57,12 @@ function opsAuthorized(req: express.Request): boolean {
   const pushHdr = String(req.headers["x-push-token"] ?? "");
   return (Boolean(ADMIN_KEY) && adminHdr === ADMIN_KEY) || (Boolean(PUSH_TOKEN) && pushHdr === PUSH_TOKEN);
 }
+function pushOrAdminAuthorized(req: express.Request): boolean {
+  if (!PUSH_TOKEN) return true;
+  const pushHdr = String(req.headers["x-push-token"] ?? "");
+  const adminHdr = String(req.headers["x-admin-key"] ?? "");
+  return pushHdr === PUSH_TOKEN || (Boolean(ADMIN_KEY) && adminHdr === ADMIN_KEY);
+}
 app.use((req, res, next) => {
   if (req.path.startsWith("/internal/") && !opsAuthorized(req)) {
     res.status(401).json({ ok: false, error: "unauthorized (x-admin-key or x-push-token required)" });
@@ -82,12 +88,31 @@ app.get("/version", (_req, res) => {
 });
 
 // Internal relay from the CPN API. Not a Bot Framework activity — just log it.
-app.post("/internal/notify", (req, res) => {
+app.post("/internal/notify", async (req, res) => {
   try {
-    const body = Buffer.isBuffer(req.body) ? req.body.toString("utf8") : String(req.body ?? "");
-    console.log("[notify]", body.slice(0, 500));
-  } catch {
-    /* ignore */
+    const raw = Buffer.isBuffer(req.body) ? req.body.toString("utf8") : String(req.body ?? "");
+    const body = JSON.parse(raw) as {
+      type?: string;
+      audience?: string;
+      data?: { author?: string; behavior?: string; message?: string };
+    };
+    if (body.type === "recognition-approved" && body.audience) {
+      const ref = await getConversationByUserId(body.audience);
+      if (ref) {
+        const ok = await pushCardTo(
+          ref,
+          RecognitionReceivedCard({
+            fromName: body.data?.author ?? "A colleague",
+            behavior: body.data?.behavior ?? "Recognition",
+            message: body.data?.message ?? "You were recognised by a colleague."
+          })
+        );
+        return res.status(202).json({ ok: true, delivered: ok ? 1 : 0 });
+      }
+    }
+    console.log("[notify]", raw.slice(0, 500));
+  } catch (error) {
+    console.warn("[notify] invalid payload:", error instanceof Error ? error.message : error);
   }
   res.status(202).json({ ok: true });
 });
@@ -158,8 +183,7 @@ app.get("/internal/users", async (_req, res) => {
 
 // Sync the Microsoft directory into Postgres (people picker + segmentation).
 app.post("/internal/sync-directory", async (req, res) => {
-  const required = process.env.PUSH_TOKEN?.trim();
-  if (required && req.headers["x-push-token"] !== required) {
+  if (!pushOrAdminAuthorized(req)) {
     return res.status(401).json({ ok: false, error: "bad push token" });
   }
   const result = await syncDirectory();
@@ -168,8 +192,7 @@ app.post("/internal/sync-directory", async (req, res) => {
 
 // Enrich captured conversations with name + job title + department.
 app.post("/internal/enrich", async (req, res) => {
-  const required = process.env.PUSH_TOKEN?.trim();
-  if (required && req.headers["x-push-token"] !== required) {
+  if (!pushOrAdminAuthorized(req)) {
     return res.status(401).json({ ok: false, error: "bad push token" });
   }
   const result = await enrichAll();
@@ -183,8 +206,7 @@ app.post("/internal/enrich", async (req, res) => {
  * This is the manual "send now"; the scheduled (cron) path reuses pushCardToAll.
  */
 app.post("/internal/push", async (req, res) => {
-  const required = process.env.PUSH_TOKEN?.trim();
-  if (required && req.headers["x-push-token"] !== required) {
+  if (!pushOrAdminAuthorized(req)) {
     return res.status(401).json({ ok: false, error: "bad push token" });
   }
   const type = String(req.query.type ?? "challenge");
@@ -234,8 +256,7 @@ app.get("/internal/broadcasts", async (_req, res) => {
  *   POST /internal/install   body { "userIds": ["<aadObjectId>", ...] }
  */
 app.post("/internal/install", async (req, res) => {
-  const required = process.env.PUSH_TOKEN?.trim();
-  if (required && req.headers["x-push-token"] !== required) {
+  if (!pushOrAdminAuthorized(req)) {
     return res.status(401).json({ ok: false, error: "bad push token" });
   }
   let userIds: string[] = [];
@@ -253,8 +274,7 @@ app.post("/internal/install", async (req, res) => {
 
 // Demo the scheduler: fire a one-off proactive push after N seconds (default 30).
 app.post("/internal/schedule-test", async (req, res) => {
-  const required = process.env.PUSH_TOKEN?.trim();
-  if (required && req.headers["x-push-token"] !== required) {
+  if (!pushOrAdminAuthorized(req)) {
     return res.status(401).json({ ok: false, error: "bad push token" });
   }
   const seconds = Number(req.query.seconds ?? 30);
@@ -305,7 +325,7 @@ app.post("/api/messages", async (req, res) => {
     }
     const buf = Buffer.isBuffer(req.body) ? req.body : Buffer.from(JSON.stringify(req.body ?? {}));
     // Capture conversation refs from install / bot-added events (before any chat).
-    void captureFromRawActivity(buf.toString("utf8"));
+    await captureFromRawActivity(buf.toString("utf8"));
     const url = `http://localhost:${config.port}${req.path}`;
     const body = new Uint8Array(buf.buffer, buf.byteOffset, buf.byteLength);
     const request = new Request(url, { method: "POST", headers, body: body as unknown as BodyInit });

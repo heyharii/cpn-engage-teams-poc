@@ -163,6 +163,8 @@ export const getPendingRecognitions = () =>
   get<{ pending: PendingRecognition[] }>(`${API}/api/admin/recognitions/pending`);
 export const approveRecognition = (id: string) =>
   post<{ ok: boolean }>(`${API}/api/admin/recognitions/${encodeURIComponent(id)}/approve`);
+export const rejectRecognition = (id: string) =>
+  post<{ ok: boolean }>(`${API}/api/admin/recognitions/${encodeURIComponent(id)}/reject`);
 
 // --- Announcements + moderation ---
 export const postAnnouncement = (title: string, message: string) =>

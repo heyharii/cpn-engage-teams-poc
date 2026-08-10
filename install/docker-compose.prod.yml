@@ -66,6 +66,7 @@ services:
       DATABASE_URL: postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
       NOTIFICATION_BOT_URL: http://bot:4177
       ADMIN_KEY: ${ADMIN_KEY}
+      PUSH_TOKEN: ${PUSH_TOKEN}
       ALLOW_GUEST: "false"
       ALLOWED_ORIGINS: ${ALLOWED_ORIGINS}
       TEAMS_APP_ID: ${TEAMS_APP_ID:-}

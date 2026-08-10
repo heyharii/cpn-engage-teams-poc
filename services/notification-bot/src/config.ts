@@ -12,6 +12,10 @@ function optional(name: string, fallback = ""): string {
 }
 
 const appType = optional("TEAMS_APP_TYPE", "MultiTenant");
+const apiBaseUrl = optional("API_BASE_URL", process.env.NODE_ENV === "production" ? "" : "http://127.0.0.1:4175");
+if (process.env.NODE_ENV === "production" && !apiBaseUrl) {
+  throw new Error("API_BASE_URL is required in production");
+}
 
 export const config = {
   port: Number(optional("PORT", "4177")),
@@ -32,7 +36,7 @@ export const config = {
   },
 
   // Base URL of the deployed CPN Engage API (shared cross-app state).
-  apiBaseUrl: optional("API_BASE_URL", "https://cpn-engage-api-teams-poc.onrender.com")
+  apiBaseUrl
 } as const;
 
 export type Config = typeof config;

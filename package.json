@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "pnpm -r --parallel dev",
     "build": "pnpm -r build",
+    "test": "pnpm -r --if-present test",
     "typecheck": "pnpm -r typecheck",
     "poc:smoke": "node ./scripts/poc-smoke-test.mjs",
     "teams:manifest": "node ./teams/scripts/render-manifest.mjs ./teams/.env.local",

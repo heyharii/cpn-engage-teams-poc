@@ -4,6 +4,7 @@
  * schedule, leaderboard period, and the recognition approval flow.
  */
 import { sql } from "./db.js";
+import { isValidTimeZone } from "./domain.js";
 
 export type AppSettings = {
   recognitionPoints: number;
@@ -79,9 +80,14 @@ export async function updateSettings(patch: Partial<AppSettings>): Promise<AppSe
   if (typeof patch.appName === "string" && patch.appName.trim()) await rawSet(KEYS.appName, patch.appName.trim().slice(0, 40));
   if (typeof patch.accentColor === "string" && /^#[0-9a-fA-F]{6}$/.test(patch.accentColor))
     await rawSet(KEYS.accentColor, patch.accentColor);
-  if (typeof patch.dailyDropTime === "string" && /^\d{1,2}:\d{2}$/.test(patch.dailyDropTime))
-    await rawSet(KEYS.dailyDropTime, patch.dailyDropTime);
-  if (typeof patch.dailyDropTz === "string" && patch.dailyDropTz.trim()) await rawSet(KEYS.dailyDropTz, patch.dailyDropTz.trim());
+  if (typeof patch.dailyDropTime === "string") {
+    const match = /^(\d{1,2}):(\d{2})$/.exec(patch.dailyDropTime);
+    if (match && Number(match[1]) <= 23 && Number(match[2]) <= 59) {
+      await rawSet(KEYS.dailyDropTime, `${match[1].padStart(2, "0")}:${match[2]}`);
+    }
+  }
+  if (typeof patch.dailyDropTz === "string" && isValidTimeZone(patch.dailyDropTz.trim()))
+    await rawSet(KEYS.dailyDropTz, patch.dailyDropTz.trim());
   if (patch.leaderboardPeriod === "week" || patch.leaderboardPeriod === "month" || patch.leaderboardPeriod === "all")
     await rawSet(KEYS.leaderboardPeriod, patch.leaderboardPeriod);
   if (typeof patch.recognitionRequiresApproval === "boolean")

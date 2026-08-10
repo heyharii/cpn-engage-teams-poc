@@ -11,9 +11,11 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
 
 const REACTIONS = ["👍", "🎉", "❤️", "👏", "🔥"];
-const BELIEFS = ["Dynamism", "Customers", "Communities", "Collaboration"];
+const DEFAULT_BELIEFS = ["Dynamism", "Customers", "Communities", "Collaboration"];
 type View = "recognitions" | "leaderboard";
 type FeedRow = FeedItem & { commentCount?: number };
+type SubmitResult = { ok: boolean; pending: boolean };
+type Person = { oid: string; name: string; department: string | null };
 
 function timeAgo(iso?: string): string {
   if (!iso) return "";
@@ -44,6 +46,8 @@ export function FeedsPage() {
   const [view, setView] = useState<View>("recognitions");
   const [token, setToken] = useState<string | null>(null);
   const [me, setMe] = useState<{ name: string | null } | null>(null);
+  const [beliefs, setBeliefs] = useState(DEFAULT_BELIEFS);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const sentinel = useRef<HTMLDivElement>(null);
 
   /** Identity headers: SSO token if we have one, else the stable guest id. */
@@ -60,16 +64,30 @@ export function FeedsPage() {
   const [lbPeriod, setLbPeriod] = useState<"week" | "month" | "all">("all");
   const loadFirst = useCallback(async () => {
     setLoading(true);
-    const [feedRes, lb, per] = await Promise.all([
-      fetch(`${API}/api/feed/page?limit=15`).then((r) => r.json()),
-      fetch(`${API}/api/leaderboard`).then((r) => r.json()).catch(() => []),
-      fetch(`${API}/api/leaderboard/period`).then((r) => r.json()).catch(() => ({ period: "all" }))
-    ]);
-    setPosts(feedRes.items ?? []);
-    setCursor(feedRes.nextCursor ?? null);
-    setLeaders(Array.isArray(lb) ? lb : []);
-    setLbPeriod(per?.period ?? "all");
-    setLoading(false);
+    setLoadError(null);
+    try {
+      const [feedRes, lb, per, beliefsRes] = await Promise.all([
+        fetch(`${API}/api/feed/page?limit=15`).then((r) => {
+          if (!r.ok) throw new Error("feed unavailable");
+          return r.json();
+        }),
+        fetch(`${API}/api/leaderboard`).then((r) => r.json()).catch(() => []),
+        fetch(`${API}/api/leaderboard/period`).then((r) => r.json()).catch(() => ({ period: "all" })),
+        fetch(`${API}/api/beliefs`).then((r) => r.json()).catch(() => [])
+      ]);
+      setPosts(feedRes.items ?? []);
+      setCursor(feedRes.nextCursor ?? null);
+      setLeaders(Array.isArray(lb) ? lb : []);
+      setLbPeriod(per?.period ?? "all");
+      const names = Array.isArray(beliefsRes)
+        ? beliefsRes.map((belief) => (typeof belief === "string" ? belief : belief?.name)).filter(Boolean)
+        : [];
+      if (names.length > 0) setBeliefs(names);
+    } catch {
+      setLoadError("Couldn't load the feed. Check your connection and refresh.");
+    } finally {
+      setLoading(false);
+    }
   }, []);
 
   const loadMore = useCallback(async () => {
@@ -147,15 +165,24 @@ export function FeedsPage() {
     setPosts((prev) => prev.map((f) => (f.id === feedId ? { ...f, reactions: data.reactions } : f)));
   }
 
-  async function submitPost(target: string, belief: string, message: string): Promise<boolean> {
+  async function searchPeople(query: string): Promise<Person[]> {
+    if (query.trim().length < 2) return [];
+    const res = await fetch(`${API}/api/people?query=${encodeURIComponent(query.trim())}`, { headers: authHeaders() });
+    if (!res.ok) return [];
+    const data = (await res.json()) as { people?: Person[] };
+    return data.people ?? [];
+  }
+
+  async function submitPost(target: string, targetKey: string | null, belief: string, message: string): Promise<SubmitResult> {
     const res = await fetch(`${API}/api/feed/compose`, {
       method: "POST",
       headers: authHeaders({ "Content-Type": "application/json" }),
-      body: JSON.stringify({ target, belief, message })
+      body: JSON.stringify({ target, targetKey, belief, message })
     });
-    if (!res.ok) return false;
+    if (!res.ok) return { ok: false, pending: false };
+    const data = (await res.json()) as { pending?: boolean };
     await loadFirst();
-    return true;
+    return { ok: true, pending: data.pending === true };
   }
 
   const leaderboard = leaders;
@@ -190,7 +217,9 @@ export function FeedsPage() {
 
       {view === "recognitions" ? (
         <section className="flex flex-col gap-3">
-          <Composer meName={me?.name ?? null} onSubmit={submitPost} />
+          <Composer beliefs={beliefs} meName={me?.name ?? null} onSearch={searchPeople} onSubmit={submitPost} />
+
+          {loadError ? <p className="rounded-md border border-destructive/30 p-3 text-sm text-destructive">{loadError}</p> : null}
 
           {loading ? (
             <>
@@ -259,15 +288,25 @@ export function FeedsPage() {
 
 /* ---------- Composer ---------- */
 function Composer(props: {
+  beliefs: string[];
   meName: string | null;
-  onSubmit: (target: string, belief: string, message: string) => Promise<boolean>;
+  onSearch: (query: string) => Promise<Person[]>;
+  onSubmit: (target: string, targetKey: string | null, belief: string, message: string) => Promise<SubmitResult>;
 }) {
   const [open, setOpen] = useState(false);
   const [target, setTarget] = useState("");
-  const [belief, setBelief] = useState(BELIEFS[1]);
+  const [targetKey, setTargetKey] = useState<string | null>(null);
+  const [people, setPeople] = useState<Person[]>([]);
+  const [belief, setBelief] = useState(props.beliefs[1] ?? props.beliefs[0] ?? "Recognition");
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+  const [feedback, setFeedback] = useState<string | null>(null);
+  const searchSequence = useRef(0);
+
+  useEffect(() => {
+    if (!props.beliefs.includes(belief)) setBelief(props.beliefs[0] ?? "Recognition");
+  }, [belief, props.beliefs]);
 
   async function submit() {
     if (!target.trim() || !message.trim()) {
@@ -276,14 +315,22 @@ function Composer(props: {
     }
     setBusy(true);
     setErr(null);
-    const ok = await props.onSubmit(target.trim(), belief, message.trim());
-    setBusy(false);
-    if (ok) {
+    try {
+      const result = await props.onSubmit(target.trim(), targetKey, belief, message.trim());
+      if (!result.ok) {
+        setErr("Couldn't post. Try again.");
+        return;
+      }
       setTarget("");
+      setTargetKey(null);
+      setPeople([]);
       setMessage("");
       setOpen(false);
-    } else {
+      setFeedback(result.pending ? "Submitted for admin approval." : "Recognition posted to the feed.");
+    } catch {
       setErr("Couldn't post. Try again.");
+    } finally {
+      setBusy(false);
     }
   }
 
@@ -291,28 +338,58 @@ function Composer(props: {
     <Card>
       <CardContent>
         {!open ? (
-          <button
-            onClick={() => setOpen(true)}
-            className="flex w-full items-center gap-3 text-left"
-          >
-            <span className="flex size-9 items-center justify-center rounded-full bg-accent text-sm font-semibold text-accent-foreground">
-              {initials(props.meName ?? "You")}
-            </span>
-            <span className="flex-1 rounded-full border border-border bg-muted/40 px-4 py-2 text-sm text-muted-foreground">
-              Recognise a colleague…
-            </span>
-          </button>
+          <div className="flex flex-col gap-2">
+            <button
+              onClick={() => { setOpen(true); setFeedback(null); }}
+              className="flex w-full items-center gap-3 text-left"
+            >
+              <span className="flex size-9 items-center justify-center rounded-full bg-accent text-sm font-semibold text-accent-foreground">
+                {initials(props.meName ?? "You")}
+              </span>
+              <span className="flex-1 rounded-full border border-border bg-muted/40 px-4 py-2 text-sm text-muted-foreground">
+                Recognise a colleague…
+              </span>
+            </button>
+            {feedback ? <p className="text-xs font-medium text-emerald-600">{feedback}</p> : null}
+          </div>
         ) : (
           <div className="flex flex-col gap-3">
             <input
               value={target}
-              onChange={(e) => setTarget(e.target.value)}
+              onChange={(e) => {
+                const value = e.target.value;
+                setTarget(value);
+                setTargetKey(null);
+                const sequence = ++searchSequence.current;
+                void props.onSearch(value).then((matches) => {
+                  if (sequence === searchSequence.current) setPeople(matches);
+                });
+              }}
               placeholder="Who are you recognising? (name)"
               className="h-9 rounded-md border border-input bg-transparent px-3 text-sm outline-none focus:border-primary"
               autoFocus
             />
+            {people.length > 0 && !targetKey ? (
+              <div className="-mt-2 overflow-hidden rounded-md border border-border bg-card">
+                {people.map((person) => (
+                  <button
+                    type="button"
+                    key={person.oid}
+                    className="flex w-full items-center justify-between px-3 py-2 text-left text-sm hover:bg-muted"
+                    onClick={() => {
+                      setTarget(person.name);
+                      setTargetKey(person.oid);
+                      setPeople([]);
+                    }}
+                  >
+                    <span className="font-medium">{person.name}</span>
+                    <span className="text-xs text-muted-foreground">{person.department ?? "Employee"}</span>
+                  </button>
+                ))}
+              </div>
+            ) : null}
             <div className="flex flex-wrap gap-1.5">
-              {BELIEFS.map((b) => (
+              {props.beliefs.map((b) => (
                 <button
                   key={b}
                   onClick={() => setBelief(b)}

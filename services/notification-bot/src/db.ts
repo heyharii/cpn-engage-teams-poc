@@ -207,7 +207,12 @@ export async function rememberConversation(
       on conflict (thread_id) do update set
         service_url = excluded.service_url,
         conversation_id = excluded.conversation_id,
-        user_id = excluded.user_id,
+        user_id = case
+          when conversations.user_id ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+            and coalesce(excluded.user_id, '') !~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+          then conversations.user_id
+          else coalesce(excluded.user_id, conversations.user_id)
+        end,
         user_name = excluded.user_name,
         tenant_id = excluded.tenant_id,
         updated_at = now()

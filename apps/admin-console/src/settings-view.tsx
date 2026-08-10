@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Loader2, Palette, Clock, Trophy, ShieldCheck, Check } from "lucide-react";
+import { Loader2, Palette, Clock, Trophy, ShieldCheck, Check, X } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -9,6 +9,7 @@ import {
   saveSettings,
   getPendingRecognitions,
   approveRecognition,
+  rejectRecognition,
   type AppSettings,
   type PendingRecognition
 } from "@/lib/api";
@@ -47,6 +48,10 @@ export function SettingsView() {
 
   async function approve(id: string) {
     await approveRecognition(id);
+    await load();
+  }
+  async function reject(id: string) {
+    await rejectRecognition(id);
     await load();
   }
 
@@ -200,9 +205,14 @@ export function SettingsView() {
                       </p>
                       <p className="text-xs text-muted-foreground">{p.message}</p>
                     </div>
-                    <Button size="sm" variant="outline" onClick={() => void approve(p.id)}>
-                      <Check className="size-3.5" /> Approve
-                    </Button>
+                    <div className="flex gap-1">
+                      <Button size="sm" variant="ghost" onClick={() => void reject(p.id)}>
+                        <X className="size-3.5" /> Reject
+                      </Button>
+                      <Button size="sm" variant="outline" onClick={() => void approve(p.id)}>
+                        <Check className="size-3.5" /> Approve
+                      </Button>
+                    </div>
                   </div>
                 ))}
               </div>

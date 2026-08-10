@@ -1,7 +1,7 @@
 import cors from "@fastify/cors";
 import Fastify from "fastify";
 import { ssoConfigured, verifyTeamsToken } from "./sso.js";
-import { initScores, recordScore, computeLeaderboard, userScore, clearScores } from "./scores.js";
+import { initScores, recordScore, computeLeaderboard, userScore, clearScores, scoreRefsSummary } from "./scores.js";
 import { initModules, listModules, upsertModule, deleteModule } from "./modules.js";
 import {
   initFeed,
@@ -15,9 +15,10 @@ import {
   feedPersistent,
   setPostHidden,
   listPending,
-  approvePost
+  approvePost,
+  rejectPost
 } from "./feed.js";
-import { runMigrations, dbPing } from "./db.js";
+import { runMigrations, dbPing, dbEnabled, sql } from "./db.js";
 import {
   initDrops,
   getActiveDrop,
@@ -29,6 +30,14 @@ import {
   dropsEnabled
 } from "./drops.js";
 import { resolveIdentity } from "./identity.js";
+import { resolveWriteActor } from "./request-actor.js";
+import {
+  businessDate,
+  scoreChallengeAnswer,
+  validateDailyDrop,
+  validateModuleContent,
+  validateRecognitionInput
+} from "./domain.js";
 import { requireAdmin } from "./authz.js";
 import { buildDebugBundle, recordClientError } from "./debug.js";
 import { getAnalytics } from "./analytics.js";
@@ -46,7 +55,9 @@ import {
   touchProfile,
   completeModuleForUser,
   recordChallengeRun,
-  getMyState
+  getMyState,
+  searchPeople,
+  getPerson
 } from "./users.js";
 import type { ModuleContent, DailyDrop } from "@cpn-engage/shared";
 import {
@@ -70,7 +81,7 @@ const allowedOrigins = (process.env.ALLOWED_ORIGINS ?? "")
   .map((o) => o.trim())
   .filter(Boolean);
 await app.register(cors, {
-  origin: allowedOrigins.length > 0 ? allowedOrigins : true,
+  origin: allowedOrigins.length > 0 ? allowedOrigins : process.env.NODE_ENV === "production" ? false : true,
   methods: ["GET", "POST", "DELETE", "OPTIONS"],
   allowedHeaders: ["Content-Type", "Authorization", "x-admin-key", "x-cpn-guest"]
 });
@@ -96,6 +107,7 @@ function buildRecognitionFeedItem(item: RecognitionQueueItem) {
     summary: `${item.employee} recognized ${item.target} for living ${item.behavior}.`,
     author: item.employee,
     target: item.target,
+    targetKey: item.targetKey,
     belief: item.behavior,
     message: item.message,
     createdAt: new Date().toISOString(),
@@ -106,6 +118,7 @@ function buildRecognitionFeedItem(item: RecognitionQueueItem) {
 // Per-user reaction tracking (emoji → set of user oids) so a user can toggle
 // their own reaction. Kept beside the feed item; counts mirror into the item.
 const reactionUsers = new Map<string, Map<string, Set<string>>>();
+const demoChallengeAnswers = new Map<string, Map<string, number>>();
 
 function toggleReaction(feedId: string, emoji: string, oid: string): void {
   const item = state.feed.find((f) => f.id === feedId);
@@ -182,19 +195,31 @@ function updateMetric(label: string, updater: (value: string, note: string) => {
 
 async function relayNotificationToBot(notification: NotificationItem) {
   const botBaseUrl = process.env.NOTIFICATION_BOT_URL || "http://127.0.0.1:4177";
+  const adminKey = process.env.ADMIN_KEY?.trim();
+  const pushToken = process.env.PUSH_TOKEN?.trim();
+  const headers: Record<string, string> = { "Content-Type": "application/json" };
+  if (adminKey) headers["x-admin-key"] = adminKey;
+  if (pushToken) headers["x-push-token"] = pushToken;
 
   try {
     // /internal/notify — NOT /api/messages (that is now the Teams Bot Framework
     // webhook and would reject plain notification JSON).
-    await fetch(`${botBaseUrl}/internal/notify`, {
+    const response = await fetch(`${botBaseUrl}/internal/notify`, {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json"
-      },
+      headers,
       body: JSON.stringify(notification)
     });
+    if (!response.ok) {
+      app.log.warn({ status: response.status, notificationId: notification.id }, "Bot rejected notification relay");
+    }
+    if (sql) {
+      await sql`update notification_logs set status = ${response.ok ? "accepted" : "failed"}, updated_at = now() where id = ${notification.id}`;
+    }
   } catch (error) {
     app.log.warn({ error }, "Unable to relay notification to bot preview service");
+    if (sql) {
+      await sql`update notification_logs set status = 'failed', updated_at = now() where id = ${notification.id}`;
+    }
   }
 }
 
@@ -206,12 +231,82 @@ function queueNotification(input: NotificationRequest): NotificationItem {
     title: input.title,
     summary: input.summary,
     audience: input.audience,
-    template: input.template
+    template: input.template,
+    data: input.data
   };
 
   state.notifications = [notification, ...state.notifications];
-  void relayNotificationToBot(notification);
+  let persisted: Promise<unknown> = Promise.resolve();
+  if (sql) {
+    persisted = sql`
+      insert into notification_logs (id, type, title, summary, audience, payload)
+      values (${notification.id}, ${notification.type}, ${notification.title}, ${notification.summary},
+              ${notification.audience}, ${sql.json(notification.data ?? {})})
+      on conflict (id) do nothing
+    `.catch((error) => app.log.warn({ error }, "Unable to persist notification log"));
+  }
+  void persisted.then(() => relayNotificationToBot(notification));
   return notification;
+}
+
+async function submitRecognitionForActor(
+  actor: { userKey: string; userName: string | null },
+  raw: Partial<RecognitionSubmissionInput>
+): Promise<{ recognition: RecognitionQueueItem; pending: boolean; feedItem: ReturnType<typeof buildRecognitionFeedItem> }> {
+  const submission = validateRecognitionInput({
+    target: raw.target,
+    behavior: raw.behavior,
+    message: raw.message
+  });
+  const behaviors = await listBehaviors();
+  if (!behaviors.some((b) => b.name === submission.behavior)) {
+    throw new Error("belief is not active");
+  }
+  const requestedTargetKey = typeof raw.targetKey === "string" ? raw.targetKey.trim().slice(0, 128) : "";
+  const resolvedTarget = requestedTargetKey ? await getPerson(requestedTargetKey) : null;
+  if (requestedTargetKey && !resolvedTarget) throw new Error("selected colleague is no longer available");
+  const recognition: RecognitionQueueItem = {
+    id: `rec-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+    employee: actor.userName ?? "A colleague",
+    targetKey: resolvedTarget?.oid,
+    ...submission,
+    target: resolvedTarget?.name ?? submission.target
+  };
+  const { recognitionRequiresApproval } = await getAllSettings();
+  const feedItem = buildRecognitionFeedItem(recognition);
+
+  if (feedPersistent) {
+    await addFeedPost(feedItem, { authorKey: actor.userKey, pending: recognitionRequiresApproval });
+    state.feed = await listFeed();
+  } else if (recognitionRequiresApproval) {
+    state.recognitionQueue = [recognition, ...state.recognitionQueue];
+  } else {
+    state.feed = [feedItem, ...state.feed];
+  }
+
+  if (!recognitionRequiresApproval) {
+    await recordScore({
+      userKey: actor.userKey,
+      userName: actor.userName,
+      points: await getRecognitionPoints(),
+      reason: `Recognised ${recognition.target}`,
+      ref: `recognition:${feedItem.id}`,
+      belief: recognition.behavior
+    });
+    queueNotification({
+      type: "recognition-approved",
+      title: "New recognition posted",
+      summary: `${recognition.employee} recognised ${recognition.target} for ${recognition.behavior}.`,
+      audience: recognition.targetKey ?? recognition.target,
+      data: {
+        author: recognition.employee,
+        behavior: recognition.behavior,
+        message: recognition.message
+      }
+    });
+  }
+
+  return { recognition, pending: recognitionRequiresApproval, feedItem };
 }
 
 function triggerMorningActivation() {
@@ -416,9 +511,19 @@ app.get("/api/me", async (request, reply) => {
   }
   await touchProfile({ oid: id.oid, name: id.name, email: id.email });
   const liveModules = await listModules({ liveOnly: true });
-  const me = await getMyState({ oid: id.oid, name: id.name, email: id.email }, liveModules.map((m) => m.id));
   if (feedPersistent) state.feed = await listFeed();
   if (dropsEnabled) state.dailyDrop = await getActiveDrop();
+  const settings = await getAllSettings();
+  const today = businessDate(new Date(), settings.dailyDropTz);
+  const me = await getMyState(
+    { oid: id.oid, name: id.name, email: id.email },
+    liveModules.map((m) => m.id),
+    {
+      activeDropId: state.dailyDrop.id,
+      businessDay: today,
+      modulePoints: new Map(liveModules.map((m) => [m.id, m.points ?? 75]))
+    }
+  );
   return {
     ok: true,
     verified: id.verified,
@@ -442,6 +547,11 @@ app.get("/api/bootstrap", async () => {
 // Public list of Beliefs — the single source for the module/drop editors'
 // belief pickers and the employee "four behaviours" panel.
 app.get("/api/beliefs", async () => listBeliefs());
+app.get<{ Querystring: { query?: string } }>("/api/people", async (request, reply) => {
+  const identity = await resolveIdentity(request);
+  if (!identity) return reply.code(401).send({ ok: false, error: "identity required" });
+  return { ok: true, people: await searchPeople(request.query.query ?? "") };
+});
 app.get("/api/users/me", async () => state.currentUser);
 app.get("/api/modules", async () => state.modules);
 app.get("/api/challenges", async () => state.challenges);
@@ -455,8 +565,14 @@ app.get("/api/leaderboard", async () => {
 });
 // Expose the current period so the Feeds label can say Weekly/Monthly/All-time.
 app.get("/api/leaderboard/period", async () => ({ period: (await getAllSettings()).leaderboardPeriod }));
-app.get("/api/recognitions/pending", async () => state.recognitionQueue);
-app.get("/api/notifications", async () => state.notifications);
+app.get("/api/recognitions/pending", async (request, reply) => {
+  if (!requireAdmin(request, reply)) return reply;
+  return state.recognitionQueue;
+});
+app.get("/api/notifications", async (request, reply) => {
+  if (!requireAdmin(request, reply)) return reply;
+  return state.notifications;
+});
 app.get("/api/admin/demo/scenarios", async () => ({
   ok: true,
   scenarios: demoScenarios
@@ -476,30 +592,23 @@ app.post<{
   }
 
   const modulePoints = (target as { points?: number }).points ?? 75;
+  const actor = await resolveWriteActor(request, request.body ?? {});
+  if (!actor) return reply.code(401).send({ ok: false, error: "verified employee or bot identity required" });
+  await touchProfile({ oid: actor.userKey, name: actor.userName });
+  const awarded = await recordScore({
+    userKey: actor.userKey,
+    userName: actor.userName,
+    points: modulePoints,
+    reason: `Completed ${target.title}`,
+    ref: `module:${id}:${actor.userKey}`,
+    belief: (target as { track?: string }).track ?? null
+  });
+  await completeModuleForUser(actor.userKey, id);
 
-  if (request.body?.userKey) {
-    await recordScore({
-      userKey: request.body.userKey,
-      userName: request.body.userName,
-      points: modulePoints,
-      reason: `Completed ${target.title}`,
-      ref: `module:${id}:${request.body.userKey}`,
-      belief: (target as { track?: string }).track ?? null
-    });
-    // Per-user progress — the source of truth for THIS user's passport.
-    await completeModuleForUser(request.body.userKey, id);
-  }
-
-  state.modules = state.modules.map((item) =>
-    item.id === id
-      ? {
-          ...item,
-          status: "completed"
-        }
-      : item
-  );
-
-  if ((target as { status?: string }).status !== "completed") {
+  if (!dbEnabled && (target as { status?: string }).status !== "completed") {
+    state.modules = state.modules.map((item) =>
+      item.id === id ? { ...item, status: "completed" } : item
+    );
     state.passport.modulesCompleted = Math.min(
       state.passport.modulesTotal,
       state.passport.modulesCompleted + 1
@@ -522,57 +631,74 @@ app.post<{
   return {
     ok: true,
     moduleId: id,
+    awarded,
+    score: await userScore(actor.userKey),
     bootstrap: state
   };
 });
 
 app.post<{
   Params: { id: string };
-  Body: { userKey?: string; userName?: string; best?: boolean; questionId?: string; last?: boolean };
+  Body: { userKey?: string; userName?: string; questionId?: string; optionId?: string; last?: boolean };
 }>("/api/challenges/:id/submit", async (request, reply) => {
   const { id } = request.params;
   // Accept either a demo challenge OR an admin-authored daily drop with this id.
   const stateChallenge = state.challenges.find((item) => item.id === id);
-  const drop = stateChallenge ? null : await getDrop(id);
+  const drop = (await getDrop(id)) ?? (state.dailyDrop.id === id ? state.dailyDrop : null);
   const target = stateChallenge ?? (drop ? { title: drop.title, behavior: drop.behavior, status: "pending" as const } : null);
 
   if (!target) {
     return reply.code(404).send({ ok: false, message: "Challenge not found" });
   }
 
-  if (request.body?.userKey) {
-    const pts = request.body.best ? drop?.bestPoints ?? 50 : drop?.basePoints ?? 20;
-    // One score event per question (ref includes questionId so it's idempotent
-    // and multi-question drops award per answer, not once).
-    const qref = request.body.questionId ? `:${request.body.questionId}` : "";
-    await recordScore({
-      userKey: request.body.userKey,
-      userName: request.body.userName,
-      points: pts,
-      reason: `Challenge: ${target.title}`,
-      ref: `challenge:${id}${qref}:${request.body.userKey}`,
-      belief: target.behavior ?? null
-    });
-    // Per-user challenge run — recorded once per drop (on the last question, or
-    // for a single-question drop) so the streak counts the drop, not each Q.
-    if (request.body.last !== false) {
-      await recordChallengeRun(request.body.userKey, id, Boolean(request.body.best), pts);
-    }
+  const actor = await resolveWriteActor(request, request.body ?? {});
+  if (!actor) return reply.code(401).send({ ok: false, error: "verified employee or bot identity required" });
+  if (!drop) return reply.code(409).send({ ok: false, error: "challenge has no scoreable daily-drop content" });
+  const questionId = (request.body?.questionId ?? "").trim();
+  const optionId = (request.body?.optionId ?? "").trim();
+  const result = scoreChallengeAnswer(drop, questionId, optionId);
+  if (!result) return reply.code(400).send({ ok: false, error: "question or option is not part of this challenge" });
+  await touchProfile({ oid: actor.userKey, name: actor.userName });
+  const ref = `challenge:${id}:${questionId}:${actor.userKey}`;
+  let awarded = await recordScore({
+    userKey: actor.userKey,
+    userName: actor.userName,
+    points: result.points,
+    reason: `Challenge: ${target.title}`,
+    ref,
+    belief: target.behavior ?? null
+  });
+  const expectedRefs = drop.questions.map((q) => `challenge:${id}:${q.id}:${actor.userKey}`);
+  let answerSummary = await scoreRefsSummary(actor.userKey, expectedRefs);
+  if (!dbEnabled) {
+    const key = `${actor.userKey}:${id}`;
+    const answers = demoChallengeAnswers.get(key) ?? new Map<string, number>();
+    awarded = !answers.has(questionId);
+    if (awarded) answers.set(questionId, result.points);
+    demoChallengeAnswers.set(key, answers);
+    answerSummary = { count: answers.size, points: [...answers.values()].reduce((sum, points) => sum + points, 0) };
+  }
+  const completed = answerSummary.count === drop.questions.length;
+  let completionRecorded = false;
+  if (completed) {
+    const { dailyDropTz } = await getAllSettings();
+    completionRecorded = await recordChallengeRun(
+      actor.userKey,
+      id,
+      answerSummary.points === (drop.bestPoints ?? 50) * drop.questions.length,
+      answerSummary.points,
+      businessDate(new Date(), dailyDropTz)
+    );
+    if (!dbEnabled) completionRecorded = awarded;
   }
 
-  state.challenges = state.challenges.map((item) =>
-    item.id === id
-      ? {
-          ...item,
-          status: "completed"
-        }
-      : item
-  );
-
-  if (target.status !== "completed") {
+  if (!dbEnabled && completionRecorded && target.status !== "completed") {
+    state.challenges = state.challenges.map((item) =>
+      item.id === id ? { ...item, status: "completed" } : item
+    );
     state.dailyDrop.status = state.dailyDrop.id === id ? "completed" : state.dailyDrop.status;
-    state.passport.score += 50;
-    state.persona.points += 50;
+    state.passport.score += answerSummary.points;
+    state.persona.points += answerSummary.points;
     state.streakSummary.current += 1;
     state.streakSummary.daysLeft = Math.max(
       state.streakSummary.nextMilestone - state.streakSummary.current,
@@ -582,7 +708,7 @@ app.post<{
     appendPassportEntry({
       title: `${target.title} completed`,
       behavior: target.behavior,
-      points: 50,
+      points: answerSummary.points,
       status: "recorded"
     });
   }
@@ -592,71 +718,36 @@ app.post<{
     note: "Updated from challenge submission"
   }));
 
-  queueNotification({
-    type: "leaderboard-summary",
-    title: "Challenge completed",
-    summary: `${state.currentUser.name} completed ${target.title}.`,
-    audience: "admins"
-  });
+  if (completionRecorded) {
+    queueNotification({
+      type: "leaderboard-summary",
+      title: "Challenge completed",
+      summary: `${actor.userName ?? "An employee"} completed ${target.title}.`,
+      audience: "admins"
+    });
+  }
 
   return {
     ok: true,
     challengeId: id,
+    awarded,
+    completed,
+    score: await userScore(actor.userKey),
     bootstrap: state
   };
 });
 
 app.post<{
   Body: RecognitionSubmissionInput & { userKey?: string; userName?: string };
-}>("/api/recognitions", async (request) => {
-  const id = `rec-${Date.now()}`;
-  const { userKey, userName, ...submission } = request.body;
-  const recognition: RecognitionQueueItem = {
-    id,
-    ...submission
-  };
-
-  const { recognitionRequiresApproval } = await getAllSettings();
-
-  // Award immediately only when no approval is required; otherwise the award
-  // happens on approval (so a rejected recognition earns nothing).
-  if (userKey && !recognitionRequiresApproval) {
-    await recordScore({
-      userKey,
-      userName: userName ?? recognition.employee,
-      points: await getRecognitionPoints(),
-      reason: `Recognised ${recognition.target}`,
-      ref: `recognition:${id}`,
-      belief: recognition.behavior ?? null
-    });
+}>("/api/recognitions", async (request, reply) => {
+  const actor = await resolveWriteActor(request, request.body ?? {});
+  if (!actor) return reply.code(401).send({ ok: false, error: "verified employee or bot identity required" });
+  try {
+    const result = await submitRecognitionForActor(actor, request.body ?? {});
+    return { ok: true, recognition: result.recognition, pending: result.pending, bootstrap: state };
+  } catch (error) {
+    return reply.code(400).send({ ok: false, error: error instanceof Error ? error.message : "invalid recognition" });
   }
-
-  // Publish straight to the feed, unless approval is required — then it's held
-  // pending until an admin approves it.
-  const feedItem = buildRecognitionFeedItem(recognition);
-  if (feedPersistent) {
-    await addFeedPost(feedItem, { authorKey: userKey ?? null, pending: recognitionRequiresApproval });
-    state.feed = await listFeed();
-  } else if (!recognitionRequiresApproval) {
-    state.feed = [feedItem, ...state.feed];
-  }
-
-  updateMetric("Recognition posts", () => ({
-    note: "Published to the public feed"
-  }));
-
-  queueNotification({
-    type: "recognition-approved",
-    title: "New recognition posted",
-    summary: `${recognition.employee} recognised ${recognition.target} for ${recognition.behavior}.`,
-    audience: recognition.target
-  });
-
-  return {
-    ok: true,
-    recognition,
-    bootstrap: state
-  };
 });
 
 // Toggle an emoji reaction on a feed post. Identity is best-effort: a verified
@@ -668,19 +759,23 @@ app.post<{
   Body: { emoji?: string; reactor?: string };
 }>("/api/feed/:id/react", async (request, reply) => {
   const emoji = (request.body?.emoji ?? "").trim();
-  if (!emoji) {
-    return reply.code(400).send({ ok: false, error: "emoji required" });
+  const allowedReactions = new Set(["👍", "🎉", "❤️", "👏", "🔥"]);
+  if (!allowedReactions.has(emoji)) {
+    return reply.code(400).send({ ok: false, error: "unsupported reaction" });
   }
-  let reactor = (request.body?.reactor ?? "").trim();
-  const sso = await verifyTeamsToken(request.headers.authorization);
-  if (sso.ok) reactor = sso.user.oid;
-  if (!reactor) reactor = "anon";
+  const identity = await resolveIdentity(request);
+  if (!identity) return reply.code(401).send({ ok: false, error: "identity required to react" });
+  const reactor = identity.oid;
 
   if (feedPersistent) {
-    const reactions = await toggleReactionDb(request.params.id, emoji, reactor);
-    const item = state.feed.find((f) => f.id === request.params.id);
-    if (item) item.reactions = reactions;
-    return { ok: true, reactions };
+    try {
+      const reactions = await toggleReactionDb(request.params.id, emoji, reactor);
+      const item = state.feed.find((f) => f.id === request.params.id);
+      if (item) item.reactions = reactions;
+      return { ok: true, reactions };
+    } catch {
+      return reply.code(404).send({ ok: false, error: "feed item not found" });
+    }
   }
 
   const item = state.feed.find((f) => f.id === request.params.id);
@@ -721,6 +816,7 @@ app.post<{ Params: { id: string }; Body: { body?: string } }>(
     if (!feedPersistent) return reply.code(503).send({ ok: false, error: "comments need a database" });
     await touchProfile({ oid: id.oid, name: id.name, email: id.email });
     const comment = await addComment(request.params.id, id.oid, id.name, body);
+    if (!comment) return reply.code(404).send({ ok: false, error: "feed item not found" });
     return { ok: true, comment };
   }
 );
@@ -731,59 +827,35 @@ app.post<{ Params: { id: string }; Body: { body?: string } }>(
  * post as someone else. Posts to the public feed + awards the author — the same
  * pipeline the bot uses, now available in the web tab.
  */
-app.post<{ Body: { target?: string; belief?: string; message?: string } }>(
+app.post<{ Body: { target?: string; targetKey?: string | null; belief?: string; message?: string } }>(
   "/api/feed/compose",
   async (request, reply) => {
     const id = await resolveIdentity(request);
     if (!id) return reply.code(401).send({ ok: false, error: "sign-in required to post" });
-    const target = (request.body?.target ?? "").trim();
-    const belief = (request.body?.belief ?? "").trim();
-    const message = (request.body?.message ?? "").trim();
-    if (!target || !message) {
-      return reply.code(400).send({ ok: false, error: "target and message are required" });
-    }
-    const author = id.name ?? "A colleague";
-    const recId = `rec-${Date.now()}`;
-
     await touchProfile({ oid: id.oid, name: id.name, email: id.email });
-    await recordScore({
-      userKey: id.oid,
-      userName: author,
-      points: 75,
-      reason: `Recognised ${target}`,
-      ref: `recognition:${recId}`,
-      belief: belief || null
-    });
-
-    const feedItem = buildRecognitionFeedItem({
-      id: recId,
-      employee: author,
-      target,
-      behavior: belief || "Recognition",
-      message
-    } as RecognitionQueueItem);
-
-    if (feedPersistent) {
-      await addFeedPost(feedItem);
-      state.feed = await listFeed();
-    } else {
-      state.feed = [feedItem, ...state.feed];
+    try {
+      const result = await submitRecognitionForActor(
+        { userKey: id.oid, userName: id.name },
+        {
+          target: request.body?.target ?? "",
+          targetKey: request.body?.targetKey ?? undefined,
+          behavior: request.body?.belief ?? "",
+          message: request.body?.message ?? ""
+        }
+      );
+      return { ok: true, post: result.pending ? null : result.feedItem, pending: result.pending };
+    } catch (error) {
+      return reply.code(400).send({ ok: false, error: error instanceof Error ? error.message : "invalid recognition" });
     }
-
-    queueNotification({
-      type: "recognition-approved",
-      title: "New recognition posted",
-      summary: `${author} recognised ${target}${belief ? ` for ${belief}` : ""}.`,
-      audience: target
-    });
-
-    return { ok: true, post: feedItem };
   }
 );
 
 app.post<{
   Body: NotificationRequest;
-}>("/api/notifications", async (request) => {
+}>("/api/notifications", async (request, reply) => {
+  // This compatibility endpoint is operational, not an employee write.
+  // It remains at its old URL but is admin-gated explicitly.
+  if (!requireAdmin(request, reply)) return reply;
   const notification = queueNotification(request.body);
 
   return {
@@ -795,6 +867,8 @@ app.post<{
 
 app.post("/api/admin/demo/reset", async () => {
   state = cloneDemoState();
+  demoChallengeAnswers.clear();
+  reactionUsers.clear();
   await clearScores();
   await clearFeed();
   await initFeed(); // re-seeds the starter feed posts
@@ -829,9 +903,13 @@ app.post<{
 // Learning Journey content — authored in the Admin, consumed by the bot.
 app.get("/api/learning/modules", async () => listModules({ liveOnly: true }));
 app.get("/api/admin/modules", async () => listModules());
-app.post<{ Body: ModuleContent }>("/api/admin/modules", async (request) => {
-  const saved = await upsertModule(request.body);
-  return { ok: true, module: saved };
+app.post<{ Body: ModuleContent }>("/api/admin/modules", async (request, reply) => {
+  try {
+    const saved = await upsertModule(validateModuleContent(request.body));
+    return { ok: true, module: saved };
+  } catch (error) {
+    return reply.code(400).send({ ok: false, error: error instanceof Error ? error.message : "invalid module" });
+  }
 });
 // Persist a new module order after a drag-and-drop reorder in the Admin.
 app.post<{ Body: { order: { id: string; orderIdx: number }[] } }>(
@@ -855,7 +933,7 @@ app.delete<{ Params: { id: string } }>("/api/admin/modules/:id", async (request)
 // Daily-drop authoring — admins create/edit drops and mark ONE active. The bot
 // serves the active drop; the employee tabs show it as "today's drop".
 app.get("/api/admin/drops", async () => listDrops());
-app.post<{ Body: DailyDrop & { scheduledDate?: string | null } }>("/api/admin/drops", async (request) => {
+app.post<{ Body: DailyDrop & { scheduledDate?: string | null } }>("/api/admin/drops", async (request, reply) => {
   const b = request.body;
   const drop = {
     ...b,
@@ -864,16 +942,29 @@ app.post<{ Body: DailyDrop & { scheduledDate?: string | null } }>("/api/admin/dr
     rewardLabel: b.rewardLabel || "Up to 50 points",
     timeLimit: b.timeLimit || "30 sec"
   };
-  const saved = await upsertDrop(drop);
-  return { ok: true, drop: saved };
+  try {
+    const saved = await upsertDrop(validateDailyDrop(drop));
+    return { ok: true, drop: saved };
+  } catch (error) {
+    return reply.code(400).send({ ok: false, error: error instanceof Error ? error.message : "invalid drop" });
+  }
 });
-app.post<{ Params: { id: string } }>("/api/admin/drops/:id/activate", async (request) => {
-  await activateDrop(request.params.id);
-  return { ok: true };
+app.post<{ Params: { id: string } }>("/api/admin/drops/:id/activate", async (request, reply) => {
+  try {
+    await activateDrop(request.params.id);
+    return { ok: true };
+  } catch {
+    return reply.code(404).send({ ok: false, error: "drop not found" });
+  }
 });
-app.delete<{ Params: { id: string } }>("/api/admin/drops/:id", async (request) => {
-  await deleteDrop(request.params.id);
-  return { ok: true };
+app.delete<{ Params: { id: string } }>("/api/admin/drops/:id", async (request, reply) => {
+  try {
+    await deleteDrop(request.params.id);
+    return { ok: true };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "unable to delete drop";
+    return reply.code(message === "drop not found" ? 404 : 409).send({ ok: false, error: message });
+  }
 });
 
 // Engagement analytics for the admin Overview (real aggregates).
@@ -886,9 +977,12 @@ app.post<{ Body: Partial<AppSettings> }>("/api/admin/settings", async (request) 
   // Ask the bot to re-apply the daily-drop schedule if the time/tz changed.
   if (request.body?.dailyDropTime || request.body?.dailyDropTz) {
     try {
-      await fetch(`${process.env.NOTIFICATION_BOT_URL ?? "http://bot:4177"}/internal/reschedule`, {
+      await fetch(`${process.env.NOTIFICATION_BOT_URL ?? "http://127.0.0.1:4177"}/internal/reschedule`, {
         method: "POST",
-        headers: { "x-admin-key": process.env.ADMIN_KEY ?? "" }
+        headers: {
+          "x-admin-key": process.env.ADMIN_KEY ?? "",
+          ...(process.env.PUSH_TOKEN ? { "x-push-token": process.env.PUSH_TOKEN } : {})
+        }
       });
     } catch {
       /* bot may be down in dev — settings still saved */
@@ -973,13 +1067,30 @@ app.post<{ Params: { id: string } }>("/api/admin/recognitions/:id/approve", asyn
   if (r.authorKey) {
     await recordScore({
       userKey: r.authorKey,
+      userName: r.author,
       points: await getRecognitionPoints(),
       reason: `Recognised ${r.target ?? "a colleague"}`,
       ref: `recognition:${request.params.id}`,
       belief: r.belief
     });
   }
+  queueNotification({
+    type: "recognition-approved",
+    title: "Recognition approved",
+    summary: `${r.author ?? "A colleague"} recognised ${r.target ?? "a colleague"}${r.belief ? ` for ${r.belief}` : ""}.`,
+    audience: r.targetKey ?? r.target ?? "",
+    data: {
+      author: r.author ?? "A colleague",
+      behavior: r.belief ?? "Recognition",
+      message: r.message ?? "You were recognised by a colleague."
+    }
+  });
   if (feedPersistent) state.feed = await listFeed();
+  return { ok: true };
+});
+app.post<{ Params: { id: string } }>("/api/admin/recognitions/:id/reject", async (request, reply) => {
+  const rejected = await rejectPost(request.params.id);
+  if (!rejected) return reply.code(404).send({ ok: false, error: "not found or already moderated" });
   return { ok: true };
 });
 

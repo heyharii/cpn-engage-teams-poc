@@ -3,7 +3,7 @@
 ## Live URLs
 
 - Employee app: `https://cpn-engage-home-teams-poc.onrender.com`
-- Community feed: `https://cpn-engage-community-teams-poc.onrender.com`
+- Community feed: `https://cpn-engage-feed-teams-poc.onrender.com`
 - Admin console: `https://cpn-engage-admin-teams-poc.onrender.com`
 - API: `https://cpn-engage-api-teams-poc.onrender.com`
 - Bot preview service: `https://cpn-engage-bot-teams-poc.onrender.com`

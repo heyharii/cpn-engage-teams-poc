@@ -29,7 +29,12 @@ async function call<T>(path: string, init?: RequestInit): Promise<T | null> {
     const res = await fetch(`${config.apiBaseUrl}${path}`, {
       ...init,
       body,
-      headers: { "Content-Type": "application/json", ...(init?.headers ?? {}) },
+      headers: {
+        "Content-Type": "application/json",
+        ...(process.env.PUSH_TOKEN ? { "x-push-token": process.env.PUSH_TOKEN } : {}),
+        ...(process.env.ADMIN_KEY ? { "x-admin-key": process.env.ADMIN_KEY } : {}),
+        ...(init?.headers ?? {})
+      },
       signal: controller.signal
     });
     if (!res.ok) {
@@ -62,13 +67,13 @@ export type ScoreIdentity = { userKey: string; userName?: string | null };
 /** Answering one daily-drop question — awards that question's points. */
 export async function submitChallenge(
   challengeId: string,
-  identity?: ScoreIdentity & { best?: boolean; questionId?: string; last?: boolean }
-): Promise<BootstrapResponse | null> {
-  const data = await call<{ ok: boolean; bootstrap: BootstrapResponse }>(
+  identity?: ScoreIdentity & { questionId?: string; optionId?: string; last?: boolean }
+): Promise<{ points: number } | null> {
+  const data = await call<{ ok: boolean; score?: { points: number } }>(
     `/api/challenges/${challengeId}/submit`,
     { method: "POST", body: JSON.stringify(identity ?? {}) }
   );
-  return data?.bootstrap ?? null;
+  return data?.score ?? null;
 }
 
 /** Completing a learning module — awards module points to the user. */
@@ -86,12 +91,12 @@ export async function submitModuleComplete(
 /** A recognition sent from the bot posts to the feed + awards the sender. */
 export async function submitRecognition(
   input: RecognitionSubmissionInput & ScoreIdentity
-): Promise<boolean> {
-  const data = await call<{ ok: boolean }>("/api/recognitions", {
+): Promise<{ ok: boolean; pending: boolean } | null> {
+  const data = await call<{ ok: boolean; pending: boolean }>("/api/recognitions", {
     method: "POST",
     body: JSON.stringify(input)
   });
-  return Boolean(data?.ok);
+  return data;
 }
 
 /** Resolve the point-attribution identity for a thread (oid when known). */

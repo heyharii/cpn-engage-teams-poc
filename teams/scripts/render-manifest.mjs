@@ -37,8 +37,18 @@ function requiredEnv(name, env) {
   return value;
 }
 
+function requiredGuid(name, env) {
+  const value = requiredEnv(name, env);
+  const isGuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
+  const isPlaceholder = value.replaceAll("-", "").toLowerCase() === "0".repeat(32);
+  if (!isGuid || isPlaceholder) {
+    throw new Error(`${name} must be a real non-zero GUID from the Teams/Entra registration`);
+  }
+  return value;
+}
+
 function uniqueDomains(env) {
-  const urlKeys = ["EMPLOYEE_APP_URL", "ADMIN_CONSOLE_URL", "API_BASE_URL"];
+  const urlKeys = ["EMPLOYEE_APP_URL", "COMMUNITY_FEED_URL", "ADMIN_CONSOLE_URL", "API_BASE_URL"];
   const domains = new Set();
 
   for (const key of urlKeys) {
@@ -62,10 +72,11 @@ function uniqueDomains(env) {
 
 function replaceTemplateValues(template, env) {
   const replacements = {
-    TEAMS_APP_ID: requiredEnv("TEAMS_APP_ID", env),
-    TEAMS_ENTRA_CLIENT_ID: requiredEnv("TEAMS_ENTRA_CLIENT_ID", env),
-    TEAMS_BOT_ID: requiredEnv("TEAMS_BOT_ID", env),
+    TEAMS_APP_ID: requiredGuid("TEAMS_APP_ID", env),
+    TEAMS_ENTRA_CLIENT_ID: requiredGuid("TEAMS_ENTRA_CLIENT_ID", env),
+    TEAMS_BOT_ID: requiredGuid("TEAMS_BOT_ID", env),
     EMPLOYEE_APP_URL: requiredEnv("EMPLOYEE_APP_URL", env),
+    COMMUNITY_FEED_URL: requiredEnv("COMMUNITY_FEED_URL", env),
     ADMIN_CONSOLE_URL: requiredEnv("ADMIN_CONSOLE_URL", env),
     APPLICATION_ID_URI: requiredEnv("APPLICATION_ID_URI", env),
     TEAMS_APP_DOMAIN: requiredEnv("TEAMS_APP_DOMAIN", env)

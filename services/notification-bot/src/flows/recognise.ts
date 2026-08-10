@@ -9,8 +9,7 @@
 import type { Thread } from "chat";
 import { getBootstrap, submitRecognition, scoreIdentity } from "../api.ts";
 import { getState, setState, clearState, type ThreadState } from "../state.ts";
-import { searchDirectory, getDirectoryUser, getConversationByUserId } from "../db.ts";
-import { pushCardTo } from "../proactive.ts";
+import { searchDirectory, getDirectoryUser } from "../db.ts";
 import {
   RecognisePromptCard,
   ColleaguePickCard,
@@ -18,7 +17,6 @@ import {
   DescriptionPromptCard,
   MediaPromptCard,
   RecognitionConfirmCard,
-  RecognitionReceivedCard,
   RecognitionSentCard,
   StalePromptCard
 } from "../cards/index.ts";
@@ -161,29 +159,20 @@ export async function onRecogniseSend(thread: AnyThread, author?: { userId?: str
   const fromName = author?.fullName ?? boot.currentUser.name;
   const message = st.description ?? `Recognised for living ${st.behavior}.`;
   const id = await scoreIdentity(thread.id, author?.userId, author?.fullName);
-  await submitRecognition({
+  const submitted = await submitRecognition({
     employee: fromName,
     target: st.colleague ?? "",
+    targetKey: st.colleagueOid,
     behavior: st.behavior ?? "",
     message,
     ...id
   });
-
-  // Notify the recognised colleague directly, if we resolved their identity and
-  // they have a captured conversation (installed the app / chatted before).
-  if (st.colleagueOid) {
-    const ref = await getConversationByUserId(st.colleagueOid);
-    if (ref) {
-      await pushCardTo(
-        ref,
-        RecognitionReceivedCard({ fromName, behavior: st.behavior ?? "", message })
-      );
-      console.log(`[recognise] notified ${st.colleague} (${st.colleagueOid})`);
-    }
-  }
+  if (!submitted?.ok) throw new Error("Recognition could not be submitted");
 
   await clearState(thread.id);
-  await thread.post(RecognitionSentCard({ colleague: st.colleague ?? "", behavior: st.behavior ?? "" }));
+  await thread.post(
+    RecognitionSentCard({ colleague: st.colleague ?? "", behavior: st.behavior ?? "", pending: submitted.pending })
+  );
 }
 
 /** Re-render the current recognise step (for "Continue"). */

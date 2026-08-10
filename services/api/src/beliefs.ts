@@ -4,12 +4,8 @@
  * Belief dropdown in the module + daily-drop editors. Admins add/edit/reorder;
  * everything else reads this list. Seeds the demo beliefs on first run.
  */
-import postgres from "postgres";
 import { demoBehaviors, type Behavior } from "@cpn-engage/shared";
-
-const url = process.env.DATABASE_URL?.trim();
-const isLocalDb = (u: string) => ["localhost", "127.0.0.1", "postgres"].includes(new URL(u).hostname);
-const sql = url ? postgres(url, { ssl: isLocalDb(url) ? false : "require", max: 3 }) : null;
+import { sql } from "./db.js";
 
 export const beliefsEnabled = Boolean(sql);
 

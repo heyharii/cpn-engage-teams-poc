@@ -4,14 +4,8 @@
  * whole ModuleContent round-trips unchanged to the bot. Shares the app Postgres
  * (same DATABASE_URL as scores/directory). Seeds the demo modules on first run.
  */
-import postgres from "postgres";
 import { demoModuleContent, type ModuleContent } from "@cpn-engage/shared";
-
-const url = process.env.DATABASE_URL?.trim();
-const isLocalDb = (u: string) => ["localhost", "127.0.0.1", "postgres"].includes(new URL(u).hostname);
-const sql = url
-  ? postgres(url, { ssl: isLocalDb(url) ? false : "require", max: 5 })
-  : null;
+import { sql } from "./db.js";
 
 export const modulesEnabled = Boolean(sql);
 

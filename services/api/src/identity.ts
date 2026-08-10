@@ -13,7 +13,9 @@
 import type { FastifyRequest } from "fastify";
 import { ssoConfigured, verifyTeamsToken } from "./sso.js";
 
-const allowGuest = process.env.ALLOW_GUEST !== "false";
+const allowGuest =
+  process.env.ALLOW_GUEST === "true" ||
+  (process.env.NODE_ENV !== "production" && process.env.ALLOW_GUEST !== "false");
 
 export type ResolvedIdentity = {
   oid: string;

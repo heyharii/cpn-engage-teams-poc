@@ -30,6 +30,7 @@ services:
       # Admin authorization — the console must send this as x-admin-key. In prod
       # the installer generates a random one; this is a fixed local-dev value.
       ADMIN_KEY: ${ADMIN_KEY:-local-dev-admin-key}
+      PUSH_TOKEN: ${PUSH_TOKEN:-}
       # Allow browser guests (per-browser per-user state) in local dev.
       ALLOW_GUEST: ${ALLOW_GUEST:-true}
       # Teams SSO token validation (Profile tab) — optional locally.

@@ -7,6 +7,7 @@
  */
 
 import { createMemoryState } from "@chat-adapter/state-memory";
+import { sql } from "./db.ts";
 
 export type ThreadState =
   | { kind: "idle" }
@@ -33,14 +34,46 @@ export type ThreadState =
 
 export const state = createMemoryState();
 
+let tableReady: Promise<void> | null = null;
+function ensureTable(): Promise<void> {
+  if (!sql) return Promise.resolve();
+  tableReady ??= sql`
+    create table if not exists bot_flow_states (
+      thread_id text primary key,
+      state jsonb not null,
+      updated_at timestamptz not null default now()
+    )
+  `.then(() => undefined);
+  return tableReady;
+}
+
 export async function getState(threadId: string): Promise<ThreadState> {
+  if (sql) {
+    await ensureTable();
+    const rows = await sql<{ state: ThreadState }[]>`select state from bot_flow_states where thread_id = ${threadId}`;
+    return rows[0]?.state ?? { kind: "idle" };
+  }
   return (await state.get<ThreadState>(threadId)) ?? { kind: "idle" };
 }
 
 export async function setState(threadId: string, next: ThreadState): Promise<void> {
+  if (sql) {
+    await ensureTable();
+    await sql`
+      insert into bot_flow_states (thread_id, state, updated_at)
+      values (${threadId}, ${sql.json(next)}, now())
+      on conflict (thread_id) do update set state = excluded.state, updated_at = now()
+    `;
+    return;
+  }
   await state.set<ThreadState>(threadId, next);
 }
 
 export async function clearState(threadId: string): Promise<void> {
+  if (sql) {
+    await ensureTable();
+    await sql`delete from bot_flow_states where thread_id = ${threadId}`;
+    return;
+  }
   await state.set<ThreadState>(threadId, { kind: "idle" });
 }

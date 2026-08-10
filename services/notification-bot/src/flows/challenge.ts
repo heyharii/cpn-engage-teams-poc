@@ -58,11 +58,11 @@ export async function onSubmitAnswer(
   const isLast = st.qIndex + 1 >= drop.questions.length;
   const updated = await submitChallenge(drop.id, {
     ...id,
-    best: chosen.isBest === true,
     questionId: payload.questionId,
+    optionId: payload.optionId,
     last: isLast
   });
-  const newScore = updated?.passport.score ?? null;
+  const newScore = updated?.points ?? null;
 
   const runningScore = st.score + pointsEarned;
   await setState(thread.id, {

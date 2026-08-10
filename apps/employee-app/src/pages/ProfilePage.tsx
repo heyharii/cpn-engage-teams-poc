@@ -272,9 +272,11 @@ export function ProfilePage() {
               <p className="mt-1 text-sm text-muted-foreground">
                 {nextModule?.summary ?? "Fetching your learning journey."}
               </p>
-              {nextModule?.duration ? (
+              {(nextModule as { duration?: string; durationMin?: number } | undefined)?.duration ||
+              (nextModule as { durationMin?: number } | undefined)?.durationMin ? (
                 <Badge variant="secondary" className="mt-3">
-                  {nextModule.duration}
+                  {(nextModule as { duration?: string; durationMin?: number }).duration ??
+                    `${(nextModule as { durationMin?: number }).durationMin} min`}
                 </Badge>
               ) : null}
               <p className="mt-3 text-sm font-medium text-primary">▶ Start it from the Chat tab</p>

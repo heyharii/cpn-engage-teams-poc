@@ -24,9 +24,13 @@ Install dependencies:
 
 `pnpm install`
 
-Start the employee app (serves both the Profile tab at `/` and the Feeds tab at `/feeds` — merged into one app so Feeds' Teams SSO works):
+Start the employee app (Profile tab):
 
 `pnpm --filter @cpn-engage/employee-app dev`
+
+Start the standalone community feed:
+
+`pnpm --filter @cpn-engage/community-feed dev`
 
 Start the admin console:
 
@@ -44,16 +48,15 @@ Default URLs:
 
 - `http://localhost:4173` - employee app
 - `http://localhost:4174` - admin console
-- `http://localhost:4176` - community feed
+- `http://localhost:4176/feeds` - standalone community feed
 - `http://localhost:4175/health` - API health
 - `http://localhost:4177/health` - notification bot health
 
-Useful bot preview routes:
+Useful bot diagnostics:
 
-- `http://localhost:4177/api/cards`
-- `http://localhost:4177/api/cards/daily-drop`
-- `http://localhost:4177/api/cards/passport-summary`
-- `POST http://localhost:4177/api/messages/demo/capstone-unlocked`
+- `http://localhost:4177/`
+- `http://localhost:4177/version`
+- `http://localhost:4177/internal/audience`
 
 Useful end-to-end demo routes:
 

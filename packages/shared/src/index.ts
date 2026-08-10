@@ -203,6 +203,7 @@ export type FeedItem = {
   /** Rich recognition fields (present for kind === "recognition"). */
   author?: string;
   target?: string;
+  targetKey?: string;
   belief?: string;
   message?: string;
   createdAt?: string;
@@ -264,6 +265,7 @@ export type RecognitionQueueItem = {
   id: string;
   employee: string;
   target: string;
+  targetKey?: string;
   behavior: string;
   message: string;
 };
@@ -271,6 +273,7 @@ export type RecognitionQueueItem = {
 export type RecognitionSubmissionInput = {
   employee: string;
   target: string;
+  targetKey?: string;
   behavior: string;
   message: string;
 };
@@ -282,6 +285,7 @@ export type NotificationItem = {
   summary: string;
   audience: string;
   template?: BotCardTemplate;
+  data?: Record<string, string>;
 };
 
 export type NotificationRequest = {
@@ -290,6 +294,7 @@ export type NotificationRequest = {
   summary: string;
   audience: string;
   template?: BotCardTemplate;
+  data?: Record<string, string>;
 };
 
 export type BotCardTemplate =

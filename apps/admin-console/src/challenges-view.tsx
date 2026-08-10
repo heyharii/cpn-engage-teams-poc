@@ -56,6 +56,7 @@ export function ChallengesView() {
   const [loading, setLoading] = useState(true);
   const [editing, setEditing] = useState<AdminDrop | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
   async function load() {
     setLoading(true);
@@ -76,7 +77,12 @@ export function ChallengesView() {
   }
   async function remove(id: string) {
     if (!confirm("Delete this drop?")) return;
-    await deleteDropApi(id);
+    setError(null);
+    const removed = await deleteDropApi(id);
+    if (!removed) {
+      setError("The active drop cannot be deleted. Activate another drop first.");
+      return;
+    }
     await load();
   }
 
@@ -107,6 +113,8 @@ export function ChallengesView() {
           <Plus className="size-4" /> New drop
         </Button>
       </div>
+
+      {error ? <p className="mb-4 rounded-md border border-destructive/30 p-3 text-sm text-destructive">{error}</p> : null}
 
       {loading ? (
         <p className="text-sm text-muted-foreground">Loading…</p>
@@ -141,7 +149,13 @@ export function ChallengesView() {
                   <Button size="icon" variant="ghost" onClick={() => setEditing(withQuestions(d))}>
                     <Pencil className="size-4" />
                   </Button>
-                  <Button size="icon" variant="ghost" onClick={() => void remove(d.id)}>
+                  <Button
+                    size="icon"
+                    variant="ghost"
+                    disabled={d.isActive}
+                    title={d.isActive ? "Activate another drop before deleting this one" : "Delete drop"}
+                    onClick={() => void remove(d.id)}
+                  >
                     <Trash2 className="size-4" />
                   </Button>
                 </CardContent>

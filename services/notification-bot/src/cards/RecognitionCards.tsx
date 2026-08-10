@@ -29,12 +29,17 @@ export function RecognisePromptCard(opts: { behaviors: Behavior[] }) {
 }
 
 /** Step 2 — confirmation after the recognition is posted. */
-export function RecognitionSentCard(opts: { colleague: string; behavior: string }) {
+export function RecognitionSentCard(opts: { colleague: string; behavior: string; pending?: boolean }) {
   return (
-    <Card title="✅ Recognition sent" subtitle="Posted to the Community Feed">
+    <Card
+      title={opts.pending ? "🕓 Recognition submitted" : "✅ Recognition sent"}
+      subtitle={opts.pending ? "Waiting for admin approval" : "Posted to the Community Feed"}
+    >
       <Section>
         <CardText>
-          {`Your recognition for ${opts.colleague} (${opts.behavior}) is now live in the Community Feed, and ${opts.colleague} has been notified.`}
+          {opts.pending
+            ? `Your recognition for ${opts.colleague} (${opts.behavior}) is waiting for approval. They will be notified after it is approved.`
+            : `Your recognition for ${opts.colleague} (${opts.behavior}) is now live in the Community Feed. Their Teams notification has been queued.`}
         </CardText>
       </Section>
       <Actions>
