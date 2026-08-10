@@ -37,6 +37,25 @@ export function ssoConfigured(): boolean {
   return Boolean(jwks && clientId && tenantId);
 }
 
+/**
+ * What the server was configured with — no secrets, just which pieces are
+ * present, so a deployment can be checked from the outside (and the tabs can
+ * tell the user WHY they are running unverified).
+ */
+export function ssoConfigSummary(): {
+  configured: boolean;
+  clientId: boolean;
+  tenantId: boolean;
+  applicationIdUri: string | null;
+} {
+  return {
+    configured: ssoConfigured(),
+    clientId: Boolean(clientId),
+    tenantId: Boolean(tenantId),
+    applicationIdUri: appIdUri || null
+  };
+}
+
 export async function verifyTeamsToken(authHeader: string | undefined): Promise<SsoResult> {
   if (!jwks) return { ok: false, error: "SSO not configured (set TEAMS_APP_TENANT_ID + TEAMS_APP_ID)" };
   const token = authHeader?.replace(/^Bearer\s+/i, "").trim();

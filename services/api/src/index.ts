@@ -1,6 +1,6 @@
 import cors from "@fastify/cors";
 import Fastify from "fastify";
-import { ssoConfigured, verifyTeamsToken } from "./sso.js";
+import { ssoConfigured, ssoConfigSummary, verifyTeamsToken } from "./sso.js";
 import { initScores, recordScore, computeLeaderboard, userScore, clearScores, scoreRefsSummary } from "./scores.js";
 import { initModules, listModules, upsertModule, deleteModule } from "./modules.js";
 import {
@@ -29,7 +29,7 @@ import {
   deleteDrop,
   dropsEnabled
 } from "./drops.js";
-import { resolveIdentity } from "./identity.js";
+import { resolveIdentity, resolveIdentityDetailed } from "./identity.js";
 import { resolveWriteActor } from "./request-actor.js";
 import {
   businessDate,
@@ -518,9 +518,9 @@ app.get("/api/profile/me", async (request, reply) => {
  * `org` carries the shared content (modules, daily drop, feed) both users share.
  */
 app.get("/api/me", async (request, reply) => {
-  const id = await resolveIdentity(request);
+  const { identity: id, sso } = await resolveIdentityDetailed(request);
   if (!id) {
-    return reply.code(401).send({ ok: false, error: "no identity (SSO token or guest id required)" });
+    return reply.code(401).send({ ok: false, error: "no identity (SSO token or guest id required)", sso });
   }
   await touchProfile({ oid: id.oid, name: id.name, email: id.email });
   const liveModules = await listModules({ liveOnly: true });
@@ -540,6 +540,9 @@ app.get("/api/me", async (request, reply) => {
   return {
     ok: true,
     verified: id.verified,
+    // Why this request is (un)verified — the tabs render it as an SSO badge so
+    // a misconfigured app registration is visible instead of silent.
+    sso,
     me,
     org: {
       modules: liveModules,
@@ -549,6 +552,19 @@ app.get("/api/me", async (request, reply) => {
     }
   };
 });
+
+/**
+ * Deployment self-check for Teams SSO — no secrets, safe to call from anywhere.
+ * `curl $API/api/sso/status` tells an operator whether the API can validate
+ * tokens at all, which origins its CORS allowlist accepts (the other thing that
+ * silently breaks tabs), and whether unverified guests are permitted.
+ */
+app.get("/api/sso/status", async () => ({
+  ok: true,
+  sso: ssoConfigSummary(),
+  allowGuest: process.env.ALLOW_GUEST === "true" || (process.env.NODE_ENV !== "production" && process.env.ALLOW_GUEST !== "false"),
+  allowedOrigins: allowedOrigins.length > 0 ? allowedOrigins : "any (dev)"
+}));
 
 app.get("/api/bootstrap", async () => {
   if (feedPersistent) state.feed = await listFeed();

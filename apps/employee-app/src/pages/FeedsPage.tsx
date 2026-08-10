@@ -4,6 +4,7 @@ import { AnimatePresence, motion } from "framer-motion";
 import { RefreshCw, Send, MessageCircle, Loader2 } from "lucide-react";
 import { guestId } from "@/lib/identity";
 import { teamsAuthToken, teamsDisplayName } from "@/lib/teams";
+import { SsoBadge, type SsoInfo, type SsoState } from "@/components/sso-badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -51,6 +52,7 @@ export function FeedsPage() {
   const sentinel = useRef<HTMLDivElement>(null);
 
   const [hostName, setHostName] = useState<string | null>(null);
+  const [sso, setSso] = useState<SsoState>({ state: "checking" });
 
   /** Identity headers: SSO token if we have one, else the stable guest id. */
   const authHeaders = useCallback(
@@ -127,12 +129,24 @@ export function FeedsPage() {
     };
   }, [loadFirst]);
 
-  // Resolve who "me" is (for the composer avatar/label).
+  // Resolve who "me" is (composer label) and why we are (un)verified — a tab
+  // that cannot reach the API or whose token is rejected says so in the badge.
   useEffect(() => {
     void fetch(`${API}/api/me`, { headers: authHeaders() })
-      .then((r) => (r.ok ? r.json() : null))
-      .then((d) => d && setMe({ name: d.me?.profile?.name ?? null }))
-      .catch(() => {});
+      .then(async (r) => {
+        const body = (await r.json().catch(() => null)) as
+          | { verified?: boolean; sso?: SsoInfo; me?: { profile?: { name?: string | null } } }
+          | null;
+        if (r.ok && body) {
+          setMe({ name: body.me?.profile?.name ?? null });
+          setSso({ state: "ok", verified: Boolean(body.verified), name: body.me?.profile?.name ?? null, sso: body.sso });
+        } else {
+          setSso({ state: "ok", verified: false, name: null, sso: body?.sso });
+        }
+      })
+      .catch((err: unknown) => {
+        setSso({ state: "unreachable", detail: err instanceof Error ? err.message : "request failed" });
+      });
   }, [authHeaders]);
 
   // Infinite scroll: load more when the sentinel enters view.
@@ -213,6 +227,8 @@ export function FeedsPage() {
           {refreshing ? "…" : "Refresh"}
         </Button>
       </header>
+
+      <SsoBadge status={sso} className="mb-4" />
 
       <div className="mb-5 grid grid-cols-2 gap-1 rounded-lg border border-border bg-card p-1">
         {(["recognitions", "leaderboard"] as View[]).map((v) => (

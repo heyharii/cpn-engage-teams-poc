@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import { RefreshCw, Flame, MessageSquare, BookOpen, Target, LayoutGrid, ScrollText } from "lucide-react";
 import { guestId } from "@/lib/identity";
 import { teamsAuthToken, teamsDisplayName } from "@/lib/teams";
+import { SsoBadge, type SsoInfo, type SsoState } from "@/components/sso-badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -13,6 +14,7 @@ type SsoStatus = "checking" | "verified" | "unverified";
 type MeResponse = {
   ok: boolean;
   verified: boolean;
+  sso?: SsoInfo;
   me: {
     profile: { oid: string; name: string | null; email: string | null; department: string | null };
     score: { points: number; rank: number | null };
@@ -52,6 +54,7 @@ export function ProfilePage() {
   const [bootstrap, setBootstrap] = useState<BootstrapResponse | null>(null);
   const [me, setMe] = useState<MeResponse | null>(null);
   const [ssoStatus, setSsoStatus] = useState<SsoStatus>("checking");
+  const [sso, setSso] = useState<SsoState>({ state: "checking" });
   const [refreshing, setRefreshing] = useState(false);
   const [activeNav, setActiveNav] = useState("overview");
   const apiBaseUrl = import.meta.env.VITE_API_BASE_URL ?? "http://127.0.0.1:4175";
@@ -71,10 +74,23 @@ export function ProfilePage() {
       const name = await teamsDisplayName();
       if (name) headers["x-cpn-guest-name"] = name;
     }
-    const res = await fetch(`${apiBaseUrl}/api/me`, { headers });
-    if (res.ok) {
-      setMe((await res.json()) as MeResponse);
-      setSsoStatus(token ? "verified" : "unverified");
+    try {
+      const res = await fetch(`${apiBaseUrl}/api/me`, { headers });
+      if (!res.ok) {
+        const body = (await res.json().catch(() => null)) as { sso?: SsoInfo } | null;
+        setSso({ state: "ok", verified: false, name: null, sso: body?.sso });
+        setSsoStatus("unverified");
+        return;
+      }
+      const data = (await res.json()) as MeResponse;
+      setMe(data);
+      setSsoStatus(data.verified ? "verified" : "unverified");
+      setSso({ state: "ok", verified: data.verified, name: data.me?.profile?.name ?? null, sso: data.sso });
+    } catch (err) {
+      // A blocked CORS preflight or a down API lands here — say so instead of
+      // leaving the tab looking empty.
+      setSso({ state: "unreachable", detail: err instanceof Error ? err.message : "request failed" });
+      setSsoStatus("unverified");
     }
   }
 
@@ -177,6 +193,7 @@ export function ProfilePage() {
                     "Loading your profile…"
                   )}
                 </p>
+                <SsoBadge status={sso} className="mt-3" />
                 <Button variant="outline" size="sm" className="mt-4" onClick={() => void refresh()}>
                   <RefreshCw className={cn("size-3.5", refreshing && "animate-spin")} />
                   {refreshing ? "Refreshing…" : "Refresh"}
