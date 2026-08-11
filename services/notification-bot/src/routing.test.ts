@@ -14,6 +14,14 @@ test("browsing beats starting when the ask is ambiguous", () => {
   }
 });
 
+test("both recognition versions stay reachable, and v1 keeps the plain wording", () => {
+  assert.equal(classifyIntent("recognise a colleague"), "recognise");
+  assert.equal(classifyIntent("kudos to someone"), "recognise");
+  for (const text of ["recognise v2", "kudos new form", "praise — new version"]) {
+    assert.equal(classifyIntent(text), "recognise_v2", text);
+  }
+});
+
 test("a colleague's name never escapes the recognition flow as a command", () => {
   // The router only escapes on a real command; these must stay "unknown" so
   // mid-flow text is consumed as the answer rather than routed away.

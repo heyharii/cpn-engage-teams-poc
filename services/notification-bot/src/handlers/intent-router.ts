@@ -9,6 +9,7 @@ export type Intent =
   | "start_module"
   | "daily_challenge"
   | "recognise"
+  | "recognise_v2"
   | "leaderboard"
   | "unknown";
 
@@ -40,6 +41,11 @@ const MATCHERS: { intent: Intent; patterns: RegExp[] }[] = [
   {
     intent: "daily_challenge",
     patterns: [/\b(daily|challenge|quiz|drop|scenario)\b/i]
+  },
+  // Ordered before `recognise`, which its patterns would otherwise match.
+  {
+    intent: "recognise_v2",
+    patterns: [/\b(recogni[sz]e|kudos|praise)\b.{0,12}\b(v2|new form|new version)\b/i]
   },
   {
     intent: "recognise",

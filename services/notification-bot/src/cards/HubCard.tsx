@@ -9,9 +9,18 @@ import { Card, CardText, Section, Actions, Button, Divider } from "chat";
  * When a flow is in progress the hub leads with Continue, which is also the
  * only way back into a paused flow.
  */
-export function HubCard(opts: { displayName?: string; resume?: { label: string; detail: string } | null } = {}) {
+export function HubCard(
+  opts: {
+    displayName?: string;
+    resume?: { label: string; detail: string } | null;
+    /** v2 flows on offer. They sit ALONGSIDE their v1 buttons, never replacing
+     *  them, so both versions can be tried in the same conversation. */
+    v2?: { intent: string; label: string }[];
+  } = {}
+) {
   const hi = opts.displayName ? `Hi ${opts.displayName}!` : "Hi!";
   const r = opts.resume;
+  const v2 = opts.v2 ?? [];
   return (
     <Card title="👋 CPN Engage" subtitle="Your Central Pattana culture companion">
       <Section>
@@ -45,6 +54,11 @@ export function HubCard(opts: { displayName?: string; resume?: { label: string; 
         <Button id="intent" value="daily_challenge">Today's challenge</Button>
         <Button id="intent" value="recognise">Recognise a colleague</Button>
         <Button id="intent" value="leaderboard">View leaderboard</Button>
+        {v2.map((f) => (
+          <Button key={f.intent} id="intent" value={f.intent}>
+            {f.label}
+          </Button>
+        ))}
       </Actions>
     </Card>
   );

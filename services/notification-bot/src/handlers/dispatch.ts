@@ -14,8 +14,7 @@
 
 import type { Thread } from "chat";
 import type { Intent } from "./intent-router.ts";
-import { getState, describeFlow, type ThreadState } from "../state.ts";
-import { config } from "../config.ts";
+import { getState, describeFlow, type FlowSummary } from "../state.ts";
 import { ConflictCard } from "../cards/index.ts";
 import { showHub } from "../flows/hub.ts";
 import { showModuleList, showModuleIntro } from "../flows/module.ts";
@@ -35,10 +34,13 @@ export type DispatchCtx = {
 };
 
 /** Intents that reset thread state: the flow they'd enter, and how to name it. */
-const DESTRUCTIVE: Record<string, { kind: ThreadState["kind"]; label: string }> = {
+const DESTRUCTIVE: Record<string, { kind: FlowSummary["kind"]; label: string }> = {
   start_module: { kind: "module", label: "a module" },
   daily_challenge: { kind: "challenge", label: "today's challenge" },
-  recognise: { kind: "recognise", label: "a recognition" }
+  // Both recognition versions map to the same flow kind, so starting either one
+  // while the other is open raises the conflict card rather than losing a draft.
+  recognise: { kind: "recognise", label: "a recognition" },
+  recognise_v2: { kind: "recognise", label: "a recognition" }
 };
 
 export async function dispatchIntent(thread: AnyThread, intent: Intent | string, ctx: DispatchCtx = {}) {
@@ -65,11 +67,11 @@ export async function dispatchIntent(thread: AnyThread, intent: Intent | string,
     case "leaderboard":
       return showLeaderboard(thread);
     case "recognise":
-      // v2 is one card, so it has no partial state to resume and no opener to
-      // parse — the force/rawText arguments simply don't apply to it.
-      return config.flowsV2.recognise
-        ? startRecogniseV2(thread)
-        : startRecognise(thread, ctx.rawText, ctx.force === true);
+      return startRecognise(thread, ctx.rawText, ctx.force === true);
+    case "recognise_v2":
+      // One card, so there is no partial state to resume and no opener to
+      // parse — the force/rawText arguments don't apply to it.
+      return startRecogniseV2(thread);
     case "help":
     case "unknown":
     default:

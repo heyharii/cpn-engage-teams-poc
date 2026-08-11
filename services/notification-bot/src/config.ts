@@ -18,21 +18,35 @@ if (process.env.NODE_ENV === "production" && !apiBaseUrl) {
 }
 
 /**
- * Flows to serve in their v2 form, comma-separated (e.g. BOT_FLOWS_V2=recognise).
- * v1 stays the default so a v2 flow can be demoed, and switched off again,
- * without touching the code that everyone else is using.
+ * v2 flows to EXPOSE, comma-separated (e.g. BOT_FLOWS_V2=recognise, or "all").
+ *
+ * This switches an entry point on; it never switches v1 off. Both versions stay
+ * reachable at the same time so they can be compared side by side in one
+ * conversation — and so a v2 that misbehaves in a real tenant costs nothing,
+ * because the v1 route was never taken away. As more v2 flows arrive they each
+ * add an entry here rather than competing for one either/or setting.
  */
-const flowsV2 = new Set(
+/** How each v2 flow names itself on the hub, next to its v1 button. */
+const V2_LABELS = { recognise: "Recognise — new form" } as const;
+
+const exposedV2 = new Set(
   optional("BOT_FLOWS_V2")
     .split(",")
     .map((s) => s.trim().toLowerCase())
     .filter(Boolean)
 );
 
+const v2 = { recognise: exposedV2.has("recognise") || exposedV2.has("all") };
+
 export const config = {
   port: Number(optional("PORT", "4177")),
 
-  flowsV2: { recognise: flowsV2.has("recognise") || flowsV2.has("all") },
+  /** Which v2 flows the hub offers alongside their v1 counterparts. */
+  v2,
+  /** The v2 flows on offer, for rendering the hub's buttons. */
+  v2Entries: (Object.entries(v2) as [keyof typeof v2, boolean][])
+    .filter(([, on]) => on)
+    .map(([id]) => ({ intent: `${id}_v2`, label: V2_LABELS[id] })),
 
   teams: {
     // Microsoft App ID of the Azure Bot (= Entra app registration client id).
