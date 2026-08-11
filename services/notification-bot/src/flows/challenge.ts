@@ -1,26 +1,40 @@
 /**
- * Challenge flow (PRD Feature 2): a daily drop that can have 1..n MCQs. Each
- * question is scored (best answer = bestPoints, else basePoints), points are
- * awarded once per question (idempotent via ref), and re-answering an old card
- * is guarded as stale. After the last question a summary card shows the total.
+ * Challenge flow (PRD Feature 2): a daily drop of 1..n MCQs. Each question is
+ * scored (best answer = bestPoints, else basePoints), points are awarded once
+ * per question (idempotent via ref), and re-answering an old card is stale.
+ *
+ * Like every flow here: the answered card becomes a buttonless result, and the
+ * next question is posted below it.
  */
 
 import type { Thread } from "chat";
 import { normalizeDrop } from "@cpn-engage/shared";
 import { getBootstrap, submitChallenge, scoreIdentity } from "../api.ts";
-import { getState, setState } from "../state.ts";
-import { editCard } from "../edit.ts";
+import { getState, setState, type ThreadState } from "../state.ts";
+import { advanceStep, editCard, postCard } from "../edit.ts";
 import { DailyDropCard, AnswerResultCard, StalePromptCard } from "../cards/index.ts";
 
 type AnyThread = Thread<unknown, unknown>;
 type Author = { userId?: string; fullName?: string };
 
-/** Intent "daily_challenge" — present the first question. */
-export async function showChallenge(thread: AnyThread) {
+/**
+ * Intent "daily_challenge" — start the drop, or pick it back up.
+ *
+ * Restarting used to be unconditional, so a tap on any old "Today's challenge"
+ * button reset a half-finished drop to question 1 with a zeroed score. Now an
+ * unforced re-entry resumes instead.
+ */
+export async function showChallenge(thread: AnyThread, force = false) {
   const boot = await getBootstrap();
   const drop = normalizeDrop(boot.dailyDrop);
+  const st = await getState(thread.id);
+
+  if (!force && st.kind === "challenge" && st.dropId === drop.id && st.qIndex > 0) {
+    return resumeChallenge(thread, st);
+  }
+
   await setState(thread.id, { kind: "challenge", dropId: drop.id, qIndex: 0, score: 0, answeredQ: [] });
-  await thread.post(DailyDropCard({ drop, question: drop.questions[0], qNum: 1, total: drop.questions.length }));
+  await postCard(thread, DailyDropCard({ drop, question: drop.questions[0], qNum: 1, total: drop.questions.length }));
 }
 
 /** Action "submit_answer" — value "dropId|questionId|optionId". */
@@ -28,7 +42,7 @@ export async function onSubmitAnswer(
   thread: AnyThread,
   payload: { dropId: string; questionId: string; optionId: string },
   author?: Author,
-  /** Message that was tapped — replaced with the result, so it stops asking. */
+  /** Message that was tapped — becomes the result, so it stops asking. */
   messageId?: string
 ) {
   const st = await getState(thread.id);
@@ -46,7 +60,7 @@ export async function onSubmitAnswer(
     await thread.post(
       StalePromptCard({
         hint: "That question is already answered. Come back tomorrow for the next daily drop.",
-        canContinue: false
+        canContinue: st.kind === "challenge"
       })
     );
     return;
@@ -67,21 +81,44 @@ export async function onSubmitAnswer(
   });
   const newScore = updated?.points ?? null;
 
-  const runningScore = st.score + pointsEarned;
   await setState(thread.id, {
     kind: "challenge",
     dropId: drop.id,
     qIndex: st.qIndex + 1,
-    score: runningScore,
+    score: st.score + pointsEarned,
     answeredQ: [...st.answeredQ, payload.questionId]
   });
 
-  // The question card BECOMES the result: same message, no answer buttons left.
   const result = AnswerResultCard({ drop, chosen, best, pointsEarned, newScore: isLast ? newScore : null });
-  if (!(await editCard(thread, messageId, result))) await thread.post(result);
-  // …then the next question, or finish.
-  if (!isLast) {
-    const next = drop.questions[st.qIndex + 1];
-    await thread.post(DailyDropCard({ drop, question: next, qNum: st.qIndex + 2, total: drop.questions.length }));
+  if (isLast) {
+    // Nothing follows, so the answered card simply becomes the result.
+    if (!(await editCard(thread, messageId, result))) await postCard(thread, result);
+    return;
   }
+  const next = drop.questions[st.qIndex + 1];
+  await advanceStep(
+    thread,
+    messageId,
+    result,
+    DailyDropCard({ drop, question: next, qNum: st.qIndex + 2, total: drop.questions.length })
+  );
+}
+
+/** Re-post the question the user is on (Continue / resume). */
+export async function resumeChallenge(thread: AnyThread, st: ThreadState) {
+  if (st.kind !== "challenge") return;
+  const boot = await getBootstrap();
+  const drop = normalizeDrop(boot.dailyDrop);
+  const question = drop.questions[st.qIndex];
+  if (!question) {
+    // The drop rotated under them — nothing sensible left to resume.
+    await thread.post(
+      StalePromptCard({ hint: "That daily drop has closed. A new one lands tomorrow.", canContinue: false })
+    );
+    return;
+  }
+  await postCard(
+    thread,
+    DailyDropCard({ drop, question, qNum: st.qIndex + 1, total: drop.questions.length })
+  );
 }

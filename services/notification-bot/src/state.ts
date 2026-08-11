@@ -8,6 +8,7 @@
 
 import { createMemoryState } from "@chat-adapter/state-memory";
 import { sql } from "./db.ts";
+import { getModule } from "./content.ts";
 
 export type ThreadState =
   | { kind: "idle" }
@@ -22,17 +23,20 @@ export type ThreadState =
     }
   // Challenge: a mini-quiz of 1..n MCQs; tracks progress + running score
   | { kind: "challenge"; dropId: string; qIndex: number; score: number; answeredQ: string[] }
-  // Recognition: who → belief → description → media → confirm → send
+  // Recognition: who → belief → description → confirm → send
   | {
       kind: "recognise";
-      step: "colleague" | "belief" | "description" | "media" | "confirm";
+      step: "colleague" | "belief" | "description" | "confirm";
       colleague?: string;
       colleagueOid?: string; // resolved directory identity (for notify)
       behavior?: string;
       description?: string;
-      /** The single message this wizard lives in — every step edits it. */
+      /** The card holding the step we're waiting on — summarised when answered. */
       cardId?: string;
     };
+
+/** A flow the user abandoned this long ago is no longer worth resuming. */
+const STATE_TTL_DAYS = 7;
 
 export const state = createMemoryState();
 
@@ -52,7 +56,13 @@ function ensureTable(): Promise<void> {
 export async function getState(threadId: string): Promise<ThreadState> {
   if (sql) {
     await ensureTable();
-    const rows = await sql<{ state: ThreadState }[]>`select state from bot_flow_states where thread_id = ${threadId}`;
+    // A stale row is treated as idle rather than deleted — the next setState
+    // overwrites it anyway, and reads stay a single statement.
+    const rows = await sql<{ state: ThreadState }[]>`
+      select state from bot_flow_states
+      where thread_id = ${threadId}
+        and updated_at > now() - ${`${STATE_TTL_DAYS} days`}::interval
+    `;
     return rows[0]?.state ?? { kind: "idle" };
   }
   return (await state.get<ThreadState>(threadId)) ?? { kind: "idle" };
@@ -78,4 +88,42 @@ export async function clearState(threadId: string): Promise<void> {
     return;
   }
   await state.set<ThreadState>(threadId, { kind: "idle" });
+}
+
+/**
+ * One-line description of where the user is, used by the hub ("Continue…"),
+ * the conflict card, and the paused card. Returns null when nothing is running,
+ * which is also the signal that a flow-starting action is safe to run.
+ */
+export type FlowSummary = { kind: "module" | "challenge" | "recognise"; label: string; detail: string };
+
+export function describeFlow(st: ThreadState): FlowSummary | null {
+  switch (st.kind) {
+    case "module": {
+      const title = getModule(st.moduleId)?.title ?? "your module";
+      const detail =
+        st.step === "video"
+          ? "Video step"
+          : st.step === "text"
+            ? "Lesson step"
+            : `Question ${st.quizIdx + 1}`;
+      return { kind: "module", label: title, detail };
+    }
+    case "challenge":
+      return { kind: "challenge", label: "Today's challenge", detail: `Question ${st.qIndex + 1}` };
+    case "recognise": {
+      const who = st.colleague ? ` for ${st.colleague}` : "";
+      const detail =
+        st.step === "colleague"
+          ? "Choosing a colleague"
+          : st.step === "belief"
+            ? "Choosing a Belief"
+            : st.step === "description"
+              ? "Describing what happened"
+              : "Ready to send";
+      return { kind: "recognise", label: `Recognition${who}`, detail };
+    }
+    default:
+      return null;
+  }
 }

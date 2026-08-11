@@ -26,10 +26,9 @@ export function LeaderboardCard(opts: { entries: LeaderboardEntry[]; you?: strin
         <CardText>Complete today's daily drop to climb before the weekly reset.</CardText>
       </Section>
       <Actions>
-        <Button id="intent" value="daily_challenge" style="primary">
-          Daily drop
+        <Button id="intent" value="help" style="primary">
+          Back to hub
         </Button>
-        <Button id="intent" value="help">Back to menu</Button>
       </Actions>
     </Card>
   );

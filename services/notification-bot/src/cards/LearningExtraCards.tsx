@@ -18,6 +18,7 @@ export function TextLessonCard(opts: { module: ModuleContent; heading: string; b
         <Button id="lesson_done" value={opts.module.id} style="primary">
           Continue to quiz
         </Button>
+        <Button id="pause" value="pause">Finish later</Button>
       </Actions>
     </Card>
   );
@@ -48,8 +49,8 @@ export function ClosedCard(opts: { kind: "module" | "challenge"; title: string }
 
 /**
  * A finished step, shown in place of the card that had the buttons. Keeps the
- * outcome readable in the chat history without leaving a tappable control that
- * would rewind the flow.
+ * outcome readable in the chat history and carries NO controls at all — the
+ * message is a record, and a record can't rewind a flow years later.
  */
 export function StepDoneCard(opts: { title: string; subtitle?: string; lines: string[] }) {
   return (
@@ -59,10 +60,6 @@ export function StepDoneCard(opts: { title: string; subtitle?: string; lines: st
           <CardText key={String(i)}>{line}</CardText>
         ))}
       </Section>
-      <Divider />
-      <Actions>
-        <Button id="intent" value="help">Menu</Button>
-      </Actions>
     </Card>
   );
 }

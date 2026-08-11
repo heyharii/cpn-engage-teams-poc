@@ -29,6 +29,7 @@ export function QuizQuestionCard(opts: { module: ModuleContent; quiz: QuizQuesti
             {o.key}
           </Button>
         ))}
+        <Button id="pause" value="pause">Finish later</Button>
       </Actions>
     </Card>
   );

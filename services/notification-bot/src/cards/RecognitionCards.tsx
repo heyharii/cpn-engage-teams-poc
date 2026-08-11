@@ -22,6 +22,7 @@ export function RecognisePromptCard(opts: { behaviors: Behavior[] }) {
         ))}
       </Section>
       <Actions>
+        <Button id="pause" value="pause">Finish later</Button>
         <Button id="intent" value="help">Cancel</Button>
       </Actions>
     </Card>
@@ -43,10 +44,9 @@ export function RecognitionSentCard(opts: { colleague: string; behavior: string;
         </CardText>
       </Section>
       <Actions>
-        <Button id="intent" value="leaderboard" style="primary">
-          View leaderboard
+        <Button id="intent" value="help" style="primary">
+          Back to hub
         </Button>
-        <Button id="intent" value="help">Back to menu</Button>
       </Actions>
     </Card>
   );

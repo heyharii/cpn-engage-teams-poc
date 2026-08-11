@@ -10,8 +10,11 @@ export function ModuleAssignedCard(opts: { moduleId: string; title: string; trac
         <CardText>Tap below to start — it only takes a few minutes.</CardText>
       </Section>
       <Actions>
-        <Button id="begin_module" value={opts.moduleId} style="primary">
-          Start module
+        {/* Opens the intro rather than starting the module: this card is pushed
+            daily and never edited, so yesterday's copy must not be able to wipe
+            today's progress. Starting is the guarded action behind the intro. */}
+        <Button id="pick_module" value={opts.moduleId} style="primary">
+          Open module
         </Button>
         <Button id="remind_later" value={opts.moduleId}>Remind me later</Button>
       </Actions>

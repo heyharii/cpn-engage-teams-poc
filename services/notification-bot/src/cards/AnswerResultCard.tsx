@@ -48,10 +48,9 @@ export function AnswerResultCard(opts: {
         </Fields>
       </Section>
       <Actions>
-        <Button id="intent" value="leaderboard" style="primary">
-          View leaderboard
+        <Button id="intent" value="help" style="primary">
+          Back to hub
         </Button>
-        <Button id="intent" value="help">Back to menu</Button>
       </Actions>
     </Card>
   );

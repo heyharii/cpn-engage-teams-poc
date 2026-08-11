@@ -1,22 +1,28 @@
 /**
- * Recognition flow (PRD Feature 3), 5 guided steps:
- *   who → belief → description → media → confirm → (send)
+ * Recognition flow (PRD Feature 3), 4 guided steps:
+ *   who → belief → description → confirm → (send)
  *
- * Text steps (who, description) read the user's typed reply; button steps
- * (belief, media, confirm) read a tap. Out-of-order taps are handled as stale.
+ * This flow used to live inside a single message that each step overwrote. It
+ * no longer does: like the other flows, the answered card becomes a buttonless
+ * record and the next step is posted below it. An edit raises no Teams
+ * notification, so a one-message wizard silently stalls for anyone who steps
+ * away — which is precisely the user we want to be able to come back.
+ *
+ * Steps answered by TYPING (who, description) work the same way; the only
+ * difference is that the card to summarise comes from `st.cardId` rather than
+ * from the tapped message.
  */
 
 import type { Thread } from "chat";
 import { getBootstrap, submitRecognition, scoreIdentity } from "../api.ts";
-import { getState, setState, clearState, type ThreadState } from "../state.ts";
-import { replaceOrPost, postCard, editCard } from "../edit.ts";
+import { getState, setState, clearState, describeFlow, type ThreadState } from "../state.ts";
+import { advanceStep, postCard } from "../edit.ts";
 import { searchDirectory, getDirectoryUser } from "../db.ts";
 import {
   RecognisePromptCard,
   ColleaguePickCard,
   BeliefSelectCard,
   DescriptionPromptCard,
-  MediaPromptCard,
   RecognitionConfirmCard,
   RecognitionSentCard,
   StalePromptCard,
@@ -26,67 +32,46 @@ import {
 type AnyThread = Thread<unknown, unknown>;
 
 /**
- * Resolve a typed name to a real directory person via the people picker:
- *   1 match  → proceed to the Belief step with the resolved identity (+ oid)
- *   several  → show a pick card to disambiguate
- *   none     → proceed with the typed name (no oid); directory may be un-synced
+ * Resolve a typed name to a real directory person:
+ *   1 match  → straight to the Belief step with the resolved identity (+ oid)
+ *   several  → a pick card to disambiguate
+ *   none     → carry on with the typed name; the directory may be un-synced
  */
-/**
- * Advance a step the user reached by TYPING. Their reply lands at the bottom of
- * the chat, so an edited card would sit above it and read backwards — the next
- * card is posted below instead, and the card they answered becomes a summary.
- */
-async function advanceAfterText(
-  thread: AnyThread,
-  cardId: string | undefined,
-  answered: { title: string; subtitle?: string; lines: string[] },
-  next: unknown
-): Promise<string | undefined> {
-  await editCard(thread, cardId, StepDoneCard(answered));
-  return postCard(thread, next);
-}
-
-async function resolveColleague(thread: AnyThread, name: string, cardId?: string, viaText = false): Promise<void> {
+async function resolveColleague(thread: AnyThread, name: string, cardId?: string): Promise<void> {
   const matches = await searchDirectory(name, 6);
   const boot = await getBootstrap();
 
-  if (matches.length === 1) {
-    const m = matches[0];
-    const colleagueName = m.displayName ?? name;
-    const beliefCard = BeliefSelectCard({ colleague: colleagueName, behaviors: boot.behaviors });
-    const id = viaText
-      ? await advanceAfterText(thread, cardId, { title: "✅ Colleague", subtitle: colleagueName, lines: ["Now pick the Belief they showed."] }, beliefCard)
-      : await replaceOrPost(thread, cardId, beliefCard);
-    await setState(thread.id, {
-      kind: "recognise",
-      step: "belief",
-      colleague: m.displayName ?? name,
-      colleagueOid: m.oid,
-      cardId: id
-    });
-    return;
-  }
-
   if (matches.length > 1) {
-    const pickCard = ColleaguePickCard({
-      candidates: matches.map((m) => ({
-        oid: m.oid,
-        label: m.department ? `${m.displayName} · ${m.department}` : (m.displayName ?? m.oid)
-      }))
-    });
-    const id = viaText
-      ? await advanceAfterText(thread, cardId, { title: "🔍 Several matches", subtitle: name, lines: ["Pick the right person below."] }, pickCard)
-      : await replaceOrPost(thread, cardId, pickCard);
+    const id = await advanceStep(
+      thread,
+      cardId,
+      StepDoneCard({ title: "🔍 Several matches", subtitle: name, lines: ["Pick the right person below."] }),
+      ColleaguePickCard({
+        candidates: matches.map((m) => ({
+          oid: m.oid,
+          label: m.department ? `${m.displayName} · ${m.department}` : (m.displayName ?? m.oid)
+        }))
+      })
+    );
     await setState(thread.id, { kind: "recognise", step: "colleague", cardId: id });
     return;
   }
 
-  // No directory match — don't block; proceed with the typed name.
-  const fallbackCard = BeliefSelectCard({ colleague: name, behaviors: boot.behaviors });
-  const id = viaText
-    ? await advanceAfterText(thread, cardId, { title: "✅ Colleague", subtitle: name, lines: ["Now pick the Belief they showed."] }, fallbackCard)
-    : await replaceOrPost(thread, cardId, fallbackCard);
-  await setState(thread.id, { kind: "recognise", step: "belief", colleague: name, cardId: id });
+  const match = matches[0];
+  const colleague = match?.displayName ?? name;
+  const id = await advanceStep(
+    thread,
+    cardId,
+    StepDoneCard({ title: "✅ Colleague", subtitle: colleague, lines: ["Now pick the Belief they showed."] }),
+    BeliefSelectCard({ colleague, behaviors: boot.behaviors })
+  );
+  await setState(thread.id, {
+    kind: "recognise",
+    step: "belief",
+    colleague,
+    colleagueOid: match?.oid,
+    cardId: id
+  });
 }
 
 /**
@@ -113,7 +98,14 @@ function cleanColleagueName(text?: string): string | undefined {
 }
 
 /** Intent "recognise" — start the flow (optionally jump if a name was given). */
-export async function startRecognise(thread: AnyThread, fromText?: string) {
+export async function startRecognise(thread: AnyThread, fromText?: string, force = false) {
+  const st = await getState(thread.id);
+  // Re-entering a recognition already under way resumes it rather than
+  // discarding the draft — unless the user explicitly chose to start over.
+  if (!force && st.kind === "recognise" && st.step !== "colleague") {
+    return resumeRecognise(thread, st);
+  }
+
   // Only jump ahead if the opener actually named someone after a verb.
   const colleague = RECOGNISE_VERBS.test(fromText ?? "") ? cleanColleagueName(fromText) : undefined;
   if (colleague) {
@@ -122,8 +114,7 @@ export async function startRecognise(thread: AnyThread, fromText?: string) {
     return;
   }
   const boot = await getBootstrap();
-  // The whole wizard lives in this one message from here on.
-  const id = await replaceOrPost(thread, undefined, RecognisePromptCard({ behaviors: boot.behaviors }));
+  const id = await postCard(thread, RecognisePromptCard({ behaviors: boot.behaviors }));
   await setState(thread.id, { kind: "recognise", step: "colleague", cardId: id });
 }
 
@@ -137,18 +128,22 @@ export async function onRecogniseText(thread: AnyThread, text: string): Promise<
 
   if (st.step === "colleague") {
     const name = cleanColleagueName(text) ?? text.trim();
-    await resolveColleague(thread, name, st.cardId, true);
+    await resolveColleague(thread, name, st.cardId);
     return true;
   }
   if (st.step === "description") {
     const note = text.trim();
-    const id = await advanceAfterText(
+    const id = await advanceStep(
       thread,
       st.cardId,
-      { title: "✅ What happened", subtitle: st.colleague ?? "", lines: [note] },
-      MediaPromptCard({ colleague: st.colleague ?? "your colleague" })
+      StepDoneCard({ title: "✅ What happened", subtitle: st.colleague ?? "", lines: [note] }),
+      RecognitionConfirmCard({
+        colleague: st.colleague ?? "",
+        behavior: st.behavior ?? "",
+        description: note
+      })
     );
-    await setState(thread.id, { ...st, step: "media", description: note, cardId: id });
+    await setState(thread.id, { ...st, step: "confirm", description: note, cardId: id });
     return true;
   }
   return false;
@@ -161,7 +156,12 @@ export async function onColleaguePick(thread: AnyThread, oid: string, messageId?
   const user = await getDirectoryUser(oid);
   const colleague = user?.displayName ?? "your colleague";
   const boot = await getBootstrap();
-  const id = await replaceOrPost(thread, messageId ?? st.cardId, BeliefSelectCard({ colleague, behaviors: boot.behaviors }));
+  const id = await advanceStep(
+    thread,
+    messageId ?? st.cardId,
+    StepDoneCard({ title: "✅ Colleague", subtitle: colleague, lines: ["Now pick the Belief they showed."] }),
+    BeliefSelectCard({ colleague, behaviors: boot.behaviors })
+  );
   await setState(thread.id, { kind: "recognise", step: "belief", colleague, colleagueOid: oid, cardId: id });
 }
 
@@ -169,28 +169,14 @@ export async function onColleaguePick(thread: AnyThread, oid: string, messageId?
 export async function onBeliefSelect(thread: AnyThread, behavior: string, messageId?: string) {
   const st = await getState(thread.id);
   if (st.kind !== "recognise" || st.step !== "belief") return stale(thread, st);
-  const id = await replaceOrPost(
+  const colleague = st.colleague ?? "your colleague";
+  const id = await advanceStep(
     thread,
     messageId ?? st.cardId,
-    DescriptionPromptCard({ colleague: st.colleague ?? "your colleague", behavior })
+    StepDoneCard({ title: "✅ Belief", subtitle: colleague, lines: [behavior] }),
+    DescriptionPromptCard({ colleague, behavior })
   );
   await setState(thread.id, { ...st, step: "description", behavior, cardId: id });
-}
-
-/** Action "recognise_skip_media" — skip the optional attachment. */
-export async function onSkipMedia(thread: AnyThread, messageId?: string) {
-  const st = await getState(thread.id);
-  if (st.kind !== "recognise" || st.step !== "media") return stale(thread, st);
-  const id = await replaceOrPost(
-    thread,
-    messageId ?? st.cardId,
-    RecognitionConfirmCard({
-      colleague: st.colleague ?? "",
-      behavior: st.behavior ?? "",
-      description: st.description ?? ""
-    })
-  );
-  await setState(thread.id, { ...st, step: "confirm", cardId: id });
 }
 
 /** Action "recognise_send" — post the recognition to the public feed. */
@@ -216,14 +202,23 @@ export async function onRecogniseSend(
   if (!submitted?.ok) throw new Error("Recognition could not be submitted");
 
   await clearState(thread.id);
-  await replaceOrPost(
+  await advanceStep(
     thread,
     messageId ?? st.cardId,
-    RecognitionSentCard({ colleague: st.colleague ?? "", behavior: st.behavior ?? "", pending: submitted.pending })
+    StepDoneCard({
+      title: "✅ Sent",
+      subtitle: st.colleague ?? "",
+      lines: [st.behavior ?? "", message]
+    }),
+    RecognitionSentCard({
+      colleague: st.colleague ?? "",
+      behavior: st.behavior ?? "",
+      pending: submitted.pending
+    })
   );
 }
 
-/** Re-render the current recognise step (for "Continue"). */
+/** Re-post the current recognise step (Continue / resume). */
 export async function resumeRecognise(thread: AnyThread, st: ThreadState) {
   if (st.kind !== "recognise") return;
   const boot = await getBootstrap();
@@ -234,24 +229,25 @@ export async function resumeRecognise(thread: AnyThread, st: ThreadState) {
         ? BeliefSelectCard({ colleague: st.colleague ?? "", behaviors: boot.behaviors })
         : st.step === "description"
           ? DescriptionPromptCard({ colleague: st.colleague ?? "", behavior: st.behavior ?? "" })
-          : st.step === "media"
-            ? MediaPromptCard({ colleague: st.colleague ?? "" })
-            : RecognitionConfirmCard({
-                colleague: st.colleague ?? "",
-                behavior: st.behavior ?? "",
-                description: st.description ?? ""
-              });
-  // Resume always posts a fresh card (the old one may be unreachable), and the
-  // wizard follows it from here.
+          : RecognitionConfirmCard({
+              colleague: st.colleague ?? "",
+              behavior: st.behavior ?? "",
+              description: st.description ?? ""
+            });
+  // Resume always posts fresh (the old card may be unreachable) and the flow
+  // follows the new message from here.
   const id = await postCard(thread, card);
   await setState(thread.id, { ...st, cardId: id });
 }
 
 async function stale(thread: AnyThread, st: ThreadState) {
+  const flow = describeFlow(st);
   await thread.post(
     StalePromptCard({
-      hint: "That recognition step has moved on. Tap Continue to pick up where you are, or start over from the menu.",
-      canContinue: st.kind === "recognise"
+      hint: flow
+        ? `You're already at: ${flow.detail}. Tap Continue to pick up where you are.`
+        : "That recognition has already been sent — start a new one from the hub.",
+      canContinue: Boolean(flow)
     })
   );
 }

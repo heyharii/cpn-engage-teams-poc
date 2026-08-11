@@ -41,12 +41,12 @@ export function ModuleCompleteCard(opts: {
       ) : null}
       <Actions>
         {next ? (
-          <Button id="begin_module" value={next.id} style="primary">
-            Start next module
+          <Button id="pick_module" value={next.id} style="primary">
+            Open next module
           </Button>
         ) : null}
-        <Button id="intent" value="leaderboard">View leaderboard</Button>
-        <Button id="intent" value="help">Back to menu</Button>
+        <Button id="intent" value="browse_modules">Browse modules</Button>
+        <Button id="intent" value="help">Back to hub</Button>
       </Actions>
     </Card>
   );

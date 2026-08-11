@@ -18,17 +18,23 @@ import { getConversationByThreadId, rememberConversation } from "./db.ts";
 import { classifyIntent } from "./handlers/intent-router.ts";
 import { dispatchIntent, type DispatchCtx } from "./handlers/dispatch.ts";
 import { guardAction, guardMessage } from "./handlers/safe.ts";
-import { beginModule, onWatchedVideo, onLessonDone, onQuizAnswer, resumeModule } from "./flows/module.ts";
-import { onSubmitAnswer } from "./flows/challenge.ts";
+import {
+  beginModule,
+  pickModule,
+  onWatchedVideo,
+  onLessonDone,
+  onQuizAnswer,
+  resumeModule
+} from "./flows/module.ts";
+import { onSubmitAnswer, resumeChallenge } from "./flows/challenge.ts";
 import {
   onRecogniseText,
   onColleaguePick,
   onBeliefSelect,
-  onSkipMedia,
   onRecogniseSend,
   resumeRecognise
 } from "./flows/recognise.ts";
-import { showMenu } from "./flows/menu.ts";
+import { showHub, pauseFlow } from "./flows/hub.ts";
 
 export const bot = new Chat({
   userName: "CPN Engage",
@@ -111,9 +117,32 @@ bot.onAction(
   })
 );
 
+// The user has seen the conflict card and chosen to discard their progress.
+bot.onAction(
+  "force_intent",
+  guardAction("force_intent", async (event) => {
+    if (!event.thread) return;
+    await dispatchIntent(event.thread, (event.value ?? "help") as string, {
+      ...ctx(event.user),
+      force: true
+    });
+  })
+);
+
+// "Finish later" — park the flow; state is untouched and the hub offers Continue.
+bot.onAction("pause", guardAction("pause", async (e) => {
+  if (e.thread) await pauseFlow(e.thread, e.user?.fullName);
+}));
+
 // Learning Journey
+bot.onAction("pick_module", guardAction("pick_module", async (e) => {
+  if (e.thread) await pickModule(e.thread, (e.value ?? "") as string);
+}));
 bot.onAction("begin_module", guardAction("begin_module", async (e) => {
   if (e.thread) await beginModule(e.thread, (e.value ?? "") as string, e.messageId);
+}));
+bot.onAction("force_begin_module", guardAction("force_begin_module", async (e) => {
+  if (e.thread) await beginModule(e.thread, (e.value ?? "") as string, e.messageId, true);
 }));
 bot.onAction("watched_video", guardAction("watched_video", async (e) => {
   if (e.thread) await onWatchedVideo(e.thread, (e.value ?? "") as string, e.messageId);
@@ -145,36 +174,36 @@ bot.onAction("recognise_pick", guardAction("recognise_pick", async (e) => {
 bot.onAction("recognise_belief", guardAction("recognise_belief", async (e) => {
   if (e.thread) await onBeliefSelect(e.thread, (e.value ?? "") as string, e.messageId);
 }));
-bot.onAction("recognise_skip_media", guardAction("recognise_skip_media", async (e) => {
-  if (e.thread) await onSkipMedia(e.thread, e.messageId);
-}));
 bot.onAction("recognise_send", guardAction("recognise_send", async (e) => {
   if (e.thread) await onRecogniseSend(e.thread, { userId: e.user?.userId, fullName: e.user?.fullName }, e.messageId);
 }));
 
-// "Remind me later" — just acknowledge with the menu.
+// "Remind me later" — just acknowledge with the hub.
 bot.onAction("remind_later", guardAction("remind_later", async (e) => {
-  if (e.thread) await showMenu(e.thread, e.user?.fullName);
+  if (e.thread) await showHub(e.thread, e.user?.fullName);
 }));
 
-// "Continue" on a stale-prompt card — re-render the user's current step.
+// "Continue" — re-post the card for wherever the user actually is. Every flow
+// answers this, so a paused flow is never a dead end.
 bot.onAction("resume", guardAction("resume", async (e) => {
   if (!e.thread) return;
   const st = await getState(e.thread.id);
   if (st.kind === "module") await resumeModule(e.thread, st);
+  else if (st.kind === "challenge") await resumeChallenge(e.thread, st);
   else if (st.kind === "recognise") await resumeRecognise(e.thread, st);
-  else await showMenu(e.thread, e.user?.fullName);
+  else await showHub(e.thread, e.user?.fullName);
 }));
 
-// Catch-all — any unknown action id routes to the menu, never silent.
+// Catch-all — any unknown action id routes to the hub, never silent.
 bot.onAction(
   guardAction("catchall", async (event) => {
     const known = new Set([
-      "intent", "begin_module", "watched_video", "lesson_done", "quiz_answer",
-      "submit_answer", "recognise_pick", "recognise_belief", "recognise_skip_media", "recognise_send",
-      "remind_later", "resume"
+      "intent", "force_intent", "pause", "resume", "remind_later",
+      "pick_module", "begin_module", "force_begin_module",
+      "watched_video", "lesson_done", "quiz_answer",
+      "submit_answer", "recognise_pick", "recognise_belief", "recognise_send"
     ]);
     if (known.has(event.actionId)) return;
-    if (event.thread) await showMenu(event.thread, event.user?.fullName);
+    if (event.thread) await showHub(event.thread, event.user?.fullName);
   })
 );

@@ -5,6 +5,7 @@
 
 export type Intent =
   | "help"
+  | "browse_modules"
   | "start_module"
   | "daily_challenge"
   | "recognise"
@@ -18,6 +19,18 @@ const MATCHERS: { intent: Intent; patterns: RegExp[] }[] = [
       /^\s*(hi|hii+|hello|hey|help|menu|start|\?|❓)[\s!.,?]*$/i,
       /^what can (you|u) do[?!.]*$/i,
       /^\/?help$/i
+    ]
+  },
+  // Ordered before start_module: "all modules" contains "module", and browsing
+  // is the safe reading of an ambiguous ask (it starts nothing).
+  {
+    intent: "browse_modules",
+    patterns: [
+      /\b(all|every|my|other|more|list|browse|which|available)\s+(the\s+)?(module|lesson|course)s?\b/i,
+      // The qualifier can also trail the noun: "what modules are available".
+      /\b(module|lesson|course)s\b.{0,20}\b(available|open|left|there)\b/i,
+      /\b(module|lesson|course)\s+(list|catalog(ue)?|library)\b/i,
+      /\blearning\s+(path|journey|plan)\b/i
     ]
   },
   {

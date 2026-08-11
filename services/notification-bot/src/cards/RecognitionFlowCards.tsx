@@ -15,6 +15,7 @@ export function ColleaguePickCard(opts: { candidates: { oid: string; label: stri
             {c.label}
           </Button>
         ))}
+        <Button id="pause" value="pause">Finish later</Button>
       </Actions>
     </Card>
   );
@@ -23,7 +24,7 @@ export function ColleaguePickCard(opts: { candidates: { oid: string; label: stri
 /** Step 2 — which Belief did the colleague demonstrate? */
 export function BeliefSelectCard(opts: { colleague: string; behaviors: Behavior[] }) {
   return (
-    <Card title="🌟 Recognise a colleague" subtitle={`Step 2 of 3 · ${opts.colleague}`}>
+    <Card title="🌟 Recognise a colleague" subtitle={`Step 2 of 4 · ${opts.colleague}`}>
       <Section>
         <CardText>{`Which Belief did **${opts.colleague}** demonstrate?`}</CardText>
       </Section>
@@ -33,44 +34,30 @@ export function BeliefSelectCard(opts: { colleague: string; behaviors: Behavior[
             {b.name}
           </Button>
         ))}
+        <Button id="pause" value="pause">Finish later</Button>
       </Actions>
     </Card>
   );
 }
 
-/** Step 2b — ask what happened (free-text description). */
+/** Step 3 — ask what happened (free-text description). */
 export function DescriptionPromptCard(opts: { colleague: string; behavior: string }) {
   return (
-    <Card title="✍️ What happened?" subtitle={`${opts.colleague} · ${opts.behavior}`}>
+    <Card title="✍️ What happened?" subtitle={`Step 3 of 4 · ${opts.colleague} · ${opts.behavior}`}>
       <Section>
         <CardText>{`Reply with a short note about what **${opts.colleague}** did to show **${opts.behavior}**.`}</CardText>
       </Section>
-    </Card>
-  );
-}
-
-/** Step 2c — optionally attach a photo or video (PRD Feature 3 #4). */
-export function MediaPromptCard(opts: { colleague: string }) {
-  return (
-    <Card title="📷 Add a photo or video?" subtitle="Optional">
-      <Section>
-        <CardText>
-          {`Attach a photo or video of ${opts.colleague} in action using the Teams attachment (📎) below, or skip.`}
-        </CardText>
-      </Section>
       <Actions>
-        <Button id="recognise_skip_media" value="skip" style="primary">
-          Skip — no media
-        </Button>
+        <Button id="pause" value="pause">Finish later</Button>
       </Actions>
     </Card>
   );
 }
 
-/** Step 3 — confirm before it posts to the public feed (no approval needed). */
+/** Step 4 — confirm before it posts to the public feed. */
 export function RecognitionConfirmCard(opts: { colleague: string; behavior: string; description: string }) {
   return (
-    <Card title="📝 Confirm recognition" subtitle="Step 3 of 3">
+    <Card title="📝 Confirm recognition" subtitle="Step 4 of 4">
       <Section>
         <Fields>
           <Field label="COLLEAGUE" value={opts.colleague} />
@@ -86,7 +73,8 @@ export function RecognitionConfirmCard(opts: { colleague: string; behavior: stri
         <Button id="recognise_send" value="send" style="primary">
           Send recognition
         </Button>
-        <Button id="intent" value="recognise">Start over</Button>
+        {/* Deliberate restart — skips the in-progress check that `intent` applies. */}
+        <Button id="force_intent" value="recognise">Start over</Button>
       </Actions>
     </Card>
   );
@@ -101,8 +89,8 @@ export function RecognitionReceivedCard(opts: { fromName: string; behavior: stri
         <CardText style="bold">{`“${opts.message}”`}</CardText>
       </Section>
       <Actions>
-        <Button id="intent" value="leaderboard" style="primary">
-          See the feed
+        <Button id="intent" value="help" style="primary">
+          Open CPN Engage
         </Button>
       </Actions>
     </Card>

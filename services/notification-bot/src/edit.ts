@@ -48,14 +48,26 @@ export async function postCard(thread: AnyThread, card: unknown): Promise<string
 }
 
 /**
- * Show `card` in the message the user just acted on, or post it when there is
- * no message to edit (or the edit was refused). Returns the id now showing it.
+ * Advance one step of any flow. Two operations, always paired:
+ *
+ *   1. the card the user just answered is replaced by a buttonless record of
+ *      what they chose — it keeps its place in the history and can never be
+ *      tapped again;
+ *   2. the next step is posted BELOW as a new message.
+ *
+ * Never edit a card into the *next* step: an edit raises no Teams notification,
+ * so a user who stepped away would never learn the flow had moved on, and a
+ * card edited above a reply the user typed reads backwards.
+ *
+ * Returns the id of the new message, so a step answered by typing knows which
+ * card to summarise when its own answer arrives.
  */
-export async function replaceOrPost(
+export async function advanceStep(
   thread: AnyThread,
-  messageId: string | undefined,
-  card: unknown
+  answeredCardId: string | undefined,
+  record: unknown,
+  next: unknown
 ): Promise<string | undefined> {
-  if (await editCard(thread, messageId, card)) return messageId;
-  return postCard(thread, card);
+  await editCard(thread, answeredCardId, record);
+  return postCard(thread, next);
 }
