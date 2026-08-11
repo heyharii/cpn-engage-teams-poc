@@ -15,7 +15,7 @@ export function ColleaguePickCard(opts: { candidates: { oid: string; label: stri
             {c.label}
           </Button>
         ))}
-        <Button id="pause" value="pause">Finish later</Button>
+        <Button id="pause" value="pause" style="default">Save &amp; exit</Button>
       </Actions>
     </Card>
   );
@@ -34,7 +34,7 @@ export function BeliefSelectCard(opts: { colleague: string; behaviors: Behavior[
             {b.name}
           </Button>
         ))}
-        <Button id="pause" value="pause">Finish later</Button>
+        <Button id="pause" value="pause" style="default">Save &amp; exit</Button>
       </Actions>
     </Card>
   );
@@ -48,7 +48,7 @@ export function DescriptionPromptCard(opts: { colleague: string; behavior: strin
         <CardText>{`Reply with a short note about what **${opts.colleague}** did to show **${opts.behavior}**.`}</CardText>
       </Section>
       <Actions>
-        <Button id="pause" value="pause">Finish later</Button>
+        <Button id="pause" value="pause" style="default">Save &amp; exit</Button>
       </Actions>
     </Card>
   );

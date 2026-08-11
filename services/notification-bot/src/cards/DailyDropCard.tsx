@@ -34,7 +34,7 @@ export function DailyDropCard(opts: { drop: DailyDrop; question: DropQuestion; q
             {String(i + 1)}
           </Button>
         ))}
-        <Button id="pause" value="pause">Finish later</Button>
+        <Button id="pause" value="pause" style="default">Save &amp; exit</Button>
       </Actions>
     </Card>
   );

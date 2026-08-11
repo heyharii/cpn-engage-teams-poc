@@ -18,7 +18,7 @@ export function TextLessonCard(opts: { module: ModuleContent; heading: string; b
         <Button id="lesson_done" value={opts.module.id} style="primary">
           Continue to quiz
         </Button>
-        <Button id="pause" value="pause">Finish later</Button>
+        <Button id="pause" value="pause" style="default">Save &amp; exit</Button>
       </Actions>
     </Card>
   );

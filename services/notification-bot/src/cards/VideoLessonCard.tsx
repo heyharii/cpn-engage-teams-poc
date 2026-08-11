@@ -22,7 +22,7 @@ export function VideoLessonCard(opts: { module: ModuleContent }) {
         <Button id="watched_video" value={m.id} style="primary">
           I've watched it
         </Button>
-        <Button id="pause" value="pause">Finish later</Button>
+        <Button id="pause" value="pause" style="default">Save &amp; exit</Button>
       </Actions>
     </Card>
   );

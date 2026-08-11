@@ -19,7 +19,7 @@ export function QuizQuestionCard(opts: { module: ModuleContent; quiz: QuizQuesti
       </Actions>
       <Divider />
       <Actions>
-        <Button id="pause" value="pause">Finish later</Button>
+        <Button id="pause" value="pause" style="default">Save &amp; exit</Button>
       </Actions>
     </Card>
   );

@@ -22,8 +22,7 @@ export function RecognisePromptCard(opts: { behaviors: Behavior[] }) {
         ))}
       </Section>
       <Actions>
-        <Button id="pause" value="pause">Finish later</Button>
-        <Button id="intent" value="help">Cancel</Button>
+        <Button id="pause" value="pause" style="default">Save &amp; exit</Button>
       </Actions>
     </Card>
   );
