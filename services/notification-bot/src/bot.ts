@@ -34,6 +34,7 @@ import {
   onRecogniseSend,
   resumeRecognise
 } from "./flows/recognise.ts";
+import { onRecogniseSendV2, startRecogniseV2 } from "./flows/v2/recognise.ts";
 import { showHub, pauseFlow } from "./flows/hub.ts";
 
 export const bot = new Chat({
@@ -178,6 +179,9 @@ bot.onAction("recognise_send", guardAction("recognise_send", async (e) => {
   if (e.thread) await onRecogniseSend(e.thread, { userId: e.user?.userId, fullName: e.user?.fullName }, e.messageId);
 }));
 
+// Recognition v2 — the whole form arrives in this one submit.
+bot.onAction("v2_recognise_send", guardAction("v2_recognise_send", onRecogniseSendV2));
+
 // "Remind me later" — just acknowledge with the hub.
 bot.onAction("remind_later", guardAction("remind_later", async (e) => {
   if (e.thread) await showHub(e.thread, e.user?.fullName);
@@ -191,6 +195,10 @@ bot.onAction("resume", guardAction("resume", async (e) => {
   if (st.kind === "module") await resumeModule(e.thread, st);
   else if (st.kind === "challenge") await resumeChallenge(e.thread, st);
   else if (st.kind === "recognise") await resumeRecognise(e.thread, st);
+  // v2 has no partial state — a fresh form IS the resume. The old form stays
+  // valid until one of them is submitted; the first submit clears the state,
+  // so the other one lands on the stale card.
+  else if (st.kind === "recognise2") await startRecogniseV2(e.thread);
   else await showHub(e.thread, e.user?.fullName);
 }));
 
@@ -201,7 +209,8 @@ bot.onAction(
       "intent", "force_intent", "pause", "resume", "remind_later",
       "pick_module", "begin_module", "force_begin_module",
       "watched_video", "lesson_done", "quiz_answer",
-      "submit_answer", "recognise_pick", "recognise_belief", "recognise_send"
+      "submit_answer", "recognise_pick", "recognise_belief", "recognise_send",
+      "v2_recognise_send"
     ]);
     if (known.has(event.actionId)) return;
     if (event.thread) await showHub(event.thread, event.user?.fullName);

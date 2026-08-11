@@ -33,7 +33,10 @@ export type ThreadState =
       description?: string;
       /** The card holding the step we're waiting on — summarised when answered. */
       cardId?: string;
-    };
+    }
+  // Recognition v2: one card collects everything, so there are no steps to
+  // track — only which message holds the open form.
+  | { kind: "recognise2"; cardId?: string };
 
 /** A flow the user abandoned this long ago is no longer worth resuming. */
 const STATE_TTL_DAYS = 7;
@@ -95,7 +98,13 @@ export async function clearState(threadId: string): Promise<void> {
  * the conflict card, and the paused card. Returns null when nothing is running,
  * which is also the signal that a flow-starting action is safe to run.
  */
-export type FlowSummary = { kind: "module" | "challenge" | "recognise"; label: string; detail: string };
+export type FlowSummary = {
+  /** v1 and v2 recognition share a kind here so either counts as "a recognition
+   *  is open" for the conflict check and the hub's Continue row. */
+  kind: "module" | "challenge" | "recognise";
+  label: string;
+  detail: string;
+};
 
 export function describeFlow(st: ThreadState): FlowSummary | null {
   switch (st.kind) {
@@ -123,6 +132,8 @@ export function describeFlow(st: ThreadState): FlowSummary | null {
               : "Ready to send";
       return { kind: "recognise", label: `Recognition${who}`, detail };
     }
+    case "recognise2":
+      return { kind: "recognise", label: "Recognition", detail: "Filling in the form" };
     default:
       return null;
   }

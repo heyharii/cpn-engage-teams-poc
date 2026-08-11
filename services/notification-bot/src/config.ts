@@ -17,8 +17,22 @@ if (process.env.NODE_ENV === "production" && !apiBaseUrl) {
   throw new Error("API_BASE_URL is required in production");
 }
 
+/**
+ * Flows to serve in their v2 form, comma-separated (e.g. BOT_FLOWS_V2=recognise).
+ * v1 stays the default so a v2 flow can be demoed, and switched off again,
+ * without touching the code that everyone else is using.
+ */
+const flowsV2 = new Set(
+  optional("BOT_FLOWS_V2")
+    .split(",")
+    .map((s) => s.trim().toLowerCase())
+    .filter(Boolean)
+);
+
 export const config = {
   port: Number(optional("PORT", "4177")),
+
+  flowsV2: { recognise: flowsV2.has("recognise") || flowsV2.has("all") },
 
   teams: {
     // Microsoft App ID of the Azure Bot (= Entra app registration client id).

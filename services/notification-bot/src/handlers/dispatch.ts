@@ -15,12 +15,14 @@
 import type { Thread } from "chat";
 import type { Intent } from "./intent-router.ts";
 import { getState, describeFlow, type ThreadState } from "../state.ts";
+import { config } from "../config.ts";
 import { ConflictCard } from "../cards/index.ts";
 import { showHub } from "../flows/hub.ts";
 import { showModuleList, showModuleIntro } from "../flows/module.ts";
 import { showChallenge } from "../flows/challenge.ts";
 import { showLeaderboard } from "../flows/leaderboard.ts";
 import { startRecognise } from "../flows/recognise.ts";
+import { startRecogniseV2 } from "../flows/v2/recognise.ts";
 
 type AnyThread = Thread<unknown, unknown>;
 
@@ -63,7 +65,11 @@ export async function dispatchIntent(thread: AnyThread, intent: Intent | string,
     case "leaderboard":
       return showLeaderboard(thread);
     case "recognise":
-      return startRecognise(thread, ctx.rawText, ctx.force === true);
+      // v2 is one card, so it has no partial state to resume and no opener to
+      // parse — the force/rawText arguments simply don't apply to it.
+      return config.flowsV2.recognise
+        ? startRecogniseV2(thread)
+        : startRecognise(thread, ctx.rawText, ctx.force === true);
     case "help":
     case "unknown":
     default:
