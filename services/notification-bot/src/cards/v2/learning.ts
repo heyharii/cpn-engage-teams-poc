@@ -49,8 +49,9 @@ export function moduleListCardV2(opts: { modules: ModuleContent[]; activeId?: st
  * subtitle; a bar shows the same thing without being read, which is the point
  * of a learning streak.
  *
- * The option text stays in the body with letter-only buttons underneath —
- * Teams truncates long button labels, so that part of v1's design is kept.
+ * Each option is a CompoundButton in the body, so its full copy remains
+ * clickable and can wrap instead of being truncated like an Action.Submit
+ * title.
  */
 export function quizQuestionCardV2(opts: {
   module: ModuleContent;
@@ -95,13 +96,12 @@ export function quizQuestionCardV2(opts: {
         ]
       },
       { type: "TextBlock", text: quiz.question, wrap: true },
-      ...quiz.options.map((o) => ({ type: "TextBlock", text: `**${o.key}.** ${o.text}`, wrap: true, spacing: "Small" })),
-      { type: "TextBlock", text: "Tap your answer:", isSubtle: true, wrap: true }
-    ],
-    actions: quiz.options.map((o) => ({
-      type: "Action.Submit",
-      title: o.key,
-      data: { actionId: "quiz_answer", value: `${m.id}|${quiz.id}|${o.key}` }
-    }))
+      { type: "TextBlock", text: "Choose an option:", isSubtle: true, wrap: true },
+      ...quiz.options.map((o) => ({
+        type: "CompoundButton",
+        title: `${o.key}. ${o.text}`,
+        selectAction: { type: "Action.Submit", data: { actionId: "quiz_answer", value: `${m.id}|${quiz.id}|${o.key}` } }
+      }))
+    ]
   };
 }
