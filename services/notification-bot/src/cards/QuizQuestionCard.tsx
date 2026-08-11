@@ -2,7 +2,10 @@
 import { Card, CardText, Section, Actions, Button, Divider } from "chat";
 import type { ModuleContent, QuizQuestion } from "./types.ts";
 
-/** One quiz question with the full answer options as clickable actions. */
+/**
+ * One quiz question. Option copy is rendered as text so Teams can wrap it;
+ * the compact letter buttons remain the clickable answer controls.
+ */
 export function QuizQuestionCard(opts: { module: ModuleContent; quiz: QuizQuestion; total: number }) {
   const { module: m, quiz, total } = opts;
   return (
@@ -10,10 +13,16 @@ export function QuizQuestionCard(opts: { module: ModuleContent; quiz: QuizQuesti
       <Section>
         <CardText>{quiz.question}</CardText>
       </Section>
+      <Divider />
+      <Section>
+        {quiz.options.map((o) => (
+          <CardText key={o.key}>{`**${o.key}.** ${o.text}`}</CardText>
+        ))}
+      </Section>
       <Actions>
         {quiz.options.map((o) => (
           <Button key={o.key} id="quiz_answer" value={`${m.id}|${quiz.id}|${o.key}`}>
-            {`${o.key}. ${o.text}`}
+            {o.key}
           </Button>
         ))}
       </Actions>
