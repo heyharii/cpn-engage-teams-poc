@@ -54,10 +54,15 @@ test("the progress bar reflects questions already answered, not the current one"
 
 test("full quiz options remain clickable with the existing action payload", () => {
   const card = quizQuestionCardV2({ module: modules[0]!, quiz, total: 2, answered: 1 });
-  const options = (card.body as { type?: string; title?: string; selectAction?: { data?: { actionId?: string; value?: string } } }[]).filter(
-    (e) => e.type === "CompoundButton"
+  const options = (card.body as {
+    type?: string;
+    items?: { text?: string; wrap?: boolean }[];
+    selectAction?: { data?: { actionId?: string; value?: string } };
+  }[]).filter(
+    (e) => e.type === "Container"
   );
-  assert.deepEqual(options.map((o) => o.title), ["A. Escalate", "B. Ask what they need"]);
+  assert.deepEqual(options.map((o) => o.items?.[0]?.text), ["A. Escalate", "B. Ask what they need"]);
+  assert.equal(options[0]?.items?.[0]?.wrap, true);
   assert.equal(options[0]?.selectAction?.data?.actionId, "quiz_answer");
   assert.equal(options[0]?.selectAction?.data?.value, "m1|q2|A");
 });

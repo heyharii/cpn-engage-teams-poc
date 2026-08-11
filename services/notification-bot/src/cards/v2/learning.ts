@@ -49,9 +49,8 @@ export function moduleListCardV2(opts: { modules: ModuleContent[]; activeId?: st
  * subtitle; a bar shows the same thing without being read, which is the point
  * of a learning streak.
  *
- * Each option is a CompoundButton in the body, so its full copy remains
- * clickable and can wrap instead of being truncated like an Action.Submit
- * title.
+ * Each option is a full-width clickable Container in the body. Its TextBlock
+ * wraps naturally, instead of being truncated like an Action.Submit title.
  */
 export function quizQuestionCardV2(opts: {
   module: ModuleContent;
@@ -98,9 +97,11 @@ export function quizQuestionCardV2(opts: {
       { type: "TextBlock", text: quiz.question, wrap: true },
       { type: "TextBlock", text: "Choose an option:", isSubtle: true, wrap: true },
       ...quiz.options.map((o) => ({
-        type: "CompoundButton",
-        title: `${o.key}. ${o.text}`,
-        selectAction: { type: "Action.Submit", data: { actionId: "quiz_answer", value: `${m.id}|${quiz.id}|${o.key}` } }
+        type: "Container",
+        style: "emphasis",
+        spacing: "Small",
+        selectAction: { type: "Action.Submit", data: { actionId: "quiz_answer", value: `${m.id}|${quiz.id}|${o.key}` } },
+        items: [{ type: "TextBlock", text: `${o.key}. ${o.text}`, wrap: true }]
       }))
     ]
   };
