@@ -130,7 +130,7 @@ bot.onAction(
   })
 );
 
-// "Finish later" — park the flow; state is untouched and the hub offers Continue.
+// "Save & exit" — park the flow; state is untouched and the hub offers Continue.
 bot.onAction("pause", guardAction("pause", async (e) => {
   if (e.thread) await pauseFlow(e.thread, e.user?.fullName);
 }));

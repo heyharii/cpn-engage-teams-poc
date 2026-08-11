@@ -88,7 +88,7 @@ export function recogniseFormCard(behaviors: Behavior[]): RawCard {
         style: "positive",
         data: { actionId: "v2_recognise_send" }
       },
-      { type: "Action.Submit", title: "Cancel", data: { actionId: "intent", value: "help" } }
+      { type: "Action.Submit", title: "Save & exit", data: { actionId: "pause", value: "pause" } }
     ]
   };
 }

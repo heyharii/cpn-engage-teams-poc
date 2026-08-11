@@ -17,7 +17,7 @@ export async function showHub(thread: AnyThread, displayName?: string) {
 }
 
 /**
- * "Finish later" — park the flow without touching its state. The hub keeps
+ * "Save & exit" — park the flow without touching its state. The hub keeps
  * offering Continue until the state expires, so nothing here needs clearing.
  */
 export async function pauseFlow(thread: AnyThread, displayName?: string) {
