@@ -48,7 +48,7 @@ export async function onRecogniseSendV2(event: ActionEvent<unknown>) {
   if (st.kind !== "recognise2") {
     // The form was already sent, or belongs to an older conversation.
     await thread.post(
-      StalePromptCard({ hint: "That recognition was already sent — start a new one from the hub.", canContinue: false })
+      StalePromptCard({ hint: "That recognition was already sent — start a new one from the main menu.", canContinue: false })
     );
     return;
   }

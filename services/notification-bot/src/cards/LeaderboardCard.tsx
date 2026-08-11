@@ -27,7 +27,7 @@ export function LeaderboardCard(opts: { entries: LeaderboardEntry[]; you?: strin
       </Section>
       <Actions>
         <Button id="intent" value="help" style="primary">
-          Back to hub
+          Back to main menu
         </Button>
       </Actions>
     </Card>

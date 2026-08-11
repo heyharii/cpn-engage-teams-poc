@@ -45,7 +45,7 @@ export function RecognitionSentCard(opts: { colleague: string; behavior: string;
       </Section>
       <Actions>
         <Button id="intent" value="help" style="primary">
-          Back to hub
+          Back to main menu
         </Button>
       </Actions>
     </Card>
