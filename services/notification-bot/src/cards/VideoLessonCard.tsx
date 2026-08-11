@@ -1,29 +1,19 @@
-/** @jsxImportSource chat */
-import { Card, CardText, Section, Actions, Button, LinkButton, Divider } from "chat";
 import type { ModuleContent } from "./types.ts";
+import { adaptiveCard, cardHeader, openUrlAction, submitAction, textBlock } from "./rawLayout.ts";
+import type { RawCard } from "../raw-card.ts";
 
-/**
- * Learning Journey — video step. Adaptive Cards can't reliably embed video,
- * so we link out and let "I've watched it" advance the flow.
- */
-export function VideoLessonCard(opts: { module: ModuleContent }) {
+/** Learning Journey — video step. The active card keeps pause in the header. */
+export function VideoLessonCard(opts: { module: ModuleContent }): RawCard {
   const m = opts.module;
-  return (
-    <Card title="🎬 Video Lesson" subtitle={`${m.title} · ${m.track}`}>
-      <Section>
-        <CardText style="bold">What this looks like in practice</CardText>
-        <CardText>
-          {m.outcome ?? "A short lesson on living this Belief in everyday work."}
-        </CardText>
-      </Section>
-      <Divider />
-      <Actions>
-        <LinkButton url={m.videoUrl ?? "https://www.centralpattana.co.th"}>Watch video</LinkButton>
-        <Button id="watched_video" value={m.id} style="primary">
-          I've watched it
-        </Button>
-        <Button id="pause" value="pause" style="default">Save &amp; exit</Button>
-      </Actions>
-    </Card>
+  return adaptiveCard(
+    [
+      ...cardHeader("🎬 Video Lesson", `${m.title} · ${m.track}`, "pause"),
+      textBlock("What this looks like in practice", { bold: true, spacing: "Medium" }),
+      textBlock(m.outcome ?? "A short lesson on living this Belief in everyday work.")
+    ],
+    [
+      openUrlAction(m.videoUrl ?? "https://www.centralpattana.co.th", "Watch video"),
+      submitAction("watched_video", m.id, "I've watched it", "positive")
+    ]
   );
 }

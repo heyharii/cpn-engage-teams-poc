@@ -1,31 +1,21 @@
 /** @jsxImportSource chat */
-import { Card, CardText, Section, Actions, Button, Divider } from "chat";
+import { Card, CardText, Section, Actions, Button } from "chat";
 import type { Behavior } from "@cpn-engage/shared";
+import type { RawCard } from "../raw-card.ts";
+import { adaptiveCard, cardHeader, textBlock } from "./rawLayout.ts";
 
 /** Step 1 — ask who to recognise. */
-export function RecognisePromptCard(opts: { behaviors: Behavior[] }) {
-  return (
-    <Card title="🌟 Recognise a colleague" subtitle="Send a moment of appreciation">
-      <Section>
-        <CardText>
-          Type the name of the colleague you'd like to recognise. I'll look them
-          up in the directory so they get notified.
-        </CardText>
-        <CardText style="bold">Tip</CardText>
-        <CardText>Just their name works — e.g. "Somruk" or "Somruk T."</CardText>
-      </Section>
-      <Divider />
-      <Section>
-        <CardText style="bold">CPN BEHAVIOURS</CardText>
-        {opts.behaviors.map((b) => (
-          <CardText key={b.name}>{`• ${b.name} — ${b.tagline}`}</CardText>
-        ))}
-      </Section>
-      <Actions>
-        <Button id="pause" value="pause" style="default">Save &amp; exit</Button>
-      </Actions>
-    </Card>
-  );
+export function RecognisePromptCard(opts: { behaviors: Behavior[] }): RawCard {
+  return adaptiveCard([
+    ...cardHeader("🌟 Recognise a colleague", "Send a moment of appreciation", "pause"),
+    textBlock("Type the name of the colleague you'd like to recognise. I'll look them up in the directory so they get notified.", {
+      spacing: "Medium"
+    }),
+    textBlock("Tip", { bold: true, spacing: "Medium" }),
+    textBlock('Just their name works — e.g. "Somruk" or "Somruk T."'),
+    textBlock("CPN BEHAVIOURS", { bold: true, spacing: "Medium" }),
+    ...opts.behaviors.map((b) => textBlock(`• ${b.name} — ${b.tagline}`))
+  ]);
 }
 
 /** Step 2 — confirmation after the recognition is posted. */

@@ -1,33 +1,24 @@
-/** @jsxImportSource chat */
-import { Card, CardText, Section, Fields, Field, Actions, Button, Divider } from "chat";
 import type { ModuleContent } from "./types.ts";
+import { adaptiveCard, cardHeader, submitAction, textBlock } from "./rawLayout.ts";
+import type { RawCard } from "../raw-card.ts";
 
-/**
- * Learning Journey — module intro (PRD Feature 1). A module mixes video, text,
- * and a quiz; completing the quiz gives a score (not points).
- */
-export function ModuleIntroCard(opts: { module: ModuleContent }) {
+/** Learning Journey — the non-destructive intro before a module starts. */
+export function ModuleIntroCard(opts: { module: ModuleContent }): RawCard {
   const { module: m } = opts;
-  return (
-    <Card title={`📘 Today's Module · ${m.track}`} subtitle={m.title}>
-      <Section>
-        <CardText>{m.summary}</CardText>
-      </Section>
-      <Divider />
-      <Section>
-        <CardText style="bold">WHAT'S INSIDE</CardText>
-        <Fields>
-          <Field label="⏱️ Time" value={`${m.durationMin} min`} />
-          <Field label="🎯 Belief" value={m.track} />
-          <Field label="📦 Format" value={`Video · guide · ${m.questions.length}-question quiz`} />
-        </Fields>
-      </Section>
-      <Actions>
-        <Button id="begin_module" value={m.id} style="primary">
-          Start module
-        </Button>
-        <Button id="intent" value="help">Maybe later</Button>
-      </Actions>
-    </Card>
+  return adaptiveCard(
+    [
+      ...cardHeader(`📘 Today's Module · ${m.track}`, m.title),
+      textBlock(m.summary, { spacing: "Medium" }),
+      textBlock("WHAT'S INSIDE", { bold: true, spacing: "Medium" }),
+      {
+        type: "FactSet",
+        facts: [
+          { title: "⏱️ Time", value: `${m.durationMin} min` },
+          { title: "🎯 Belief", value: m.track },
+          { title: "📦 Format", value: `Video · guide · ${m.questions.length}-question quiz` }
+        ]
+      }
+    ],
+    [submitAction("begin_module", m.id, "Start module", "positive"), submitAction("intent", "help", "Maybe later")]
   );
 }

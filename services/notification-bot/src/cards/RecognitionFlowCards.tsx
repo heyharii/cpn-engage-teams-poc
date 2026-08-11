@@ -1,82 +1,57 @@
 /** @jsxImportSource chat */
-import { Card, CardText, Section, Fields, Field, Actions, Button, Divider } from "chat";
+import { Card, CardText, Section, Actions, Button } from "chat";
 import type { Behavior } from "@cpn-engage/shared";
+import type { RawCard } from "../raw-card.ts";
+import { adaptiveCard, cardHeader, submitAction, textBlock } from "./rawLayout.ts";
 
 /** Step 1b — disambiguate a typed name into a real directory person. */
-export function ColleaguePickCard(opts: { candidates: { oid: string; label: string }[] }) {
-  return (
-    <Card title="👥 Who do you mean?" subtitle="Pick the colleague">
-      <Section>
-        <CardText>Select the right person so they get notified.</CardText>
-      </Section>
-      <Actions>
-        {opts.candidates.map((c) => (
-          <Button key={c.oid} id="recognise_pick" value={c.oid} style="primary">
-            {c.label}
-          </Button>
-        ))}
-        <Button id="pause" value="pause" style="default">Save &amp; exit</Button>
-      </Actions>
-    </Card>
+export function ColleaguePickCard(opts: { candidates: { oid: string; label: string }[] }): RawCard {
+  return adaptiveCard(
+    [...cardHeader("👥 Who do you mean?", "Pick the colleague", "pause"), textBlock("Select the right person so they get notified.", { spacing: "Medium" })],
+    opts.candidates.map((c) => submitAction("recognise_pick", c.oid, c.label, "positive"))
   );
 }
 
 /** Step 2 — which Belief did the colleague demonstrate? */
-export function BeliefSelectCard(opts: { colleague: string; behaviors: Behavior[] }) {
-  return (
-    <Card title="🌟 Recognise a colleague" subtitle={`Step 2 of 4 · ${opts.colleague}`}>
-      <Section>
-        <CardText>{`Which Belief did **${opts.colleague}** demonstrate?`}</CardText>
-      </Section>
-      <Actions>
-        {opts.behaviors.map((b) => (
-          <Button key={b.name} id="recognise_belief" value={b.name} style="primary">
-            {b.name}
-          </Button>
-        ))}
-        <Button id="pause" value="pause" style="default">Save &amp; exit</Button>
-      </Actions>
-    </Card>
+export function BeliefSelectCard(opts: { colleague: string; behaviors: Behavior[] }): RawCard {
+  return adaptiveCard(
+    [
+      ...cardHeader("🌟 Recognise a colleague", `Step 2 of 4 · ${opts.colleague}`, "pause"),
+      textBlock(`Which Belief did **${opts.colleague}** demonstrate?`, { spacing: "Medium" })
+    ],
+    opts.behaviors.map((b) => submitAction("recognise_belief", b.name, b.name, "positive"))
   );
 }
 
 /** Step 3 — ask what happened (free-text description). */
-export function DescriptionPromptCard(opts: { colleague: string; behavior: string }) {
-  return (
-    <Card title="✍️ What happened?" subtitle={`Step 3 of 4 · ${opts.colleague} · ${opts.behavior}`}>
-      <Section>
-        <CardText>{`Reply with a short note about what **${opts.colleague}** did to show **${opts.behavior}**.`}</CardText>
-      </Section>
-      <Actions>
-        <Button id="pause" value="pause" style="default">Save &amp; exit</Button>
-      </Actions>
-    </Card>
-  );
+export function DescriptionPromptCard(opts: { colleague: string; behavior: string }): RawCard {
+  return adaptiveCard([
+    ...cardHeader("✍️ What happened?", `Step 3 of 4 · ${opts.colleague} · ${opts.behavior}`, "pause"),
+    textBlock(`Reply with a short note about what **${opts.colleague}** did to show **${opts.behavior}**.`, { spacing: "Medium" })
+  ]);
 }
 
 /** Step 4 — confirm before it posts to the public feed. */
-export function RecognitionConfirmCard(opts: { colleague: string; behavior: string; description: string }) {
-  return (
-    <Card title="📝 Confirm recognition" subtitle="Step 4 of 4">
-      <Section>
-        <Fields>
-          <Field label="COLLEAGUE" value={opts.colleague} />
-          <Field label="BELIEF" value={opts.behavior} />
-        </Fields>
-      </Section>
-      <Divider />
-      <Section>
-        <CardText style="bold">WHAT HAPPENED</CardText>
-        <CardText>{opts.description}</CardText>
-      </Section>
-      <Actions>
-        <Button id="recognise_send" value="send" style="primary">
-          Send recognition
-        </Button>
-        {/* Deliberate restart — skips the in-progress check that `intent` applies. */}
-        <Button id="force_intent" value="recognise">Start over</Button>
-      </Actions>
-    </Card>
+export function RecognitionConfirmCard(opts: { colleague: string; behavior: string; description: string }): RawCard {
+  return adaptiveCard(
+    [
+      ...cardHeader("📝 Confirm recognition", "Step 4 of 4", "pause"),
+      {
+        type: "FactSet",
+        facts: [
+          { title: "COLLEAGUE", value: opts.colleague },
+          { title: "BELIEF", value: opts.behavior }
+        ],
+        spacing: "Medium"
+      },
+      textBlock("WHAT HAPPENED", { bold: true, spacing: "Medium" }),
+      textBlock(opts.description)
+    ],
+    [
+      submitAction("recognise_send", "send", "Send recognition", "positive"),
+      // Deliberate restart — skips the in-progress check that `intent` applies.
+      submitAction("force_intent", "recognise", "Start over")
+    ]
   );
 }
 

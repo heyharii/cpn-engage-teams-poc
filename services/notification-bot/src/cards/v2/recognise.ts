@@ -27,6 +27,7 @@
 
 import type { Behavior } from "@cpn-engage/shared";
 import type { RawCard } from "../../raw-card.ts";
+import { adaptiveCard, cardHeader } from "../rawLayout.ts";
 
 export const RECOGNISE_INPUTS = { colleague: "colleague", belief: "belief", story: "story" } as const;
 
@@ -38,19 +39,9 @@ export const RECOGNISE_INPUTS = { colleague: "colleague", belief: "belief", stor
 const PEOPLE_DATASET = "graph.microsoft.com/users";
 
 export function recogniseFormCard(behaviors: Behavior[]): RawCard {
-  return {
-    type: "AdaptiveCard",
-    $schema: "https://adaptivecards.io/schemas/adaptive-card.json",
-    version: "1.5",
-    body: [
-      { type: "TextBlock", text: "🌟 Recognise a colleague", size: "Large", weight: "Bolder", wrap: true },
-      {
-        type: "TextBlock",
-        text: "Say thank you for a moment that showed one of the CPN Beliefs.",
-        wrap: true,
-        isSubtle: true,
-        spacing: "None"
-      },
+  return adaptiveCard(
+    [
+      ...cardHeader("🌟 Recognise a colleague", "Say thank you for a moment that showed one of the CPN Beliefs.", "pause"),
       {
         type: "Input.ChoiceSet",
         id: RECOGNISE_INPUTS.colleague,
@@ -81,16 +72,8 @@ export function recogniseFormCard(behaviors: Behavior[]): RawCard {
         errorMessage: "Add a short note so the recognition means something."
       }
     ],
-    actions: [
-      {
-        type: "Action.Submit",
-        title: "Send recognition",
-        style: "positive",
-        data: { actionId: "v2_recognise_send" }
-      },
-      { type: "Action.Submit", title: "Save & exit", data: { actionId: "pause", value: "pause" } }
-    ]
-  };
+    [{ type: "Action.Submit", title: "Send recognition", style: "positive", data: { actionId: "v2_recognise_send" } }]
+  );
 }
 
 /**
@@ -98,12 +81,8 @@ export function recogniseFormCard(behaviors: Behavior[]): RawCard {
  * The same rule as every other flow: an answered card becomes a record.
  */
 export function recogniseRecordCard(opts: { colleague: string; behavior: string; story: string }): RawCard {
-  return {
-    type: "AdaptiveCard",
-    $schema: "https://adaptivecards.io/schemas/adaptive-card.json",
-    version: "1.5",
-    body: [
-      { type: "TextBlock", text: "✅ Recognition sent", weight: "Bolder", wrap: true },
+  return adaptiveCard([
+      ...cardHeader("🌟 Recognise a colleague", "Recognition sent", "done"),
       {
         type: "FactSet",
         facts: [
@@ -112,6 +91,5 @@ export function recogniseRecordCard(opts: { colleague: string; behavior: string;
         ]
       },
       { type: "TextBlock", text: opts.story, wrap: true }
-    ]
-  };
+    ]);
 }

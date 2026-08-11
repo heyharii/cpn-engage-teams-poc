@@ -6,7 +6,7 @@ import type { Thread } from "chat";
 import { getState, describeFlow } from "../state.ts";
 import { v2Entries } from "../versioning.ts";
 import { HubCard, PausedCard } from "../cards/index.ts";
-import { editCard } from "../edit.ts";
+import { editCard, postCard } from "../edit.ts";
 
 type AnyThread = Thread<unknown, unknown>;
 
@@ -26,5 +26,5 @@ export async function pauseFlow(thread: AnyThread, displayName?: string, message
   const flow = describeFlow(st);
   if (!flow) return showHub(thread, displayName);
   const paused = PausedCard(flow);
-  if (!(await editCard(thread, messageId, paused))) await thread.post(paused);
+  if (!(await editCard(thread, messageId, paused))) await postCard(thread, paused);
 }

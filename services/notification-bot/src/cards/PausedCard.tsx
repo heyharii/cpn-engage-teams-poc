@@ -1,23 +1,13 @@
-/** @jsxImportSource chat */
-import { Card, CardText, Section, Actions, Button } from "chat";
+import type { RawCard } from "../raw-card.ts";
+import { adaptiveCard, cardHeader, submitAction, textBlock } from "./rawLayout.ts";
 
-/**
- * Confirmation that a paused flow is safely parked. Nothing is cleared — the
- * thread state stays exactly where it was, and the hub keeps offering Continue
- * until the state expires.
- */
-export function PausedCard(opts: { label: string; detail: string }) {
-  return (
-    <Card title="⏸️ Paused" subtitle={opts.label}>
-      <Section>
-        <CardText>{`Saved at: ${opts.detail}. Come back any time and tap Continue — nothing is lost.`}</CardText>
-      </Section>
-      <Actions>
-        <Button id="resume" value="resume" style="primary">
-          Continue now
-        </Button>
-        <Button id="intent" value="help">Main menu</Button>
-      </Actions>
-    </Card>
+/** Paused state, edited into the active card so its old controls disappear. */
+export function PausedCard(opts: { label: string; detail: string }): RawCard {
+  return adaptiveCard(
+    [
+      ...cardHeader("⏸️ Paused", opts.label, "done"),
+      textBlock(`Saved at: ${opts.detail}. Come back any time and tap Continue — nothing is lost.`, { spacing: "Medium" })
+    ],
+    [submitAction("resume", "resume", "Continue now", "positive"), submitAction("intent", "help", "Main menu")]
   );
 }

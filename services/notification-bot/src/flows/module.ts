@@ -51,12 +51,12 @@ export async function showModuleList(thread: AnyThread) {
 export async function pickModule(thread: AnyThread, moduleId: string) {
   const m = getModule(moduleId);
   if (!m) return showModuleList(thread);
-  await thread.post(ModuleIntroCard({ module: m }));
+  await postCard(thread, ModuleIntroCard({ module: m }));
 }
 
 /** Intent "start_module" — present the default module's intro (no state change). */
 export async function showModuleIntro(thread: AnyThread) {
-  await thread.post(ModuleIntroCard({ module: firstAssignedModule() }));
+  await postCard(thread, ModuleIntroCard({ module: firstAssignedModule() }));
 }
 
 /**
