@@ -6,6 +6,7 @@ import type { Thread } from "chat";
 import { getState, describeFlow } from "../state.ts";
 import { v2Entries } from "../versioning.ts";
 import { HubCard, PausedCard } from "../cards/index.ts";
+import { editCard } from "../edit.ts";
 
 type AnyThread = Thread<unknown, unknown>;
 
@@ -20,9 +21,10 @@ export async function showHub(thread: AnyThread, displayName?: string) {
  * "Save & exit" — park the flow without touching its state. The hub keeps
  * offering Continue until the state expires, so nothing here needs clearing.
  */
-export async function pauseFlow(thread: AnyThread, displayName?: string) {
+export async function pauseFlow(thread: AnyThread, displayName?: string, messageId?: string) {
   const st = await getState(thread.id);
   const flow = describeFlow(st);
   if (!flow) return showHub(thread, displayName);
-  await thread.post(PausedCard(flow));
+  const paused = PausedCard(flow);
+  if (!(await editCard(thread, messageId, paused))) await thread.post(paused);
 }

@@ -67,7 +67,6 @@ export async function onSubmitAnswer(
   }
 
   const chosen = question.options.find((o) => o.id === payload.optionId) ?? question.options[0]!;
-  const best = question.options.find((o) => o.isBest) ?? question.options[0]!;
   const pointsEarned = chosen.isBest ? drop.bestPoints ?? 50 : drop.basePoints ?? 20;
 
   // Award this question's points (idempotent per drop+question+user).
@@ -89,7 +88,16 @@ export async function onSubmitAnswer(
     answeredQ: [...st.answeredQ, payload.questionId]
   });
 
-  const result = AnswerResultCard({ drop, chosen, best, pointsEarned, newScore: isLast ? newScore : null });
+  const result = AnswerResultCard({
+    drop,
+    question,
+    qNum: st.qIndex + 1,
+    total: drop.questions.length,
+    chosenId: chosen.id,
+    pointsEarned,
+    newScore: isLast ? newScore : null,
+    isLast
+  });
   if (isLast) {
     // Nothing follows, so the answered card simply becomes the result.
     if (!(await editCard(thread, messageId, result))) await postCard(thread, result);
