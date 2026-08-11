@@ -1,36 +1,41 @@
 /** @jsxImportSource chat */
-import { Card, CardText, Section, Actions, Button, Divider } from "chat";
+import { Card, CardText, Section, Divider } from "chat";
 import type { ModuleContent, QuizQuestion } from "./types.ts";
+import type { RawCard } from "../raw-card.ts";
+
+const QUIZ_CARD = {
+  type: "AdaptiveCard",
+  $schema: "https://adaptivecards.io/schemas/adaptive-card.json",
+  version: "1.5"
+} as const;
 
 /**
- * One quiz question. Option copy is rendered as text so Teams can wrap it;
- * the compact letter buttons remain the clickable answer controls.
+ * One quiz question. The compact pause icon lives in a right-aligned ActionSet
+ * at the top; option copy remains wrapping text with compact answer controls.
  */
-export function QuizQuestionCard(opts: { module: ModuleContent; quiz: QuizQuestion; total: number }) {
+export function QuizQuestionCard(opts: { module: ModuleContent; quiz: QuizQuestion; total: number }): RawCard {
   const { module: m, quiz, total } = opts;
   return (
-    <Card title={`Question ${quiz.number} of ${total}`} subtitle={`${m.title} · ${m.track}`}>
-      <Section>
-        <CardText>{quiz.question}</CardText>
-      </Section>
-      <Divider />
-      <Section>
-        {quiz.options.map((o) => (
-          <CardText key={o.key}>{`**${o.key}.** ${o.text}`}</CardText>
-        ))}
-      </Section>
-      <Actions>
-        {quiz.options.map((o) => (
-          <Button key={o.key} id="quiz_answer" value={`${m.id}|${quiz.id}|${o.key}`}>
-            {o.key}
-          </Button>
-        ))}
-      </Actions>
-      <Divider />
-      <Actions>
-        <Button id="pause" value="pause" style="default">Save &amp; exit</Button>
-      </Actions>
-    </Card>
+    {
+      ...QUIZ_CARD,
+      body: [
+        { type: "TextBlock", text: `Question ${quiz.number} of ${total}`, size: "Large", weight: "Bolder", wrap: true },
+        { type: "TextBlock", text: `${m.title} · ${m.track}`, isSubtle: true, wrap: true, spacing: "None" },
+        {
+          type: "ActionSet",
+          horizontalAlignment: "Right",
+          actions: [{ type: "Action.Submit", title: "×", tooltip: "Save & exit", data: { actionId: "pause", value: "pause" } }]
+        },
+        { type: "TextBlock", text: quiz.question, wrap: true },
+        ...quiz.options.map((o) => ({ type: "TextBlock", text: `**${o.key}.** ${o.text}`, wrap: true, spacing: "Small" })),
+        { type: "TextBlock", text: "Tap your answer:", isSubtle: true, wrap: true }
+      ],
+      actions: quiz.options.map((o) => ({
+        type: "Action.Submit",
+        title: o.key,
+        data: { actionId: "quiz_answer", value: `${m.id}|${quiz.id}|${o.key}` }
+      }))
+    }
   );
 }
 

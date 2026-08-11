@@ -72,6 +72,11 @@ export function quizQuestionCardV2(opts: {
         wrap: true,
         spacing: "Small"
       },
+      {
+        type: "ActionSet",
+        horizontalAlignment: "Right",
+        actions: [{ type: "Action.Submit", title: "×", tooltip: "Save & exit", data: { actionId: "pause", value: "pause" } }]
+      },
       { type: "TextBlock", text: quiz.question, wrap: true },
       ...quiz.options.map((o) => ({ type: "TextBlock", text: `**${o.key}.** ${o.text}`, wrap: true, spacing: "Small" })),
       { type: "TextBlock", text: "Tap your answer:", isSubtle: true, wrap: true }
