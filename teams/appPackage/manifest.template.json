@@ -1,7 +1,7 @@
 {
   "$schema": "https://developer.microsoft.com/json-schemas/teams/v1.25/MicrosoftTeams.schema.json",
   "manifestVersion": "1.25",
-  "version": "0.6.3",
+  "version": "0.6.4",
   "id": "${{TEAMS_APP_ID}}",
   "developer": {
     "name": "Int-Labs",
@@ -25,7 +25,7 @@
   "staticTabs": [
     {
       "entityId": "community-feed",
-      "name": "Feeds v0.6.3",
+      "name": "Feeds v0.6.4",
       "contentUrl": "${{COMMUNITY_FEED_URL}}",
       "websiteUrl": "${{COMMUNITY_FEED_URL}}",
       "scopes": ["personal"]
