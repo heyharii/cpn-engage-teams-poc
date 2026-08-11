@@ -19,12 +19,11 @@ import { getModule, firstAssignedModule, nextModuleAfter, allModules } from "../
 import { getState, setState, clearState, describeFlow, type ThreadState } from "../state.ts";
 import { submitModuleComplete, scoreIdentity } from "../api.ts";
 import { advanceStep, postCard } from "../edit.ts";
+import { moduleList, quizQuestion } from "../cards/resolve.ts";
 import {
-  ModuleListCard,
   ModuleIntroCard,
   VideoLessonCard,
   TextLessonCard,
-  QuizQuestionCard,
   ModuleCompleteCard,
   StalePromptCard,
   ConflictCard,
@@ -42,11 +41,9 @@ type AnyThread = Thread<unknown, unknown>;
  */
 export async function showModuleList(thread: AnyThread) {
   const st = await getState(thread.id);
-  await thread.post(
-    ModuleListCard({
-      modules: allModules(),
-      activeId: st.kind === "module" ? st.moduleId : undefined
-    })
+  await postCard(
+    thread,
+    moduleList({ modules: allModules(), activeId: st.kind === "module" ? st.moduleId : undefined })
   );
 }
 
@@ -137,7 +134,7 @@ export async function onLessonDone(thread: AnyThread, moduleId: string, messageI
       subtitle: m.lesson.heading,
       lines: [`${m.questions.length} question(s) to go.`]
     }),
-    QuizQuestionCard({ module: m, quiz: m.questions[0]!, total: m.questions.length })
+    quizQuestion({ module: m, quiz: m.questions[0]!, total: m.questions.length, answered: 0 })
   );
 }
 
@@ -183,7 +180,7 @@ export async function onQuizAnswer(
       thread,
       messageId,
       record,
-      QuizQuestionCard({ module: m, quiz: m.questions[nextIdx]!, total: m.questions.length })
+      quizQuestion({ module: m, quiz: m.questions[nextIdx]!, total: m.questions.length, answered: nextIdx })
     );
     return;
   }
@@ -216,7 +213,7 @@ export async function resumeModule(thread: AnyThread, st: ThreadState) {
       ? VideoLessonCard({ module: m })
       : st.step === "text"
         ? TextLessonCard({ module: m, heading: m.lesson.heading, body: m.lesson.body })
-        : QuizQuestionCard({ module: m, quiz: m.questions[st.quizIdx]!, total: m.questions.length });
+        : quizQuestion({ module: m, quiz: m.questions[st.quizIdx]!, total: m.questions.length, answered: st.quizIdx });
   await postCard(thread, card);
 }
 

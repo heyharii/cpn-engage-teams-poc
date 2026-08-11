@@ -11,6 +11,7 @@
  * do that. This is only about what the user sees.
  */
 import { isJSX, toCardElement, type Thread } from "chat";
+import { postRawCard, editRawCard, type RawCard } from "./raw-card.ts";
 
 type AnyThread = Thread<unknown, unknown>;
 
@@ -26,9 +27,26 @@ function toPayload(card: unknown): unknown {
   return el;
 }
 
+/**
+ * Cards come in two shapes: the SDK's JSX elements, and hand-written Adaptive
+ * Card JSON for the ones needing features the JSX layer doesn't expose (inputs,
+ * ProgressBar, Badge, CompoundButton). Both travel through the same two
+ * functions, so a flow never has to know which kind it is holding — swapping a
+ * card for its v2 rendering changes the import and nothing else.
+ */
+function isRawCard(card: unknown): card is RawCard {
+  return (
+    typeof card === "object" &&
+    card !== null &&
+    !isJSX(card as never) &&
+    (card as { type?: unknown }).type === "AdaptiveCard"
+  );
+}
+
 /** Replaces one message's card. Returns false when the host refused the edit. */
 export async function editCard(thread: AnyThread, messageId: string | undefined, card: unknown): Promise<boolean> {
   if (!messageId) return false;
+  if (isRawCard(card)) return editRawCard(thread.id, messageId, card);
   try {
     await thread.adapter.editMessage(thread.id, messageId, toPayload(card) as never);
     return true;
@@ -43,6 +61,7 @@ export async function editCard(thread: AnyThread, messageId: string | undefined,
  * the recognition wizard, which lives in a single message the whole way through.
  */
 export async function postCard(thread: AnyThread, card: unknown): Promise<string | undefined> {
+  if (isRawCard(card)) return postRawCard(thread.id, card);
   const sent = (await thread.post(card as never)) as { id?: string } | undefined;
   return sent?.id;
 }

@@ -4,7 +4,7 @@
  */
 import type { Thread } from "chat";
 import { getState, describeFlow } from "../state.ts";
-import { config } from "../config.ts";
+import { v2Entries } from "../versioning.ts";
 import { HubCard, PausedCard } from "../cards/index.ts";
 
 type AnyThread = Thread<unknown, unknown>;
@@ -12,7 +12,7 @@ type AnyThread = Thread<unknown, unknown>;
 export async function showHub(thread: AnyThread, displayName?: string) {
   const st = await getState(thread.id);
   await thread.post(
-    HubCard({ displayName, resume: describeFlow(st), v2: [...config.v2Entries] })
+    HubCard({ displayName, resume: describeFlow(st), v2: v2Entries() })
   );
 }
 
