@@ -65,17 +65,34 @@ export function quizQuestionCardV2(opts: {
       { type: "TextBlock", text: `${m.title} · ${m.track}`, isSubtle: true, wrap: true, spacing: "None" },
       { type: "ProgressBar", value: total > 0 ? (answered / total) * 100 : 0, max: 100, color: "Accent" },
       {
-        type: "TextBlock",
-        text: `Question ${quiz.number} of ${total}`,
-        weight: "Bolder",
-        size: "Medium",
-        wrap: true,
-        spacing: "Small"
-      },
-      {
-        type: "ActionSet",
-        horizontalAlignment: "Right",
-        actions: [{ type: "Action.Submit", title: "×", tooltip: "Save & exit", data: { actionId: "pause", value: "pause" } }]
+        type: "ColumnSet",
+        columns: [
+          {
+            type: "Column",
+            width: "stretch",
+            items: [
+              {
+                type: "TextBlock",
+                text: `Question ${quiz.number} of ${total}`,
+                weight: "Bolder",
+                size: "Medium",
+                wrap: true,
+                spacing: "Small"
+              }
+            ]
+          },
+          {
+            type: "Column",
+            width: "auto",
+            verticalContentAlignment: "Center",
+            items: [
+              {
+                type: "ActionSet",
+                actions: [{ type: "Action.Submit", title: "×", tooltip: "Save & exit", data: { actionId: "pause", value: "pause" } }]
+              }
+            ]
+          }
+        ]
       },
       { type: "TextBlock", text: quiz.question, wrap: true },
       ...quiz.options.map((o) => ({ type: "TextBlock", text: `**${o.key}.** ${o.text}`, wrap: true, spacing: "Small" })),

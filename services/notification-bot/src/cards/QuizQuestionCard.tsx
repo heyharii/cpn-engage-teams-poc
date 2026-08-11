@@ -19,13 +19,28 @@ export function QuizQuestionCard(opts: { module: ModuleContent; quiz: QuizQuesti
     {
       ...QUIZ_CARD,
       body: [
-        { type: "TextBlock", text: `Question ${quiz.number} of ${total}`, size: "Large", weight: "Bolder", wrap: true },
-        { type: "TextBlock", text: `${m.title} · ${m.track}`, isSubtle: true, wrap: true, spacing: "None" },
         {
-          type: "ActionSet",
-          horizontalAlignment: "Right",
-          actions: [{ type: "Action.Submit", title: "×", tooltip: "Save & exit", data: { actionId: "pause", value: "pause" } }]
+          type: "ColumnSet",
+          columns: [
+            {
+              type: "Column",
+              width: "stretch",
+              items: [{ type: "TextBlock", text: `Question ${quiz.number} of ${total}`, size: "Large", weight: "Bolder", wrap: true }]
+            },
+            {
+              type: "Column",
+              width: "auto",
+              verticalContentAlignment: "Center",
+              items: [
+                {
+                  type: "ActionSet",
+                  actions: [{ type: "Action.Submit", title: "×", tooltip: "Save & exit", data: { actionId: "pause", value: "pause" } }]
+                }
+              ]
+            }
+          ]
         },
+        { type: "TextBlock", text: `${m.title} · ${m.track}`, isSubtle: true, wrap: true, spacing: "None" },
         { type: "TextBlock", text: quiz.question, wrap: true },
         ...quiz.options.map((o) => ({ type: "TextBlock", text: `**${o.key}.** ${o.text}`, wrap: true, spacing: "Small" })),
         { type: "TextBlock", text: "Tap your answer:", isSubtle: true, wrap: true }
