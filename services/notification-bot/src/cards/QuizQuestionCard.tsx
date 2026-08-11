@@ -1,5 +1,3 @@
-/** @jsxImportSource chat */
-import { Card, CardText, Section, Divider } from "chat";
 import type { ModuleContent, QuizQuestion } from "./types.ts";
 import type { RawCard } from "../raw-card.ts";
 
@@ -8,6 +6,72 @@ const QUIZ_CARD = {
   $schema: "https://adaptivecards.io/schemas/adaptive-card.json",
   version: "1.5"
 } as const;
+
+function quizOptionRows(
+  moduleId: string,
+  quizId: string,
+  options: QuizQuestion["options"],
+  chosenKey?: string
+) {
+  const answered = chosenKey !== undefined;
+
+  return options.map((o) => {
+    const isChosen = o.key === chosenKey;
+    const isBest = o.correct === true;
+    const marker = answered ? (isBest ? "✅ " : isChosen ? "❌ " : "") : "";
+    const note = answered
+      ? isBest && isChosen
+        ? " — Your answer · Best answer"
+        : isBest
+          ? " — Best answer"
+          : isChosen
+            ? " — Your answer"
+            : ""
+      : "";
+
+    return {
+      type: "Container",
+      style: answered ? (isBest ? "good" : isChosen ? "attention" : "emphasis") : "emphasis",
+      spacing: "Small",
+      bleed: true,
+      ...(answered
+        ? {}
+        : {
+            selectAction: {
+              type: "Action.Submit",
+              data: { actionId: "quiz_answer", value: `${moduleId}|${quizId}|${o.key}` }
+            }
+          }),
+      items: [{ type: "TextBlock", text: `${marker}${o.key}. ${o.text}${note}`, wrap: true }]
+    };
+  });
+}
+
+function quizHeader(quiz: QuizQuestion, total: number, answered: boolean) {
+  return {
+    type: "ColumnSet",
+    columns: [
+      {
+        type: "Column",
+        width: "stretch",
+        items: [{ type: "TextBlock", text: `Question ${quiz.number} of ${total}`, size: "Large", weight: "Bolder", wrap: true }]
+      },
+      {
+        type: "Column",
+        width: "auto",
+        verticalContentAlignment: "Center",
+        items: answered
+          ? [{ type: "TextBlock", text: "✓", color: "Good", size: "Medium", weight: "Bolder", horizontalAlignment: "Right" }]
+          : [
+              {
+                type: "ActionSet",
+                actions: [{ type: "Action.Submit", title: "×", tooltip: "Save & exit", data: { actionId: "pause", value: "pause" } }]
+              }
+            ]
+      }
+    ]
+  };
+}
 
 /**
  * One quiz question. The compact pause icon lives in a right-aligned ActionSet
@@ -20,37 +84,11 @@ export function QuizQuestionCard(opts: { module: ModuleContent; quiz: QuizQuesti
     {
       ...QUIZ_CARD,
       body: [
-        {
-          type: "ColumnSet",
-          columns: [
-            {
-              type: "Column",
-              width: "stretch",
-              items: [{ type: "TextBlock", text: `Question ${quiz.number} of ${total}`, size: "Large", weight: "Bolder", wrap: true }]
-            },
-            {
-              type: "Column",
-              width: "auto",
-              verticalContentAlignment: "Center",
-              items: [
-                {
-                  type: "ActionSet",
-                  actions: [{ type: "Action.Submit", title: "×", tooltip: "Save & exit", data: { actionId: "pause", value: "pause" } }]
-                }
-              ]
-            }
-          ]
-        },
+        quizHeader(quiz, total, false),
         { type: "TextBlock", text: `${m.title} · ${m.track}`, isSubtle: true, wrap: true, spacing: "None" },
         { type: "TextBlock", text: quiz.question, wrap: true },
         { type: "TextBlock", text: "Choose an option:", isSubtle: true, wrap: true },
-        ...quiz.options.map((o) => ({
-          type: "Container",
-          style: "emphasis",
-          spacing: "Small",
-          selectAction: { type: "Action.Submit", data: { actionId: "quiz_answer", value: `${m.id}|${quiz.id}|${o.key}` } },
-          items: [{ type: "TextBlock", text: `${o.key}. ${o.text}`, wrap: true }]
-        }))
+        ...quizOptionRows(m.id, quiz.id, quiz.options)
       ]
     }
   );
@@ -65,37 +103,24 @@ export function QuizAnswerResultCard(opts: {
   quiz: QuizQuestion;
   total: number;
   chosenKey: string;
-}) {
+}): RawCard {
   const { module: m, quiz, total, chosenKey } = opts;
   const chosen = quiz.options.find((o) => o.key === chosenKey);
   const correct = chosen?.correct === true;
 
   return (
-    <Card
-      title={correct ? "✅ Correct" : "❌ Not quite"}
-      subtitle={`${m.title} · question ${quiz.number} of ${total}`}
-    >
-      <Section>
-        <CardText>{quiz.question}</CardText>
-      </Section>
-      <Divider />
-      <Section>
-        {quiz.options.map((o) => {
-          const isChosen = o.key === chosenKey;
-          const marker = o.correct ? "✅" : isChosen ? "❌" : "▫️";
-          const note = o.correct && isChosen ? " — Your answer · Best answer" : o.correct ? " — Best answer" : isChosen ? " — Your answer" : "";
-          return <CardText key={o.key}>{`${marker} **${o.key}. ${o.text}**${note}`}</CardText>;
-        })}
-      </Section>
-      {chosen?.explanation ? (
-        <>
-          <Divider />
-          <Section>
-            <CardText style="bold">WHY</CardText>
-            <CardText>{chosen.explanation}</CardText>
-          </Section>
-        </>
-      ) : null}
-    </Card>
+    {
+      ...QUIZ_CARD,
+      body: [
+        quizHeader(quiz, total, true),
+        { type: "TextBlock", text: `${m.title} · ${m.track}`, isSubtle: true, wrap: true, spacing: "None" },
+        { type: "TextBlock", text: quiz.question, wrap: true },
+        { type: "TextBlock", text: correct ? "✅ Correct" : "❌ Not quite", isSubtle: true, wrap: true },
+        ...quizOptionRows(m.id, quiz.id, quiz.options, chosenKey),
+        ...(chosen?.explanation
+          ? [{ type: "TextBlock", text: `Why: ${chosen.explanation}`, isSubtle: true, wrap: true, spacing: "Medium" }]
+          : [])
+      ]
+    }
   );
 }

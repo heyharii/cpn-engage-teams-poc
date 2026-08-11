@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { moduleListCardV2, quizQuestionCardV2 } from "./learning.js";
+import { moduleListCardV2, quizAnswerResultCardV2, quizQuestionCardV2 } from "./learning.js";
 import type { ModuleContent } from "../types.js";
 
 const modules = [
@@ -13,8 +13,8 @@ const quiz = {
   number: 2,
   question: "What do you do first?",
   options: [
-    { key: "A", text: "Escalate" },
-    { key: "B", text: "Ask what they need" }
+    { key: "A", text: "Escalate", correct: true },
+    { key: "B", text: "Ask what they need", correct: false }
   ]
 } as never;
 
@@ -65,4 +65,24 @@ test("full quiz options remain clickable with the existing action payload", () =
   assert.equal(options[0]?.items?.[0]?.wrap, true);
   assert.equal(options[0]?.selectAction?.data?.actionId, "quiz_answer");
   assert.equal(options[0]?.selectAction?.data?.value, "m1|q2|A");
+});
+
+test("the answered quiz keeps the same option layout and marks the result in place", () => {
+  const card = quizAnswerResultCardV2({ module: modules[0]!, quiz, total: 2, answered: 2, chosenKey: "B" });
+  const body = card.body as {
+    type?: string;
+    style?: string;
+    items?: { text?: string; wrap?: boolean }[];
+    selectAction?: unknown;
+  }[];
+  const options = body.filter((e) => e.type === "Container");
+
+  assert.equal(options.length, 2);
+  assert.equal(options[0]?.style, "good");
+  assert.match(String(options[0]?.items?.[0]?.text), /✅ A\. Escalate/);
+  assert.equal(options[1]?.style, "attention");
+  assert.match(String(options[1]?.items?.[0]?.text), /❌ B\. Ask what they need/);
+  assert.equal(options[0]?.items?.[0]?.wrap, true);
+  assert.equal(options[0]?.selectAction, undefined);
+  assert.equal(options[1]?.selectAction, undefined);
 });

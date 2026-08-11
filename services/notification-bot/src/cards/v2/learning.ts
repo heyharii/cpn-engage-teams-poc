@@ -14,6 +14,32 @@ import type { RawCard } from "../../raw-card.ts";
 
 const CARD = { type: "AdaptiveCard", $schema: "https://adaptivecards.io/schemas/adaptive-card.json", version: "1.5" };
 
+function quizHeader(quiz: QuizQuestion, total: number, answered: boolean) {
+  return {
+    type: "ColumnSet",
+    columns: [
+      {
+        type: "Column",
+        width: "stretch",
+        items: [{ type: "TextBlock", text: `Question ${quiz.number} of ${total}`, weight: "Bolder", size: "Medium", wrap: true, spacing: "Small" }]
+      },
+      {
+        type: "Column",
+        width: "auto",
+        verticalContentAlignment: "Center",
+        items: answered
+          ? [{ type: "TextBlock", text: "✓", color: "Good", size: "Medium", weight: "Bolder", horizontalAlignment: "Right" }]
+          : [
+              {
+                type: "ActionSet",
+                actions: [{ type: "Action.Submit", title: "×", tooltip: "Save & exit", data: { actionId: "pause", value: "pause" } }]
+              }
+            ]
+      }
+    ]
+  };
+}
+
 /**
  * The module list, as one tappable row per module instead of a text list with
  * a separate row of bare-title buttons. `CompoundButton` carries the title,
@@ -64,45 +90,77 @@ export function quizQuestionCardV2(opts: {
     body: [
       { type: "TextBlock", text: `${m.title} · ${m.track}`, isSubtle: true, wrap: true, spacing: "None" },
       { type: "ProgressBar", value: total > 0 ? (answered / total) * 100 : 0, max: 100, color: "Accent" },
-      {
-        type: "ColumnSet",
-        columns: [
-          {
-            type: "Column",
-            width: "stretch",
-            items: [
-              {
-                type: "TextBlock",
-                text: `Question ${quiz.number} of ${total}`,
-                weight: "Bolder",
-                size: "Medium",
-                wrap: true,
-                spacing: "Small"
-              }
-            ]
-          },
-          {
-            type: "Column",
-            width: "auto",
-            verticalContentAlignment: "Center",
-            items: [
-              {
-                type: "ActionSet",
-                actions: [{ type: "Action.Submit", title: "×", tooltip: "Save & exit", data: { actionId: "pause", value: "pause" } }]
-              }
-            ]
-          }
-        ]
-      },
+      quizHeader(quiz, total, false),
       { type: "TextBlock", text: quiz.question, wrap: true },
       { type: "TextBlock", text: "Choose an option:", isSubtle: true, wrap: true },
-      ...quiz.options.map((o) => ({
-        type: "Container",
-        style: "emphasis",
-        spacing: "Small",
-        selectAction: { type: "Action.Submit", data: { actionId: "quiz_answer", value: `${m.id}|${quiz.id}|${o.key}` } },
-        items: [{ type: "TextBlock", text: `${o.key}. ${o.text}`, wrap: true }]
-      }))
+      ...quizOptionRows(m.id, quiz.id, quiz.options)
+    ]
+  };
+}
+
+function quizOptionRows(
+  moduleId: string,
+  quizId: string,
+  options: QuizQuestion["options"],
+  chosenKey?: string
+) {
+  const answered = chosenKey !== undefined;
+
+  return options.map((o) => {
+    const isChosen = o.key === chosenKey;
+    const isBest = o.correct === true;
+    const marker = answered ? (isBest ? "✅ " : isChosen ? "❌ " : "") : "";
+    const note = answered
+      ? isBest && isChosen
+        ? " — Your answer · Best answer"
+        : isBest
+          ? " — Best answer"
+          : isChosen
+            ? " — Your answer"
+            : ""
+      : "";
+
+    return {
+      type: "Container",
+      style: answered ? (isBest ? "good" : isChosen ? "attention" : "emphasis") : "emphasis",
+      spacing: "Small",
+      bleed: true,
+      ...(answered
+        ? {}
+        : {
+            selectAction: {
+              type: "Action.Submit",
+              data: { actionId: "quiz_answer", value: `${moduleId}|${quizId}|${o.key}` }
+            }
+          }),
+      items: [{ type: "TextBlock", text: `${marker}${o.key}. ${o.text}${note}`, wrap: true }]
+    };
+  });
+}
+
+/** Same question layout after answering; only option state and markers change. */
+export function quizAnswerResultCardV2(opts: {
+  module: ModuleContent;
+  quiz: QuizQuestion;
+  total: number;
+  answered: number;
+  chosenKey: string;
+}): RawCard {
+  const { module: m, quiz, total, answered, chosenKey } = opts;
+  const chosen = quiz.options.find((o) => o.key === chosenKey);
+
+  return {
+    ...CARD,
+    body: [
+      { type: "TextBlock", text: `${m.title} · ${m.track}`, isSubtle: true, wrap: true, spacing: "None" },
+      { type: "ProgressBar", value: total > 0 ? (answered / total) * 100 : 0, max: 100, color: "Accent" },
+      quizHeader(quiz, total, true),
+      { type: "TextBlock", text: quiz.question, wrap: true },
+      { type: "TextBlock", text: chosen?.correct === true ? "✅ Correct" : "❌ Not quite", isSubtle: true, wrap: true },
+      ...quizOptionRows(m.id, quiz.id, quiz.options, chosenKey),
+      ...(chosen?.explanation
+        ? [{ type: "TextBlock", text: `Why: ${chosen.explanation}`, isSubtle: true, wrap: true, spacing: "Medium" }]
+        : [])
     ]
   };
 }

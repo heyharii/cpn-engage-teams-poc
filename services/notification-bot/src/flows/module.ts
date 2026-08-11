@@ -19,7 +19,7 @@ import { getModule, firstAssignedModule, nextModuleAfter, allModules } from "../
 import { getState, setState, clearState, describeFlow, type ThreadState } from "../state.ts";
 import { submitModuleComplete, scoreIdentity } from "../api.ts";
 import { advanceStep, postCard } from "../edit.ts";
-import { moduleList, quizQuestion } from "../cards/resolve.ts";
+import { moduleList, quizAnswerResult, quizQuestion } from "../cards/resolve.ts";
 import {
   ModuleIntroCard,
   VideoLessonCard,
@@ -27,8 +27,7 @@ import {
   ModuleCompleteCard,
   StalePromptCard,
   ConflictCard,
-  StepDoneCard,
-  QuizAnswerResultCard
+  StepDoneCard
 } from "../cards/index.ts";
 
 type AnyThread = Thread<unknown, unknown>;
@@ -160,16 +159,16 @@ export async function onQuizAnswer(
 
   const chosen = expected.options.find((o) => o.key === payload.optionKey);
   const correct = chosen?.correct === true;
-  const record = QuizAnswerResultCard({
-    module: m,
-    quiz: expected,
-    total: m.questions.length,
-    chosenKey: payload.optionKey
-  });
-
   const newCorrect = st.correct + (correct ? 1 : 0);
   const answered = [...st.answered, payload.quizId];
   const nextIdx = st.quizIdx + 1;
+  const record = quizAnswerResult({
+    module: m,
+    quiz: expected,
+    total: m.questions.length,
+    chosenKey: payload.optionKey,
+    answered: nextIdx
+  });
 
   if (nextIdx < m.questions.length) {
     await setState(thread.id, { ...st, quizIdx: nextIdx, correct: newCorrect, answered });
