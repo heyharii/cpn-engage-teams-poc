@@ -11,7 +11,8 @@ const QUIZ_CARD = {
 
 /**
  * One quiz question. The compact pause icon lives in a right-aligned ActionSet
- * at the top; option copy remains wrapping text with compact answer controls.
+ * at the top; each full option is a clickable Container whose TextBlock wraps
+ * naturally, so long copy never falls back to clipped letter-only controls.
  */
 export function QuizQuestionCard(opts: { module: ModuleContent; quiz: QuizQuestion; total: number }): RawCard {
   const { module: m, quiz, total } = opts;
@@ -42,14 +43,15 @@ export function QuizQuestionCard(opts: { module: ModuleContent; quiz: QuizQuesti
         },
         { type: "TextBlock", text: `${m.title} · ${m.track}`, isSubtle: true, wrap: true, spacing: "None" },
         { type: "TextBlock", text: quiz.question, wrap: true },
-        ...quiz.options.map((o) => ({ type: "TextBlock", text: `**${o.key}.** ${o.text}`, wrap: true, spacing: "Small" })),
-        { type: "TextBlock", text: "Tap your answer:", isSubtle: true, wrap: true }
-      ],
-      actions: quiz.options.map((o) => ({
-        type: "Action.Submit",
-        title: o.key,
-        data: { actionId: "quiz_answer", value: `${m.id}|${quiz.id}|${o.key}` }
-      }))
+        { type: "TextBlock", text: "Choose an option:", isSubtle: true, wrap: true },
+        ...quiz.options.map((o) => ({
+          type: "Container",
+          style: "emphasis",
+          spacing: "Small",
+          selectAction: { type: "Action.Submit", data: { actionId: "quiz_answer", value: `${m.id}|${quiz.id}|${o.key}` } },
+          items: [{ type: "TextBlock", text: `${o.key}. ${o.text}`, wrap: true }]
+        }))
+      ]
     }
   );
 }
