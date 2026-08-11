@@ -16,7 +16,7 @@ export function PausedCard(opts: { label: string; detail: string }) {
         <Button id="resume" value="resume" style="primary">
           Continue now
         </Button>
-        <Button id="intent" value="help">Hub</Button>
+        <Button id="intent" value="help">Main menu</Button>
       </Actions>
     </Card>
   );

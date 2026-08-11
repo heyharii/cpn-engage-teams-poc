@@ -246,7 +246,7 @@ async function stale(thread: AnyThread, st: ThreadState) {
     StalePromptCard({
       hint: flow
         ? `You're already at: ${flow.detail}. Tap Continue to pick up where you are.`
-        : "That recognition has already been sent — start a new one from the hub.",
+        : "That recognition has already been sent — start a new one from the main menu.",
       canContinue: Boolean(flow)
     })
   );

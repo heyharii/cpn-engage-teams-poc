@@ -10,7 +10,7 @@ export { ModuleListCard } from "./ModuleListCard.tsx";
 export { ModuleIntroCard } from "./ModuleIntroCard.tsx";
 export { VideoLessonCard } from "./VideoLessonCard.tsx";
 export { TextLessonCard, ClosedCard, StepDoneCard } from "./LearningExtraCards.tsx";
-export { QuizQuestionCard } from "./QuizQuestionCard.tsx";
+export { QuizQuestionCard, QuizAnswerResultCard } from "./QuizQuestionCard.tsx";
 export { ModuleCompleteCard } from "./ModuleCompleteCard.tsx";
 
 // Feature 2 — Challenges & Leaderboard

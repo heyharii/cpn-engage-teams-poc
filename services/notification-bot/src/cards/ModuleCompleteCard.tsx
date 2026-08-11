@@ -46,7 +46,7 @@ export function ModuleCompleteCard(opts: {
           </Button>
         ) : null}
         <Button id="intent" value="browse_modules">Browse modules</Button>
-        <Button id="intent" value="help">Back to hub</Button>
+        <Button id="intent" value="help">Back to main menu</Button>
       </Actions>
     </Card>
   );

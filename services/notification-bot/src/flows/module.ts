@@ -27,7 +27,8 @@ import {
   ModuleCompleteCard,
   StalePromptCard,
   ConflictCard,
-  StepDoneCard
+  StepDoneCard,
+  QuizAnswerResultCard
 } from "../cards/index.ts";
 
 type AnyThread = Thread<unknown, unknown>;
@@ -159,15 +160,11 @@ export async function onQuizAnswer(
 
   const chosen = expected.options.find((o) => o.key === payload.optionKey);
   const correct = chosen?.correct === true;
-  const record = StepDoneCard({
-    title: correct ? "✅ Correct" : "❌ Not quite",
-    subtitle: `${m.title} · question ${st.quizIdx + 1} of ${m.questions.length}`,
-    lines: [
-      expected.question,
-      `Your answer: ${chosen?.text ?? payload.optionKey}`,
-      ...(correct ? [] : [`Correct: ${expected.options.find((o) => o.correct)?.text ?? ""}`]),
-      ...(chosen?.explanation ? [chosen.explanation] : [])
-    ]
+  const record = QuizAnswerResultCard({
+    module: m,
+    quiz: expected,
+    total: m.questions.length,
+    chosenKey: payload.optionKey
   });
 
   const newCorrect = st.correct + (correct ? 1 : 0);
@@ -223,7 +220,7 @@ async function stale(thread: AnyThread, st: ThreadState) {
     StalePromptCard({
       hint: flow
         ? `You're already at: ${flow.detail} of ${flow.label}. Tap Continue to go back to it.`
-        : "That step is already done — here's the hub.",
+        : "That step is already done — here's the main menu.",
       canContinue: Boolean(flow)
     })
   );
