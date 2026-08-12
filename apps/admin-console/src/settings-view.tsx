@@ -116,15 +116,6 @@ export function SettingsView() {
           </CardHeader>
           <CardContent className="flex flex-col gap-3">
             <div className="flex items-center justify-between">
-              <label className="text-sm">Recognition award (points)</label>
-              <Input
-                type="number"
-                className="w-24"
-                value={s.recognitionPoints}
-                onChange={(e) => patch({ recognitionPoints: Number(e.target.value) || 0 })}
-              />
-            </div>
-            <div className="flex items-center justify-between">
               <label className="text-sm">Leaderboard period</label>
               <select
                 className="h-9 w-40 rounded-md border border-input bg-transparent px-3 text-sm"
@@ -138,7 +129,7 @@ export function SettingsView() {
             </div>
             <SaveBtn
               section="scoring"
-              body={{ recognitionPoints: s.recognitionPoints, leaderboardPeriod: s.leaderboardPeriod }}
+              body={{ leaderboardPeriod: s.leaderboardPeriod }}
             />
           </CardContent>
         </Card>

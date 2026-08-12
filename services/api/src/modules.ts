@@ -20,7 +20,6 @@ export async function initModules(): Promise<void> {
       track text not null,
       title text not null,
       summary text,
-      duration_min integer default 0,
       video_url text,
       outcome text,
       lesson jsonb,
@@ -32,6 +31,8 @@ export async function initModules(): Promise<void> {
   `;
   // Editable completion award (default 75).
   await sql`alter table modules add column if not exists points integer not null default 75`;
+  // The authoring UI uses a due date/deadline instead of a duration.
+  await sql`alter table modules add column if not exists deadline date`;
   const existing = await sql`select count(*)::int as n from modules`;
   if (existing[0].n === 0) {
     for (const m of demoModuleContent) await upsertModule(m);
@@ -46,7 +47,7 @@ function rowToModule(r: Record<string, unknown>): ModuleContent {
     track: r.track as string,
     title: r.title as string,
     summary: (r.summary as string) ?? "",
-    durationMin: (r.duration_min as number) ?? 0,
+    deadline: (r.deadline as string) ?? null,
     videoUrl: (r.video_url as string) ?? undefined,
     outcome: (r.outcome as string) ?? undefined,
     lesson: (r.lesson as { heading: string; body: string }) ?? { heading: "", body: "" },
@@ -73,15 +74,15 @@ export async function listModules(opts?: { liveOnly?: boolean }): Promise<Module
 export async function upsertModule(m: ModuleContent): Promise<ModuleContent> {
   if (!sql) return m;
   await sql`
-    insert into modules (id, track, title, summary, duration_min, video_url, outcome, lesson, questions, points, is_live, order_idx, updated_at)
+    insert into modules (id, track, title, summary, deadline, video_url, outcome, lesson, questions, points, is_live, order_idx, updated_at)
     values (
-      ${m.id}, ${m.track}, ${m.title}, ${m.summary ?? ""}, ${m.durationMin ?? 0}, ${m.videoUrl ?? null},
-      ${m.outcome ?? null}, ${sql.json(m.lesson ?? { heading: "", body: "" })},
+      ${m.id}, ${m.track}, ${m.title}, ${m.summary ?? ""}, ${m.deadline ?? null},
+      ${m.videoUrl ?? null}, ${m.outcome ?? null}, ${sql.json(m.lesson ?? { heading: "", body: "" })},
       ${sql.json(m.questions ?? [])}, ${m.points ?? 75}, ${m.isLive ?? true}, ${m.orderIdx ?? 0}, now()
     )
     on conflict (id) do update set
       track = excluded.track, title = excluded.title, summary = excluded.summary,
-      duration_min = excluded.duration_min, video_url = excluded.video_url, outcome = excluded.outcome,
+      deadline = excluded.deadline, video_url = excluded.video_url, outcome = excluded.outcome,
       lesson = excluded.lesson, questions = excluded.questions, points = excluded.points, is_live = excluded.is_live,
       order_idx = excluded.order_idx, updated_at = now()
   `;

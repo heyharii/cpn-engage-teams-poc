@@ -33,3 +33,15 @@ test("conversation flow state survives its storage round trip", async () => {
   await clearState(threadId);
   assert.deepEqual(await getState(threadId), { kind: "idle" });
 });
+
+test("module completion markers survive returning to idle", async () => {
+  if (!sql) await state.connect();
+  const threadId = `state-complete-${Date.now()}-${Math.random()}`;
+  await setState(threadId, { kind: "idle", completedModuleIds: ["module-1"] });
+  await setState(threadId, { kind: "recognise", step: "colleague" });
+  assert.deepEqual((await getState(threadId)).completedModuleIds, ["module-1"]);
+  await clearState(threadId);
+  assert.deepEqual(await getState(threadId), { kind: "idle", completedModuleIds: ["module-1"] });
+  if (sql) await sql`delete from bot_flow_states where thread_id = ${threadId}`;
+  else await state.delete(threadId);
+});

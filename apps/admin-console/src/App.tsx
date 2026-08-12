@@ -64,6 +64,8 @@ import {
   type ModerationEntry,
   getDebugBundle,
   getAnalytics,
+  getSettings,
+  saveSettings,
   getBroadcasts,
   getScheduled,
   scheduleBroadcastApi,
@@ -695,7 +697,7 @@ function Broadcast(props: {
                   >
                     {modules.map((m) => (
                       <option key={m.id} value={m.id}>
-                        {m.title} ({m.track} · {m.durationMin} min)
+                        {m.title} ({m.track}{m.deadline ? ` · due ${m.deadline}` : ""})
                       </option>
                     ))}
                   </select>
@@ -778,7 +780,7 @@ function Broadcast(props: {
                           ) : null}
                           <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
                             <Badge variant="secondary">{selectedModule.track}</Badge>
-                            <span>{selectedModule.durationMin} min</span>
+                            {selectedModule.deadline ? <span>Due {selectedModule.deadline}</span> : null}
                             <span>· {selectedModule.questions.length} questions</span>
                             <span className="inline-flex items-center gap-1">
                               · <Trophy className="size-3.5" /> {selectedModule.points ?? 75} pts
@@ -950,6 +952,27 @@ function Recognitions(props: { feed: FeedItem[]; onReload: () => Promise<void> }
   const { busy, msg, run } = useAction();
   const [title, setTitle] = useState("");
   const [message, setMessage] = useState("");
+  const [recognitionPoints, setRecognitionPoints] = useState<number | null>(null);
+  const [pointsSaving, setPointsSaving] = useState(false);
+  const [pointsSaved, setPointsSaved] = useState(false);
+
+  useEffect(() => {
+    void getSettings().then((s) => {
+      if (s) setRecognitionPoints(s.recognitionPoints);
+    });
+  }, []);
+
+  async function saveRecognitionPoints() {
+    if (recognitionPoints === null) return;
+    setPointsSaving(true);
+    const savedSettings = await saveSettings({ recognitionPoints });
+    setPointsSaving(false);
+    if (savedSettings) {
+      setRecognitionPoints(savedSettings.recognitionPoints);
+      setPointsSaved(true);
+      setTimeout(() => setPointsSaved(false), 1800);
+    }
+  }
 
   const [log, setLog] = useState<ModerationEntry[]>([]);
   async function loadLog() {
@@ -982,6 +1005,27 @@ function Recognitions(props: { feed: FeedItem[]; onReload: () => Promise<void> }
   return (
     <div>
       <PageHeader title="Recognitions & announcements" subtitle="Speak to the feed, and moderate what's posted." />
+
+      <Card className="mb-6">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Heart className="size-4" /> Recognition points
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="flex items-center gap-3">
+          <Input
+            type="number"
+            min={0}
+            className="w-28"
+            value={recognitionPoints ?? ""}
+            onChange={(e) => setRecognitionPoints(Number(e.target.value) || 0)}
+          />
+          <span className="text-sm text-muted-foreground">points awarded for each approved recognition</span>
+          <Button className="ml-auto" size="sm" disabled={pointsSaving || recognitionPoints === null} onClick={() => void saveRecognitionPoints()}>
+            {pointsSaved ? "Saved" : pointsSaving ? "Saving…" : "Save"}
+          </Button>
+        </CardContent>
+      </Card>
 
       {/* Announcement composer */}
       <Card className="mb-6">

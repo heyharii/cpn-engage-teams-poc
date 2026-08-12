@@ -54,7 +54,7 @@ function blankModule(): ModuleContent {
     title: "",
     summary: "",
     track: DEFAULT_BELIEFS[0],
-    durationMin: 10,
+    deadline: null,
     videoUrl: "",
     outcome: "",
     lesson: { heading: "", body: "" },
@@ -243,7 +243,7 @@ function SortableModuleRow(props: { module: ModuleContent; reorderable: boolean;
         <div className="min-w-0 flex-1">
           <p className="truncate font-medium">{m.title}</p>
           <p className="text-xs text-muted-foreground">
-            {m.durationMin} min · {m.questions.length} question(s)
+            {m.deadline ? `Due ${m.deadline} · ` : ""}{m.questions.length} question(s)
             {m.videoUrl ? " · video" : ""}
           </p>
         </div>
@@ -347,8 +347,8 @@ function ModuleEditor(props: { initial: ModuleContent; beliefs: string[]; onClos
                     ))}
                   </select>
                 </Field>
-                <Field label="Duration (min)">
-                  <Input type="number" value={m.durationMin} onChange={(e) => set({ durationMin: Number(e.target.value) || 0 })} />
+                <Field label="Due date / deadline">
+                  <Input type="date" value={m.deadline ?? ""} onChange={(e) => set({ deadline: e.target.value || null })} />
                 </Field>
                 <Field label="Points">
                   <Input type="number" value={m.points ?? 75} onChange={(e) => set({ points: Number(e.target.value) || 0 })} />
@@ -427,7 +427,7 @@ function ModuleEditor(props: { initial: ModuleContent; beliefs: string[]; onClos
                       ) : null}
                       <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
                         <Badge variant="secondary">{m.track}</Badge>
-                        <span>{m.durationMin} min</span>
+                        {m.deadline ? <span>Due {m.deadline}</span> : null}
                         <span>· {m.questions.length} questions</span>
                         <span>· {m.points ?? 75} pts</span>
                       </div>

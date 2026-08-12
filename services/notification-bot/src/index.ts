@@ -220,7 +220,7 @@ app.post("/internal/push", async (req, res) => {
     type === "module"
       ? (() => {
           const m = (moduleId ? getModule(moduleId) : null) ?? firstAssignedModule();
-          return ModuleAssignedCard({ moduleId: m.id, title: m.title, track: m.track, durationMin: m.durationMin });
+          return ModuleAssignedCard({ moduleId: m.id, title: m.title, track: m.track, deadline: m.deadline });
         })()
       : ChallengeReminderCard({
           behavior: boot.dailyDrop.behavior,

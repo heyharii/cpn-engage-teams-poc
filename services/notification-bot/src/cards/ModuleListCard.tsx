@@ -12,7 +12,7 @@ import type { ModuleContent } from "./types.ts";
  */
 const MAX_BUTTONS = 6;
 
-export function ModuleListCard(opts: { modules: ModuleContent[]; activeId?: string }) {
+export function ModuleListCard(opts: { modules: ModuleContent[]; activeId?: string; completedIds?: string[] }) {
   const shown = opts.modules.slice(0, MAX_BUTTONS);
   const hidden = opts.modules.length - shown.length;
   return (
@@ -20,7 +20,7 @@ export function ModuleListCard(opts: { modules: ModuleContent[]; activeId?: stri
       <Section>
         {shown.map((m) => (
           <CardText key={m.id}>
-            {`${m.id === opts.activeId ? "▶️" : "•"} **${m.title}** — ${m.track} · ${m.durationMin} min`}
+            {`${m.id === opts.activeId ? "▶️" : opts.completedIds?.includes(m.id) ? "✅" : "•"} **${m.title}** — ${m.track}${m.deadline ? ` · Due ${m.deadline}` : ""}${opts.completedIds?.includes(m.id) ? " · Completed" : ""}`}
           </CardText>
         ))}
       </Section>

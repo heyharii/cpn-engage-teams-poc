@@ -13,7 +13,7 @@ import type { ModuleContent, QuizQuestion } from "./types.ts";
 import { ModuleListCard, QuizAnswerResultCard, QuizQuestionCard } from "./index.ts";
 import { moduleListCardV2, quizAnswerResultCardV2, quizQuestionCardV2 } from "./v2/learning.ts";
 
-export function moduleList(opts: { modules: ModuleContent[]; activeId?: string }): unknown {
+export function moduleList(opts: { modules: ModuleContent[]; activeId?: string; completedIds?: string[] }): unknown {
   return cardV2("modules") ? moduleListCardV2(opts) : ModuleListCard(opts);
 }
 

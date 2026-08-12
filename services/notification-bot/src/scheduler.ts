@@ -29,7 +29,7 @@ async function runPushJob(payload: PushJob, jobId?: string) {
     await refreshModules();
     const m = (payload.moduleId ? getModule(payload.moduleId) : null) ?? firstAssignedModule();
     label = m.title;
-    card = ModuleAssignedCard({ moduleId: m.id, title: m.title, track: m.track, durationMin: m.durationMin });
+    card = ModuleAssignedCard({ moduleId: m.id, title: m.title, track: m.track, deadline: m.deadline });
   } else {
     const boot = await getBootstrap();
     label = boot.dailyDrop.behavior;

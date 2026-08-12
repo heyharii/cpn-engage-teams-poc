@@ -109,9 +109,7 @@ function blankDrop(): AdminDrop {
     behavior: DEFAULT_BELIEFS[1],
     question: "",
     rewardLabel: "Up to 50 points",
-    timeLimit: "30 sec",
     bestPoints: 50,
-    basePoints: 20,
     options: [],
     questions: [blankQuestion(1)]
   };

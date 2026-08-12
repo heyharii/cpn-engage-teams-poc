@@ -11,7 +11,7 @@ import { sql } from "./db.ts";
 import { getModule } from "./content.ts";
 
 export type ThreadState =
-  | { kind: "idle" }
+  | { kind: "idle"; completedModuleIds?: string[] }
   // Learning Journey: intro → video → text → quiz(0..n) → complete
   | {
       kind: "module";
@@ -20,9 +20,18 @@ export type ThreadState =
       quizIdx: number; // index of the question we're waiting on
       correct: number; // running correct count (idempotent — never double-counts)
       answered: string[]; // quiz ids already answered, to guard stale presses
+      /** Completed modules remain visible when the learner returns to the hub. */
+      completedModuleIds?: string[];
     }
   // Challenge: a mini-quiz of 1..n MCQs; tracks progress + running score
-  | { kind: "challenge"; dropId: string; qIndex: number; score: number; answeredQ: string[] }
+  | {
+      kind: "challenge";
+      dropId: string;
+      qIndex: number;
+      score: number;
+      answeredQ: string[];
+      completedModuleIds?: string[];
+    }
   // Recognition: who → belief → description → confirm → send
   | {
       kind: "recognise";
@@ -33,10 +42,11 @@ export type ThreadState =
       description?: string;
       /** The card holding the step we're waiting on — summarised when answered. */
       cardId?: string;
+      completedModuleIds?: string[];
     }
   // Recognition v2: one card collects everything, so there are no steps to
   // track — only which message holds the open form.
-  | { kind: "recognise2"; cardId?: string };
+  | { kind: "recognise2"; cardId?: string; completedModuleIds?: string[] };
 
 /** A flow the user abandoned this long ago is no longer worth resuming. */
 const STATE_TTL_DAYS = 7;
@@ -61,17 +71,34 @@ export async function getState(threadId: string): Promise<ThreadState> {
     await ensureTable();
     // A stale row is treated as idle rather than deleted — the next setState
     // overwrites it anyway, and reads stay a single statement.
-    const rows = await sql<{ state: ThreadState }[]>`
-      select state from bot_flow_states
-      where thread_id = ${threadId}
-        and updated_at > now() - ${`${STATE_TTL_DAYS} days`}::interval
+    const rows = await sql<{ state: ThreadState; updated_at: string }[]>`
+      select state, updated_at from bot_flow_states where thread_id = ${threadId}
     `;
-    return rows[0]?.state ?? { kind: "idle" };
+    const row = rows[0];
+    if (!row) return { kind: "idle" };
+    // Completed-module badges are a durable learning record. Only an active
+    // in-progress flow expires after seven days; an idle record is retained so
+    // replaying a module still reads as a replay months later.
+    const stale = Date.now() - new Date(row.updated_at).getTime() > STATE_TTL_DAYS * 86_400_000;
+    if (stale && row.state.kind !== "idle") {
+      return { kind: "idle", completedModuleIds: row.state.completedModuleIds };
+    }
+    return row.state;
   }
   return (await state.get<ThreadState>(threadId)) ?? { kind: "idle" };
 }
 
 export async function setState(threadId: string, next: ThreadState): Promise<void> {
+  // Keep the learner's completion markers while switching between flows. They
+  // are intentionally orthogonal to the currently active state machine.
+  // Callers that explicitly provide a marker list (including an empty list)
+  // are authoritative, so a new conversation can intentionally start clean.
+  if (next.completedModuleIds === undefined) {
+    const previous = await getState(threadId);
+    if (previous.completedModuleIds?.length) {
+      next = { ...next, completedModuleIds: previous.completedModuleIds } as ThreadState;
+    }
+  }
   if (sql) {
     await ensureTable();
     await sql`
@@ -85,12 +112,17 @@ export async function setState(threadId: string, next: ThreadState): Promise<voi
 }
 
 export async function clearState(threadId: string): Promise<void> {
+  const current = await getState(threadId);
+  const completedModuleIds = current.completedModuleIds;
   if (sql) {
     await ensureTable();
     await sql`delete from bot_flow_states where thread_id = ${threadId}`;
+    if (completedModuleIds?.length) {
+      await setState(threadId, { kind: "idle", completedModuleIds });
+    }
     return;
   }
-  await state.set<ThreadState>(threadId, { kind: "idle" });
+  await state.set<ThreadState>(threadId, completedModuleIds?.length ? { kind: "idle", completedModuleIds } : { kind: "idle" });
 }
 
 /**

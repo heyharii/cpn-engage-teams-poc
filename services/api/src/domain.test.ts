@@ -49,7 +49,7 @@ test("admin-authored learning and drop content must be scoreable", () => {
     title: "Module",
     summary: "",
     track: "Customers",
-    durationMin: 5,
+    deadline: null,
     lesson: { heading: "Lesson", body: "Body" },
     questions: [
       {

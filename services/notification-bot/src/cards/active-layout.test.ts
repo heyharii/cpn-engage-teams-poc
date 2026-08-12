@@ -13,7 +13,7 @@ const module = {
   title: "Serve with heart",
   track: "Customers",
   summary: "A short module.",
-  durationMin: 10,
+  deadline: null,
   questions: [{}, {}],
   outcome: "Practice the belief.",
   lesson: { heading: "Guide", body: "Read this." }

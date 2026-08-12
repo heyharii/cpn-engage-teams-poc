@@ -7,7 +7,7 @@ export type LearningModule = {
   id: string;
   title: string;
   summary: string;
-  duration: string;
+  deadline?: string | null;
   status: "assigned" | "completed";
 };
 
@@ -37,14 +37,12 @@ export type DailyDrop = {
   title: string;
   behavior: string;
   rewardLabel: string;
-  timeLimit: string;
   /** A drop can have multiple questions. `question`/`options` mirror questions[0]
    *  for backward compatibility with older single-question callers. */
   questions: DropQuestion[];
   question: string;
   options: DailyDropOption[];
   bestPoints?: number; // awarded per ⭐ best answer (default 50)
-  basePoints?: number; // awarded per other answer (default 20)
   status: "pending" | "completed";
 };
 
@@ -92,7 +90,8 @@ export type ModuleContent = {
   title: string;
   summary: string;
   track: string; // the Belief this module sits under
-  durationMin: number;
+  /** Optional YYYY-MM-DD deadline for this module. */
+  deadline?: string | null;
   videoUrl?: string;
   outcome?: string;
   lesson: { heading: string; body: string };
@@ -109,7 +108,7 @@ export const demoModuleContent: ModuleContent[] = [
     title: "Building Customer Empathy",
     summary: "A short journey on listening, context, and service recovery.",
     track: "Customers",
-    durationMin: 15,
+    deadline: null,
     videoUrl: "https://www.centralpattana.co.th",
     outcome: "See how to stay focused on the customer's real need under pressure.",
     lesson: {
@@ -156,7 +155,7 @@ export const demoModuleContent: ModuleContent[] = [
     title: "Solving With Impact",
     summary: "Scenario practice for decision-making under time pressure.",
     track: "Dynamism",
-    durationMin: 12,
+    deadline: null,
     videoUrl: "https://www.centralpattana.co.th",
     outcome: "Practice making a confident call when priorities and resources shift.",
     lesson: {
@@ -249,7 +248,6 @@ export type CapstonePreview = {
   title: string;
   summary: string;
   reward: string;
-  timeLimit: string;
   difficulty: string;
   unlocked: boolean;
 };
@@ -355,14 +353,14 @@ export const demoModules: LearningModule[] = [
     id: "module-1",
     title: "Building Customer Empathy",
     summary: "A short learning journey on listening, context, and service recovery.",
-    duration: "15 min",
+    deadline: null,
     status: "assigned"
   },
   {
     id: "module-2",
     title: "Solving With Impact",
     summary: "Scenario practice for decision-making under time pressure.",
-    duration: "12 min",
+    deadline: null,
     status: "completed"
   }
 ];
@@ -399,7 +397,6 @@ export const demoDailyDrop: DailyDrop = {
   title: "Daily Drop Challenge",
   behavior: "Customers",
   rewardLabel: "Up to 50 points",
-  timeLimit: "30 sec",
   questions: [
     {
       id: "q1",
@@ -414,11 +411,17 @@ export const demoDailyDrop: DailyDrop = {
 
 /** Ensure a drop has a `questions` array + mirrored top-level question/options. */
 export function normalizeDrop(d: DailyDrop): DailyDrop {
+  // Strip fields from pre-0.66 payloads so an old admin client cannot
+  // reintroduce the removed timer or partial-credit setting into the API.
+  const { timeLimit: _timeLimit, basePoints: _basePoints, ...clean } = d as DailyDrop & {
+    timeLimit?: unknown;
+    basePoints?: unknown;
+  };
   const questions =
-    Array.isArray(d.questions) && d.questions.length > 0
-      ? d.questions
-      : [{ id: "q1", question: d.question ?? "", options: d.options ?? [] }];
-  return { ...d, questions, question: questions[0].question, options: questions[0].options };
+    Array.isArray(clean.questions) && clean.questions.length > 0
+      ? clean.questions
+      : [{ id: "q1", question: clean.question ?? "", options: clean.options ?? [] }];
+  return { ...clean, questions, question: questions[0].question, options: questions[0].options };
 }
 
 export const demoCurrentUser: CurrentUser = {
@@ -563,7 +566,6 @@ export const demoCapstone: CapstonePreview = {
   title: "Capstone Challenge",
   summary: "A high-stakes operating scenario that tests judgment, alignment, and customer recovery under pressure.",
   reward: "500 XP + Master badge",
-  timeLimit: "05:00",
   difficulty: "Extreme",
   unlocked: true
 };

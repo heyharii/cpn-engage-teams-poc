@@ -8,6 +8,8 @@ export function PausedCard(opts: { label: string; detail: string }): RawCard {
       ...cardHeader("⏸️ Paused", opts.label, "done"),
       textBlock(`Saved at: ${opts.detail}. Come back any time and tap Continue — nothing is lost.`, { spacing: "Medium" })
     ],
-    [submitAction("resume", "resume", "Continue now", "positive"), submitAction("intent", "help", "Main menu")]
+    // The source marker lets the bot close only this paused card on resume;
+    // hub/conflict cards are permanent navigation cards and stay untouched.
+    [submitAction("resume", "paused", "Continue now", "positive"), submitAction("intent", "help", "Main menu")]
   );
 }

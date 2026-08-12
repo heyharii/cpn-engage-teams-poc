@@ -287,11 +287,9 @@ export function ProfilePage() {
               <p className="mt-1 text-sm text-muted-foreground">
                 {nextModule?.summary ?? "Fetching your learning journey."}
               </p>
-              {(nextModule as { duration?: string; durationMin?: number } | undefined)?.duration ||
-              (nextModule as { durationMin?: number } | undefined)?.durationMin ? (
+              {(nextModule as { deadline?: string | null } | undefined)?.deadline ? (
                 <Badge variant="secondary" className="mt-3">
-                  {(nextModule as { duration?: string; durationMin?: number }).duration ??
-                    `${(nextModule as { durationMin?: number }).durationMin} min`}
+                  Due {(nextModule as { deadline?: string | null }).deadline}
                 </Badge>
               ) : null}
               <p className="mt-3 text-sm font-medium text-primary">▶ Start it from the Chat tab</p>

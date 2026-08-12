@@ -2,9 +2,9 @@
 import { Card, CardText, Section, Actions, Button, Divider } from "chat";
 
 /** Proactive: a new learning module has been assigned. */
-export function ModuleAssignedCard(opts: { moduleId: string; title: string; track: string; durationMin: number }) {
+export function ModuleAssignedCard(opts: { moduleId: string; title: string; track: string; deadline?: string | null }) {
   return (
-    <Card title="📘 New module assigned" subtitle={`${opts.track} · ${opts.durationMin} min`}>
+    <Card title="📘 New module assigned" subtitle={`${opts.track}${opts.deadline ? ` · due ${opts.deadline}` : ""}`}>
       <Section>
         <CardText style="bold">{opts.title}</CardText>
         <CardText>Tap below to start — it only takes a few minutes.</CardText>

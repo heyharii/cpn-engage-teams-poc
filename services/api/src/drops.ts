@@ -21,16 +21,14 @@ export async function initDrops(): Promise<void> {
       behavior text not null,
       question text not null,
       reward_label text,
-      time_limit text,
       options jsonb not null default '[]',
       is_active boolean not null default false,
       scheduled_date date,
       updated_at timestamptz not null default now()
     )
   `;
-  // Editable point values (default 50 best / 20 base).
+  // Editable point value (default 50 for the best answer; incorrect is zero).
   await sql`alter table daily_drops add column if not exists best_points integer not null default 50`;
-  await sql`alter table daily_drops add column if not exists base_points integer not null default 20`;
   // Multi-question support: the full questions array (jsonb).
   await sql`alter table daily_drops add column if not exists questions jsonb`;
   const n = await sql`select count(*)::int as n from daily_drops`;
@@ -65,11 +63,9 @@ function rowToDrop(r: Record<string, unknown>): DailyDrop & { isActive: boolean;
     behavior: r.behavior as string,
     question: (r.question as string) ?? "",
     rewardLabel: (r.reward_label as string) ?? "Up to 50 points",
-    timeLimit: (r.time_limit as string) ?? "30 sec",
     questions: questions.length > 0 ? questions : [{ id: "q1", question: (r.question as string) ?? "", options: legacyOptions }],
     options: legacyOptions,
     bestPoints: (r.best_points as number) ?? 50,
-    basePoints: (r.base_points as number) ?? 20,
     status: "pending"
   });
   return {
@@ -107,15 +103,15 @@ export async function upsertDrop(input: DailyDrop & { scheduledDate?: string | n
   if (!sql) return input;
   const drop = normalizeDrop(input); // guarantees questions[] + mirrored question/options
   await sql`
-    insert into daily_drops (id, title, behavior, question, reward_label, time_limit, options, questions, best_points, base_points, scheduled_date, updated_at)
+    insert into daily_drops (id, title, behavior, question, reward_label, options, questions, best_points, scheduled_date, updated_at)
     values (${drop.id}, ${drop.title}, ${drop.behavior}, ${drop.question}, ${drop.rewardLabel ?? null},
-            ${drop.timeLimit ?? null}, ${sql.json(drop.options ?? [])}, ${sql.json(drop.questions ?? [])},
-            ${drop.bestPoints ?? 50}, ${drop.basePoints ?? 20}, ${input.scheduledDate ?? null}, now())
+            ${sql.json(drop.options ?? [])}, ${sql.json(drop.questions ?? [])},
+            ${drop.bestPoints ?? 50}, ${input.scheduledDate ?? null}, now())
     on conflict (id) do update set
       title = excluded.title, behavior = excluded.behavior, question = excluded.question,
-      reward_label = excluded.reward_label, time_limit = excluded.time_limit,
+      reward_label = excluded.reward_label,
       options = excluded.options, questions = excluded.questions, best_points = excluded.best_points,
-      base_points = excluded.base_points, scheduled_date = excluded.scheduled_date, updated_at = now()
+      scheduled_date = excluded.scheduled_date, updated_at = now()
   `;
   return drop;
 }

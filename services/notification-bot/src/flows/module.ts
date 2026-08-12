@@ -43,7 +43,11 @@ export async function showModuleList(thread: AnyThread) {
   const st = await getState(thread.id);
   await postCard(
     thread,
-    moduleList({ modules: allModules(), activeId: st.kind === "module" ? st.moduleId : undefined })
+    moduleList({
+      modules: allModules(),
+      activeId: st.kind === "module" ? st.moduleId : undefined,
+      completedIds: st.completedModuleIds
+    })
   );
 }
 
@@ -51,12 +55,15 @@ export async function showModuleList(thread: AnyThread) {
 export async function pickModule(thread: AnyThread, moduleId: string) {
   const m = getModule(moduleId);
   if (!m) return showModuleList(thread);
-  await postCard(thread, ModuleIntroCard({ module: m }));
+  const st = await getState(thread.id);
+  await postCard(thread, ModuleIntroCard({ module: m, completed: st.completedModuleIds?.includes(m.id) }));
 }
 
 /** Intent "start_module" — present the default module's intro (no state change). */
 export async function showModuleIntro(thread: AnyThread) {
-  await postCard(thread, ModuleIntroCard({ module: firstAssignedModule() }));
+  const st = await getState(thread.id);
+  const module = firstAssignedModule();
+  await postCard(thread, ModuleIntroCard({ module, completed: st.completedModuleIds?.includes(module.id) }));
 }
 
 /**
@@ -181,7 +188,12 @@ export async function onQuizAnswer(
     return;
   }
 
-  await clearState(thread.id);
+  // Keep the completion marker in the durable idle state so the module list
+  // can distinguish a first start from a deliberate replay.
+  await setState(thread.id, {
+    kind: "idle",
+    completedModuleIds: [...new Set([...(st.completedModuleIds ?? []), payload.moduleId])]
+  });
   // Award module-completion points to the learner (idempotent per module+user).
   const id = await scoreIdentity(thread.id, author?.userId, author?.fullName);
   await submitModuleComplete(payload.moduleId, id);

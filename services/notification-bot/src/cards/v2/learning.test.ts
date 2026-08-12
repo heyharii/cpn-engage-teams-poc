@@ -4,8 +4,8 @@ import { moduleListCardV2, quizAnswerResultCardV2, quizQuestionCardV2 } from "./
 import type { ModuleContent } from "../types.js";
 
 const modules = [
-  { id: "m1", title: "Serve with heart", track: "Customers", durationMin: 12, questions: [{}, {}] },
-  { id: "m2", title: "Speak up safely", track: "Integrity", durationMin: 8, questions: [{}] }
+  { id: "m1", title: "Serve with heart", track: "Customers", deadline: null, questions: [{}, {}] },
+  { id: "m2", title: "Speak up safely", track: "Integrity", deadline: null, questions: [{}] }
 ] as unknown as ModuleContent[];
 
 const quiz = {
@@ -24,7 +24,7 @@ test("each module is one tappable button carrying its own detail", () => {
   );
   assert.equal(buttons.length, 2);
   assert.equal(buttons[0]?.title, "Serve with heart");
-  assert.match(String(buttons[0]?.description), /Customers · 12 min/);
+  assert.match(String(buttons[0]?.description), /Customers · 2 question\(s\)/);
   // pick_module only opens an intro — the destructive step stays behind the
   // intro's guarded Start button, exactly as in v1.
   assert.deepEqual(buttons[0]?.selectAction, {

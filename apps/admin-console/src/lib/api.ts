@@ -205,11 +205,9 @@ export type AdminDrop = {
   behavior: string;
   question: string;
   rewardLabel?: string;
-  timeLimit?: string;
   options: DropOption[];
   questions?: DropQuestion[];
   bestPoints?: number;
-  basePoints?: number;
   status?: string;
   isActive?: boolean;
   scheduledDate?: string | null;

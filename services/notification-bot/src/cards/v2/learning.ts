@@ -47,7 +47,7 @@ function quizHeader(quiz: QuizQuestion, total: number, answered: boolean) {
  * `selectAction` is the same `pick_module` submit the v1 buttons used — so it
  * is just as non-destructive: it opens an intro, it doesn't start anything.
  */
-export function moduleListCardV2(opts: { modules: ModuleContent[]; activeId?: string }): RawCard {
+export function moduleListCardV2(opts: { modules: ModuleContent[]; activeId?: string; completedIds?: string[] }): RawCard {
   return {
     ...CARD,
     body: [
@@ -62,8 +62,12 @@ export function moduleListCardV2(opts: { modules: ModuleContent[]; activeId?: st
       ...opts.modules.map((m) => ({
         type: "CompoundButton",
         title: m.title,
-        description: `${m.track} · ${m.durationMin} min · ${m.questions.length} question(s)`,
-        ...(m.id === opts.activeId ? { badge: "In progress" } : {}),
+        description: `${m.track}${m.deadline ? ` · due ${m.deadline}` : ""} · ${m.questions.length} question(s)`,
+        ...(m.id === opts.activeId
+          ? { badge: "In progress" }
+          : opts.completedIds?.includes(m.id)
+            ? { badge: "Completed · redo" }
+            : {}),
         selectAction: { type: "Action.Submit", data: { actionId: "pick_module", value: m.id } }
       }))
     ]

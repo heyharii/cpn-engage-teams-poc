@@ -29,7 +29,7 @@ const sampleModule: ModuleContent = {
   id: "module-1",
   title: "Building Customer Empathy",
   track: "Customers",
-  durationMin: 15,
+  deadline: null,
   videoUrl: "https://www.centralpattana.co.th",
   outcome: "See how to stay focused on the customer's real need under pressure.",
   questions: [sampleQuiz]
@@ -60,8 +60,8 @@ const cards: { name: string; el: unknown }[] = [
   { name: "F3 · Sent", el: C.RecognitionSentCard({ colleague: "Somruk T.", behavior: "Collaboration" }) },
   { name: "F3 · Recognition received (notif)", el: C.RecognitionReceivedCard({ fromName: "Narin", behavior: "Collaboration", message: "Stayed late to help another store recover a difficult handover." }) },
   // Notifications (proactive)
-  { name: "Notif · Module assigned", el: C.ModuleAssignedCard({ moduleId: "module-1", title: "Building Customer Empathy", track: "Customers", durationMin: 15 }) },
-  { name: "Notif · Challenge reminder", el: C.ChallengeReminderCard({ behavior: "Customers", reward: "Up to 50 points", timeLimit: "30 sec" }) },
+  { name: "Notif · Module assigned", el: C.ModuleAssignedCard({ moduleId: "module-1", title: "Building Customer Empathy", track: "Customers", deadline: null }) },
+  { name: "Notif · Challenge reminder", el: C.ChallengeReminderCard({ behavior: "Customers", reward: "Up to 50 points" }) },
   { name: "Notif · Deadline reminder", el: C.DeadlineReminderCard({ title: "Building Customer Empathy", daysLeft: 2, actionId: "start_module", actionValue: "module-1" }) }
 ];
 

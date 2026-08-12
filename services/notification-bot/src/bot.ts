@@ -13,7 +13,7 @@
 import { Chat, type Author, type Message, type Thread } from "chat";
 import { createTeamsAdapter, decodeThreadId } from "@chat-adapter/teams";
 import { config } from "./config.ts";
-import { state, getState } from "./state.ts";
+import { state, getState, describeFlow } from "./state.ts";
 import { getConversationByThreadId, rememberConversation } from "./db.ts";
 import { classifyIntent } from "./handlers/intent-router.ts";
 import { dispatchIntent, type DispatchCtx } from "./handlers/dispatch.ts";
@@ -36,6 +36,8 @@ import {
 } from "./flows/recognise.ts";
 import { onRecogniseSendV2, startRecogniseV2 } from "./flows/v2/recognise.ts";
 import { showHub, pauseFlow } from "./flows/hub.ts";
+import { editCard } from "./edit.ts";
+import { StepDoneCard } from "./cards/index.ts";
 
 export const bot = new Chat({
   userName: "CPN Engage",
@@ -192,6 +194,18 @@ bot.onAction("remind_later", guardAction("remind_later", async (e) => {
 bot.onAction("resume", guardAction("resume", async (e) => {
   if (!e.thread) return;
   const st = await getState(e.thread.id);
+  // The paused card itself must stop being resumable before the fresh active
+  // card is posted. Otherwise the chat contains two live Continue controls.
+  const flow = describeFlow(st);
+  if (e.messageId && e.value === "paused") {
+    await editCard(
+      e.thread,
+      e.messageId,
+      flow
+        ? StepDoneCard({ title: "▶️ Resumed", subtitle: flow.label, lines: [`Continuing at ${flow.detail}.`] })
+        : StepDoneCard({ title: "↩️ Main menu", lines: ["That saved flow has expired. Here is the current menu."] })
+    );
+  }
   if (st.kind === "module") await resumeModule(e.thread, st);
   else if (st.kind === "challenge") await resumeChallenge(e.thread, st);
   else if (st.kind === "recognise") await resumeRecognise(e.thread, st);

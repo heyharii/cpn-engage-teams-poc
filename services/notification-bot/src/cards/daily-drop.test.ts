@@ -8,7 +8,6 @@ const drop = {
   title: "Solving With Impact",
   behavior: "Dynamism",
   rewardLabel: "Up to 50 points",
-  timeLimit: "30 sec",
   status: "pending",
   questions: [],
   question: "",

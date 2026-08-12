@@ -1,6 +1,6 @@
 /**
  * Challenge flow (PRD Feature 2): a daily drop of 1..n MCQs. Each question is
- * scored (best answer = bestPoints, else basePoints), points are awarded once
+ * scored (best answer = bestPoints, incorrect answer = zero), points are awarded once
  * per question (idempotent via ref), and re-answering an old card is stale.
  *
  * Like every flow here: the answered card becomes a buttonless result, and the
@@ -67,7 +67,7 @@ export async function onSubmitAnswer(
   }
 
   const chosen = question.options.find((o) => o.id === payload.optionId) ?? question.options[0]!;
-  const pointsEarned = chosen.isBest ? drop.bestPoints ?? 50 : drop.basePoints ?? 20;
+  const pointsEarned = chosen.isBest ? drop.bestPoints ?? 50 : 0;
 
   // Award this question's points (idempotent per drop+question+user).
   const id = await scoreIdentity(thread.id, author?.userId, author?.fullName);

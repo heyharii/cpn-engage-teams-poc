@@ -43,7 +43,10 @@ export function validateModuleContent(module: ModuleContent): ModuleContent {
   requireText(module.track, "module track");
   requireText(module.lesson?.heading, "lesson heading");
   requireText(module.lesson?.body, "lesson body");
-  requireNonNegativeNumber(module.durationMin, "durationMin");
+  const deadline = typeof module.deadline === "string" ? module.deadline.trim() || null : module.deadline ?? null;
+  if (deadline !== null && !/^\d{4}-\d{2}-\d{2}$/.test(deadline)) {
+    throw new Error("deadline must be YYYY-MM-DD");
+  }
   requireNonNegativeNumber(module.points ?? 75, "points");
   if (!Array.isArray(module.questions) || module.questions.length === 0) {
     throw new Error("module needs at least one question");
@@ -65,7 +68,7 @@ export function validateModuleContent(module: ModuleContent): ModuleContent {
       requireText(option.text, `option text in ${question.id}`);
     }
   }
-  return module;
+  return { ...module, deadline };
 }
 
 export function validateDailyDrop(drop: DailyDrop): DailyDrop {
@@ -73,7 +76,6 @@ export function validateDailyDrop(drop: DailyDrop): DailyDrop {
   requireText(drop.title, "drop title");
   requireText(drop.behavior, "drop behavior");
   requireNonNegativeNumber(drop.bestPoints ?? 50, "bestPoints");
-  requireNonNegativeNumber(drop.basePoints ?? 20, "basePoints");
   if (!Array.isArray(drop.questions) || drop.questions.length === 0) {
     throw new Error("drop needs at least one question");
   }

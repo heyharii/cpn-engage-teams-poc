@@ -993,7 +993,6 @@ app.post<{ Body: DailyDrop & { scheduledDate?: string | null } }>("/api/admin/dr
     id: b.id || `drop-${Date.now()}`,
     title: b.title || "Daily Drop",
     rewardLabel: b.rewardLabel || "Up to 50 points",
-    timeLimit: b.timeLimit || "30 sec"
   };
   try {
     const saved = await upsertDrop(validateDailyDrop(drop));
